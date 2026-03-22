@@ -1,0 +1,35 @@
+{
+  "productName": "VietTruyen",
+  "version": "0.1.0",
+  "identifier": "com.viettruyen.app",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build",
+    "devUrl": "http://localhost:1420",
+    "distDir": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "VietTruyen - Trợ lý sáng tác ảo",
+        "width": 1200,
+        "height": 800
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["dmg", "app"],
+    "identifier": "com.viettruyen.app",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ]
+  }
+}

@@ -1,0 +1,327 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    font-family: "Inter", system-ui, -apple-system, sans-serif;
+    line-height: 1.6;
+    font-weight: 400;
+    color-scheme: dark;
+    color: #f5e6d0;
+    background-color: #0f0d0a;
+    font-synthesis: none;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+    width: 100%;
+    margin: 0;
+  }
+
+  /* Scrollbar warm styling */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: #3a3228;
+    border-radius: 3px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: #4a4038;
+  }
+
+  /* Selection */
+  ::selection {
+    background: rgba(212, 165, 116, 0.3);
+    color: #f5e6d0;
+  }
+}
+
+@layer components {
+  /* Card styles */
+  .card {
+    @apply bg-bg-surface border border-border-subtle rounded-xl p-5 
+           transition-all duration-200 ease-out;
+  }
+
+  .card-interactive {
+    @apply card cursor-pointer hover:bg-bg-elevated hover:border-border 
+           hover:shadow-lg hover:shadow-black/20 hover:-translate-y-0.5;
+  }
+
+  .card-highlight {
+    @apply card border-accent-amber/30 bg-accent-amber/5;
+  }
+
+  /* Input styles */
+  .input-base {
+    @apply w-full bg-bg-elevated border border-border-subtle rounded-lg 
+           px-4 py-3 text-text-primary placeholder:text-text-muted
+           focus:outline-none focus:border-accent-amber/50 focus:ring-1 
+           focus:ring-accent-amber/20 transition-colors duration-200
+           font-body text-sm;
+  }
+
+  .textarea-base {
+    @apply input-base resize-none leading-relaxed;
+  }
+
+  /* Button styles */
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2.5 
+           rounded-lg font-medium text-sm transition-all duration-200 
+           cursor-pointer select-none disabled:opacity-50 
+           disabled:cursor-not-allowed;
+  }
+
+  .btn-primary {
+    @apply btn bg-accent-amber text-bg-deep hover:bg-accent-amber/90 
+           active:scale-[0.98];
+  }
+
+  .btn-secondary {
+    @apply btn bg-transparent border border-border text-text-primary 
+           hover:bg-bg-elevated hover:border-border-strong;
+  }
+
+  .btn-ghost {
+    @apply btn bg-transparent text-text-secondary hover:text-text-primary 
+           hover:bg-bg-elevated;
+  }
+
+  .btn-ai {
+    @apply btn bg-accent-teal/15 text-accent-teal border border-accent-teal/20 
+           hover:bg-accent-teal/25 hover:border-accent-teal/40;
+  }
+
+  .btn-sm {
+    @apply px-3 py-1.5 text-xs;
+  }
+
+  .btn-lg {
+    @apply px-6 py-3 text-base;
+  }
+
+  /* Label */
+  .label {
+    @apply block text-sm font-medium text-text-secondary mb-1.5;
+  }
+
+  .label-hint {
+    @apply text-xs text-text-muted mt-1;
+  }
+
+  /* Badge */
+  .badge {
+    @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs 
+           font-medium;
+  }
+
+  .badge-amber {
+    @apply badge bg-accent-amber/15 text-accent-amber;
+  }
+
+  .badge-teal {
+    @apply badge bg-accent-teal/15 text-accent-teal;
+  }
+
+  .badge-rose {
+    @apply badge bg-accent-rose/15 text-accent-rose;
+  }
+
+  /* ── Select dropdown ── */
+  .select-base {
+    @apply w-full rounded-lg px-3 py-2 text-sm
+           bg-[var(--bg-card)] text-[var(--text-primary)]
+           border border-[var(--border)] outline-none
+           focus:ring-2 focus:ring-accent-teal/40;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    padding-right: 32px;
+  }
+
+  /* ── Section accordion ── */
+  .section-header {
+    @apply w-full flex items-center justify-between px-1 py-2
+           text-base font-semibold text-[var(--text-primary)]
+           cursor-pointer select-none;
+    background: none;
+    border: none;
+    transition: color 0.15s;
+  }
+  .section-header:hover {
+    color: var(--accent-teal);
+  }
+  .section-body {
+    @apply pt-3;
+  }
+
+  /* ── AI Suggest button ── */
+  .ai-suggest-btn {
+    @apply inline-flex items-center gap-1.5 px-3 py-1.5
+           rounded-lg text-xs font-medium whitespace-nowrap
+           border border-accent-amber/40
+           text-accent-amber
+           hover:bg-accent-amber/10
+           disabled:opacity-50 disabled:cursor-not-allowed;
+    transition: all 0.2s;
+    flex-shrink: 0;
+  }
+
+  .ai-suggest-spinner {
+    animation: spin 1s linear infinite;
+  }
+
+  /* ── Suggest row (input + button) ── */
+  .suggest-row {
+    @apply flex items-center gap-2;
+  }
+
+  /* ── Tag chips ── */
+  .tag-grid {
+    @apply flex flex-wrap gap-1.5;
+    max-height: 120px;
+    overflow-y: auto;
+  }
+  .tag-chip {
+    @apply px-2 py-0.5 rounded-full text-xs
+           border cursor-pointer select-none;
+    border-color: var(--border);
+    color: var(--text-muted);
+    background: transparent;
+    transition: all 0.15s;
+  }
+  .tag-chip:hover {
+    border-color: var(--accent-teal);
+    color: var(--text-primary);
+  }
+  .tag-chip-active {
+    background: var(--accent-teal);
+    color: white;
+    border-color: var(--accent-teal);
+  }
+  .tag-chip-active:hover {
+    background: var(--accent-teal);
+    opacity: 0.85;
+    color: white;
+  }
+  .tag-chip-more {
+    @apply cursor-default;
+    color: var(--text-muted);
+    border-style: dashed;
+  }
+
+  /* ── AI result/error boxes ── */
+  .ai-result-box {
+    @apply rounded-lg p-3 text-sm;
+    background: var(--accent-teal);
+    background: rgba(45, 212, 191, 0.08);
+    border: 1px solid rgba(45, 212, 191, 0.25);
+  }
+  .ai-result-header {
+    @apply text-xs font-semibold mb-1;
+    color: var(--accent-teal);
+  }
+  .ai-result-content {
+    @apply whitespace-pre-wrap text-sm;
+    color: var(--text-primary);
+    font-family: inherit;
+    margin: 0;
+    background: none;
+  }
+
+  .ai-error-box {
+    @apply rounded-lg px-3 py-2 text-xs;
+    background: rgba(244, 63, 94, 0.08);
+    border: 1px solid rgba(244, 63, 94, 0.25);
+    color: var(--accent-rose);
+  }
+
+  /* ── Loading bar ── */
+  .ai-loading-bar {
+    @apply flex items-center gap-2 rounded-lg px-3 py-2 mb-4 text-xs;
+    background: rgba(251, 191, 36, 0.08);
+    border: 1px solid rgba(251, 191, 36, 0.25);
+    color: var(--accent-amber);
+    overflow: hidden;
+    position: relative;
+  }
+  .ai-loading-bar-inner {
+    position: absolute;
+    left: 0;
+    top: 0;
+    height: 2px;
+    width: 30%;
+    background: var(--accent-amber);
+    animation: loading-slide 1.5s ease-in-out infinite;
+  }
+
+  /* ── Smart Input box ── */
+  .smart-input-box {
+    @apply rounded-xl overflow-hidden;
+    background: var(--bg-card);
+    border: 1px solid var(--accent-teal);
+    border-color: rgba(45, 212, 191, 0.3);
+    box-shadow: 0 0 20px rgba(45, 212, 191, 0.05);
+  }
+  .smart-input-header {
+    @apply w-full flex items-center justify-between px-4 py-3
+           text-sm font-semibold cursor-pointer select-none;
+    color: var(--text-primary);
+    background: rgba(45, 212, 191, 0.06);
+    border: none;
+    border-bottom: 1px solid rgba(45, 212, 191, 0.15);
+    transition: background 0.15s;
+  }
+  .smart-input-header:hover {
+    background: rgba(45, 212, 191, 0.1);
+  }
+  .smart-input-body {
+    @apply p-4;
+  }
+  .smart-input-btn {
+    @apply inline-flex items-center gap-1.5 px-4 py-2
+           rounded-lg text-xs font-semibold whitespace-nowrap
+           border-0 cursor-pointer
+           disabled:opacity-50 disabled:cursor-not-allowed;
+    background: var(--accent-teal);
+    color: var(--bg-deep);
+    transition: all 0.2s;
+    flex-shrink: 0;
+  }
+  .smart-input-btn:hover:not(:disabled) {
+    opacity: 0.9;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(45, 212, 191, 0.3);
+  }
+
+  @keyframes loading-slide {
+    0% { left: -30%; }
+    100% { left: 100%; }
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}

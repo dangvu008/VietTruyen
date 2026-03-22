@@ -1,0 +1,100 @@
+/**
+ * File: novel_genres.ts
+ * Purpose: Genre, sub-genre/tag, and writing style options for the Bible page
+ * Layer: Data (Constants)
+ * Domain: Bible → [novel setup]
+ */
+
+export const NOVEL_GENRES = [
+  'Đô thị ngôn tình',
+  'Khoa học viễn tưởng',
+  'Võ hiệp',
+  'Trinh thám',
+  'Lịch sử',
+  'Quân sự',
+  'Game',
+  'Kinh dị',
+  'Xuyên không - Trọng sinh',
+  'Hệ thống',
+  'Đồng nhân',
+  'Mạt thế',
+  'Điền văn - Hài hước',
+  'Cổ đại ngôn tình',
+  'Kỳ ảo phương Tây',
+  'Nữ cường',
+  'Tổng tài',
+  'Thanh xuân vườn trường',
+  'Cung đấu',
+  'Gia đấu',
+  'Hồng hoang',
+  'Ngôn tình võng du',
+  'Đô thị dị năng',
+  'Linh dị - Bí ẩn',
+  'Đam mỹ',
+  'Bách hợp',
+  'Thám hiểm lăng mộ',
+  'Dị giới đại lục',
+  'Cổ đại làm ruộng',
+  'Không gian Tùy thân',
+  'ABO',
+  'Ma cà rồng',
+  'Cạnh kỹ - Thể thao',
+  'Đồng nhân Anime',
+  'Vô hạn lưu',
+  'Khác',
+] as const;
+
+export const NOVEL_TAGS = [
+  '1v1', 'NP', 'Nữ phẫn nam trang', 'Nam phẫn nữ trang',
+  'Xuyên không', 'Xuyên sách', 'Trọng sinh', 'Hệ thống',
+  'Bàn tay vàng', 'Không gian tùy thân', 'Linh tuyền', 'Đọc tâm thuật',
+  'Vô địch lưu', 'Cẩu đạo', 'Nhiệt huyết', 'Hài hước',
+  'Sảng văn', 'Ngọt sủng', 'Ngược luyến', 'Gương vỡ lại lành',
+  'Cưới trước yêu sau', 'Oan gia ngõ hẹp', 'Thanh mai trúc mã',
+  'Hào môn thế gia', 'Tổng tài', 'Minh tinh', 'Giới giải trí',
+  'Vườn trường', 'Học bá', 'Võng du', 'E-sports', 'Livestream',
+  'Mỹ thực', 'Nông trại', 'Điền văn', 'Nuôi con', 'Làm giàu',
+  'Cung đấu', 'Gia đấu', 'Quyền mưu', 'Nữ cường', 'Nam cường',
+  'Song khiết', 'Phế Sài', 'Thiên tài', 'Từ hôn',
+  'Linh khí khôi phục', 'Mạt thế', 'Cơ giáp', 'Tinh tế',
+  'ABO', 'Người sói', 'Ma cà rồng', 'Tây huyễn', 'Ma pháp',
+  'Kiếm ma', 'Pháp sư', 'Giả heo ăn hổ', 'Bi kịch', 'Chữa lành',
+  'Hắc ám', 'Gothic', 'Tâm lý', 'Trinh thám', 'Phá án',
+  'Đạo mộ', 'Cương thi', 'Quy tắc quái đàm', 'Vô hạn lưu',
+  'Mau xuyên', 'Chế tạo', 'Lĩnh chúa', 'Trồng trọt',
+  'Câu cá', 'Nuôi thú', 'Pokemon', 'Anime', 'Harry Potter', 'Marvel',
+  'Cổ đại', 'Dân quốc', 'Tu tiên', 'Trả thù', 'Pháo hôi',
+  'Vai ác', 'Tiên tri', 'Phép thuật',
+] as const;
+
+export const WRITING_STYLES = [
+  'Văn phong đẹp, ý cảnh sâu xa',
+  'Nhịp nhanh, cốt truyện kịch tính',
+  'Mô tả tinh tế, cảm xúc phong phú',
+  'Hài hước thú vị, nhẹ nhàng vui vẻ',
+  'Cổ phong nhã vận cổ điển',
+  'Sảng khoái cực độ (Sảng văn)',
+  'Hắc ám u ám',
+  'Hài hước lầy lội',
+  'Miêu tả chi tiết chậm rãi',
+  'Triết lý nội tâm sâu sắc',
+  'Hỗn hợp hiện đại cổ phong',
+  'Ngọt sủng rắc đường (甜宠文)',
+  'Hồi hộp giật gân (Huyền nghi)',
+  'Điền văn sinh hoạt (Chậm nhiệt / Slice of Life)',
+  'Trang bức vả mặt (Hệ thống / Đô thị sảng văn)',
+  'Thế giới tinh tế / Sci-fi (Cơ giáp)',
+  'Quan trường quyền mưu (Cung đấu / Gia đấu)',
+  'Thanh xuân vườn trường',
+  'Ngược luyến tàn tâm (Ngược văn)',
+  'Vô hạn lưu (Nhiệm vụ sinh tử)',
+  'Quần tượng liệt truyện (Nhiều nhân vật chính)',
+  'Quân sự chiến tranh',
+  'Đam mỹ/Bách hợp tinh tế',
+  'Đồng nhân (Fanfiction)',
+  'Võng du eSports',
+] as const;
+
+export type NovelGenre = typeof NOVEL_GENRES[number];
+export type NovelTag = typeof NOVEL_TAGS[number];
+export type WritingStyle = typeof WRITING_STYLES[number];
