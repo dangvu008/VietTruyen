@@ -1,0 +1,333 @@
+/**
+ * File: translations_zh.ts
+ * Purpose: Chinese translation map — leveraging terminology from webnovel-writer-ref
+ * Layer: Core Library
+ * Domain: i18n → [zh locale]
+ *
+ * Source references:
+ * - webnovel-writer-ref/webnovel-writer/dashboard/app.py (正文, 大纲, 设定集)
+ * - webnovel-writer-ref/webnovel-writer/dashboard/frontend/src/App.jsx (UI labels)
+ * - webnovel-writer-ref/webnovel-writer/agents/*.md (agent terminology)
+ */
+import type { TranslationMap } from './types';
+
+export const zh: TranslationMap = {
+  common: {
+    loading: '加载中...',
+    save: '保存',
+    cancel: '取消',
+    delete: '删除',
+    edit: '编辑',
+    add: '添加',
+    close: '关闭',
+    confirm: '确认',
+    search: '搜索',
+    filter: '筛选',
+    all: '全部',
+    none: '无',
+    yes: '是',
+    no: '否',
+    back: '返回',
+    next: '下一步',
+    previous: '上一步',
+    create: '新建',
+    update: '更新',
+    export: '导出',
+    import: '导入',
+    copy: '复制',
+    reset: '重置',
+    submit: '提交',
+    preview: '预览',
+    settings: '设置',
+    autoSave: '自动保存',
+    guestMode: '游客模式',
+    signOut: '退出登录',
+  },
+
+  sidebar: {
+    brand: 'VietTruyen',
+    tagline: '先从对话开始，需要时再由 AI 把你带到正确的工作区。',
+    currentProject: '当前项目',
+    sections: {
+      start: '开始',
+      idea: '构思',
+      foundation: '构建基础',
+      draft: '稿件',
+      editing: '编辑工具',
+      advanced: '高级工具',
+    },
+    tabs: {
+      studio: '流程',
+      projects: '项目',
+      brainstorm: '开始',
+      adaptation: '改编',
+      chuaCanon: '修正正典',
+      bible: '故事基础',
+      characters: '角色',       // from repo: 角色
+      world: '世界观',
+      outline: '大纲',          // from repo: 大纲
+      genreLibrary: '类型库',
+      writer: '写章节',
+      review: '检查章节',
+      chapters: '管理章节',
+      memory: '记忆库',
+      foreshadowing: '伏笔',
+      export: '发布',
+      community: '社区',
+      dashboard: 'AI 助手',
+      aiSettings: 'AI 设置',
+      editingTools: '工具',
+    },
+  },
+
+  app: {
+    aiFirst: 'AI优先',
+    aiReady: 'AI 已就绪',
+    missingApiKey: '缺少 API Key',
+    milestonesUnit: '个里程碑',
+    aiAssistant: 'AI 助手',
+    assistantPromptPlaceholder: '直接说你想做什么，AI 会继续追问并带你往下走...',
+    createFirstProject: '创建第一个项目',
+    studioDescription: '先说目标，让助手补齐信息，再带你进入正确步骤。',
+    nextStepPrefix: '下一步',
+  },
+
+  login: {
+    title: '欢迎来到 VietTruyen',
+    subtitle: 'AI优先的写作平台',
+    loginWithGoogle: '使用 Google 登录',
+    loginWithGithub: '使用 GitHub 登录',
+    guestMode: '免登录体验',
+    guestWarning: '游客模式：数据仅保存在本设备。',
+    or: '或',
+  },
+
+  studio: {
+    heroTitle: '你接下来想做什么？',
+    heroDescription: '先说一个明确目标。需要时，助手会继续追问，然后再把你带到正确步骤。',
+    openAiAssistant: '打开 AI 助手',
+    goToWriter: '前往写作区',
+    nextStep: '下一步',
+    currentAi: '当前 AI',
+    projectProgress: '项目进度',
+    chaptersUnit: '章',
+    progressFill: '% 目标已完成。',
+    workflowTitle: '工作流程',
+    workflowSubtitle: '按正确顺序操作，新手也能立即上手',
+    milestonesLocked: '个基础里程碑已锁定',
+    currentStatus: '当前状态',
+    quickSuggestion: '快速建议',
+    goToStep: '前往此步骤',
+    projectMemory: '项目记忆',
+    quickOverview: '快速概览',
+    latestChapter: '最新章节',
+    noChaptersYet: '尚无章节。',
+    noChaptersHint: '当故事基础足够清晰时，前往写作区用AI或快速草稿创建第一个稿件。',
+    openChapterList: '打开章节列表',
+    whenNeeded: '按需使用',
+    advancedTools: '高级工具',
+    assistantChatAction: '让 AI 继续追问',
+    assistantChatActionDesc: '先从对话开始，不必自己去找工具。',
+    assistantRouteAction: '打开正确界面',
+    assistantRouteActionDesc: '当任务已经明确时，AI 会把你送到能执行它的工作区。',
+    steps: {
+      enableAi: '启用 AI',
+      enableAiDesc: '添加 API Key 并选择默认模型，以进行头脑风暴和写作。',
+      aiReady: 'AI 已就绪',
+      openAiSettings: '打开 AI 设置',
+      canUseNow: '可立即使用',
+      missingApiKey: '缺少 API Key',
+      lockIdea: '确定创意',
+      lockIdeaDesc: '将粗略创意转化为梗概、主线和初始章节框架。',
+      reopenIdea: '重新打开创意',
+      brainstormNow: '立即头脑风暴',
+      hasDirection: '已有故事方向',
+      needStartPoint: '需要一个起点',
+      buildFoundation: '搭建故事基础',
+      buildFoundationDesc: '完善角色、世界观和大纲，让AI写作保持一致。',
+      foundationReady: '基础已就绪',
+      addProtagonist: '添加主角',
+      addWorld: '补充世界观',
+      addOutline: '制定章节大纲',
+      coreParts: '个核心部分',
+      writeChapters: '起草章节',
+      writeChaptersDesc: '用 Writer 把 brief 和 canon 转成可继续打磨的章节草稿。',
+      continueChapter: '继续写第',
+      writeFirstChapter: '写第一章',
+      chaptersExist: '章已完成',
+      noDraft: '尚无稿件',
+      reviewAndShip: '审核并锁定输出',
+      reviewAndShipDesc: '审核新章节、处理 divergence，稳定后再进入发布。',
+      reviewLatestChapter: '审核最新章节',
+      exportNow: '前往发布',
+      reviewedChapters: '章已通过 gate',
+      reviewPending: '还没有章节通过 gate',
+    },
+    status: {
+      ready: '已就绪',
+      continue: '继续',
+      needMore: '需补充',
+    },
+    tools: {
+      adaptationTitle: '改编',
+      adaptationDesc: '从原作或源材料创建新版本。',
+      surgeryTitle: '修正正典',
+      surgeryDesc: '制定删减/合并计划 → 扫描影响范围 → 批量重写。',
+      exportTitle: '发布',
+      exportDesc: '将稿件打包为 DOCX 或复制到剪贴板以供发行。',
+    },
+    metrics: {
+      logline: '梗概',
+      characters: '角色',
+      world: '世界观',
+      outline: '大纲',
+      chapters: '章节',
+      hasIt: '已有',
+      notYet: '尚无',
+      profiles: '份档案',
+      infoCluster: '组信息',
+      beats: '个节拍',
+      drafts: '份稿件',
+    },
+    idea: '创意',
+    ideaHas: '已有故事方向',
+    ideaNo: '尚未确定概念',
+    foundation: '故事基础',
+    draft: '稿件',
+    draftHas: '章进行中',
+    draftNo: '尚无章节',
+    notReady: '未就绪',
+    aiCanBrainstorm: '可立即进行头脑风暴和写作。',
+    addApiKeyHint: '添加 API Key 以解锁全部 AI 工作流。',
+  },
+
+  language: {
+    vi: 'Tiếng Việt',
+    zh: '中文',
+    en: 'English',
+    switchLanguage: '切换语言',
+  },
+
+  projects: {
+    title: '项目',
+    newProject: '新建项目',
+    duplicate: '复制',
+    deleteConfirm: '确定要删除此项目吗？',
+    projectName: '项目名称',
+    created: '创建日期',
+    chapters: '章节',
+    characters: '角色',
+  },
+
+  bible: {
+    title: '设定集',
+    logline: '梗概',
+    mainPlot: '主线剧情',
+    endgame: '最终目标',
+    targetChapters: '目标章数',
+    targetWords: '目标字数',
+    genre: '类型',
+    tone: '基调',
+  },
+
+  characters: {
+    title: '角色',
+    addCharacter: '添加角色',
+    name: '名称',
+    role: '角色定位',
+    description: '描述',
+    traits: '特征',
+    arc: '成长弧线',
+  },
+
+  world: {
+    title: '世界观',
+    geography: '地理',
+    magicSystem: '修炼体系',
+    rules: '规则',
+    techLevel: '科技水平',
+    factions: '势力',
+  },
+
+  outline: {
+    title: '大纲',
+    addBeat: '添加节拍',
+    beatTitle: '节拍标题',
+    beatDescription: '节拍描述',
+    moveBeat: '移动节拍',
+  },
+
+  writer: {
+    title: '写作',
+    generateChapter: 'AI 生成章节',
+    wordCount: '字数',
+    prompt: 'AI 指令',
+  },
+
+  review: {
+    title: '审核 (AI)',
+    runReview: '运行审核',
+    score: '评分',
+    issues: '问题',
+  },
+
+  chaptersPage: {
+    title: '章节',
+    chapterNumber: '章节号',
+    status: '状态',
+    wordCount: '字数',
+  },
+
+  memory: {
+    title: '记忆库',
+    entities: '实体',
+    facts: '事件',
+  },
+
+  brainstorm: {
+    title: '头脑风暴',
+    ideaInput: '输入创意...',
+    generate: '发展创意',
+  },
+
+  foreshadowing: {
+    title: '伏笔',
+    addForeshadowing: '添加伏笔',
+    planted: '已埋设',
+    resolved: '已回收',
+    pending: '待处理',
+  },
+
+  exportPage: {
+    title: '发布',
+    exportDocx: '导出 DOCX',
+    copyClipboard: '复制到剪贴板',
+  },
+
+  community: {
+    title: '社区',
+  },
+
+  aiSettings: {
+    title: 'AI 设置',
+    apiKey: 'API Key',
+    selectModel: '选择模型',
+    provider: '提供商',
+  },
+
+  genreLibrary: {
+    title: '类型库',
+  },
+
+  adaptation: {
+    title: '改编',
+  },
+
+  chuaCanon: {
+    title: '修正正典',
+    tabPlan: '制定计划',
+    tabScan: '扫描影响',
+    tabQueue: '重写队列',
+    subtitle: '制定删减/合并 → 扫描影响 → 批量重写',
+  },
+};

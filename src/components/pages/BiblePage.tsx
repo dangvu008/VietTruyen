@@ -8,18 +8,22 @@
  * 1. Thông tin cơ bản — Genre, Tags, Writing Style, Title + AI suggest
  * 2. Thiết lập chi tiết — Characters, World, Plot + AI suggest for each
  */
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { Save, ChevronDown, ChevronUp, Sparkles } from 'lucide-react';
 import type { Project } from '../../types/story';
 import { NOVEL_GENRES, NOVEL_TAGS, WRITING_STYLES } from '../../data/novel_genres';
 import { buildTitlePrompt, buildCharacterPrompt, buildWorldPrompt, buildPlotPrompt } from '../../lib/ai/bible_prompts';
 import { buildSmartProjectPrompt } from '../../lib/ai/smart_prompts';
+import { getOrGenerateStoryPreview } from '../../lib/ai/story_preview';
 import { useAiSuggest } from '../../hooks/use_ai_suggest';
 import { AiSuggestButton } from '../shared/AiSuggestButton';
 import { SmartInput } from '../shared/SmartInput';
 import { useProjectStore } from '../../store/use_project_store';
+import { useAssistantSessionStore } from '../../store/use_assistant_session_store';
+import { useNotificationStore } from '../../store/use_notification_store';
 import { createId } from '../../core/id';
 import PageHeader from '../layout/PageHeader';
+import { hasDuplicateProjectTitle } from '../../lib/project/project_title';
 
 interface BiblePageProps {
   project: Project;
@@ -48,10 +52,62 @@ const BiblePage: React.FC<BiblePageProps> = ({ project, onUpdateProject, onOpenA
 
   // Selected tag state
   const [tagSearch, setTagSearch] = useState('');
+  const [handoffBrief, setHandoffBrief] = useState<string | null>(null);
+  const [titleDraft, setTitleDraft] = useState(project.title);
+  const [titleError, setTitleError] = useState('');
 
   const update = (field: keyof Project, value: any) => {
     onUpdateProject(project.id, { [field]: value });
   };
+
+  useEffect(() => {
+    setTitleDraft(project.title);
+  }, [project.title]);
+
+  const commitTitleDraft = useCallback(() => {
+    const nextTitle = titleDraft.trim() || 'Tác phẩm mới';
+    const duplicated = hasDuplicateProjectTitle(store.projects, nextTitle, {
+      excludeProjectId: project.id,
+    });
+
+    if (duplicated) {
+      setTitleError('Tên tác phẩm đã tồn tại. Hãy dùng tên khác hoặc mở tác phẩm cũ để sửa.');
+      return;
+    }
+
+    setTitleError('');
+    if (nextTitle !== project.title) {
+      onUpdateProject(project.id, { title: nextTitle });
+    }
+  }, [onUpdateProject, project.id, project.title, store.projects, titleDraft]);
+
+  // Consume Handoff
+  const consumeHandoff = useAssistantSessionStore((state) => state.consumeHandoff);
+
+  useEffect(() => {
+    const handoff = consumeHandoff('bible');
+    if (handoff) {
+      const { payload, brief } = handoff;
+      if (brief) setHandoffBrief(brief);
+
+      const patch: Partial<Project> = {};
+      let hasUpdates = false;
+
+      if (payload.genre) { patch.genre = payload.genre; hasUpdates = true; }
+      if (payload.mainPlot) { patch.mainPlot = payload.mainPlot; hasUpdates = true; }
+      if (payload.worldSetting) { patch.worldSetting = payload.worldSetting; hasUpdates = true; }
+      if (payload.characterSetup) { patch.characterSetup = payload.characterSetup; hasUpdates = true; }
+
+      if (hasUpdates) {
+        onUpdateProject(project.id, patch);
+        useNotificationStore.getState().push({
+          type: 'success',
+          title: 'AI đã điền dữ liệu',
+          message: 'Thiết lập truyện đã được cập nhật.',
+        });
+      }
+    }
+  }, [consumeHandoff, project.id, onUpdateProject]);
 
   // Central AI: fill ALL domains from one description
   const handleSmartResult = useCallback((data: any) => {
@@ -149,11 +205,13 @@ const BiblePage: React.FC<BiblePageProps> = ({ project, onUpdateProject, onOpenA
 
   // AI Suggest handlers
   const handleSuggestTitle = async () => {
+    const preview = await getOrGenerateStoryPreview(project.id);
     const prompt = buildTitlePrompt({
       genre: project.genre || 'Đô thị ngôn tình',
       tags: project.subGenre || [],
       writingStyle: project.writingStyle || 'Văn phong đẹp, ý cảnh sâu xa',
       customPrompt: titleCustomPrompt || undefined,
+      storyPreview: preview,
     });
     const result = await titleAi.suggest(prompt);
     if (result) {
@@ -162,6 +220,7 @@ const BiblePage: React.FC<BiblePageProps> = ({ project, onUpdateProject, onOpenA
   };
 
   const handleSuggestCharacters = async () => {
+    const preview = await getOrGenerateStoryPreview(project.id);
     const prompt = buildCharacterPrompt({
       genre: project.genre || 'Đô thị ngôn tình',
       tags: project.subGenre || [],
@@ -169,6 +228,7 @@ const BiblePage: React.FC<BiblePageProps> = ({ project, onUpdateProject, onOpenA
       mainCharacterCount: project.mainCharacterCount || 2,
       supportCharacterCount: project.supportCharacterCount || 3,
       customPrompt: charCustomPrompt || undefined,
+      storyPreview: preview,
     });
     const result = await charAi.suggest(prompt);
     if (result) {
@@ -177,12 +237,14 @@ const BiblePage: React.FC<BiblePageProps> = ({ project, onUpdateProject, onOpenA
   };
 
   const handleSuggestWorld = async () => {
+    const preview = await getOrGenerateStoryPreview(project.id);
     const prompt = buildWorldPrompt({
       genre: project.genre || 'Đô thị ngôn tình',
       tags: project.subGenre || [],
       title: project.title,
       characters: project.characterSetup,
       customPrompt: worldCustomPrompt || undefined,
+      storyPreview: preview,
     });
     const result = await worldAi.suggest(prompt);
     if (result) {
@@ -191,6 +253,7 @@ const BiblePage: React.FC<BiblePageProps> = ({ project, onUpdateProject, onOpenA
   };
 
   const handleSuggestPlot = async () => {
+    const preview = await getOrGenerateStoryPreview(project.id);
     const prompt = buildPlotPrompt({
       genre: project.genre || 'Đô thị ngôn tình',
       tags: project.subGenre || [],
@@ -198,6 +261,7 @@ const BiblePage: React.FC<BiblePageProps> = ({ project, onUpdateProject, onOpenA
       characters: project.characterSetup,
       worldSetting: project.worldSetting,
       customPrompt: plotCustomPrompt || undefined,
+      storyPreview: preview,
     });
     const result = await plotAi.suggest(prompt);
     if (result) {
@@ -224,13 +288,36 @@ const BiblePage: React.FC<BiblePageProps> = ({ project, onUpdateProject, onOpenA
         }
       />
 
+      {handoffBrief && (
+        <div className="mb-4 p-4 rounded-xl border border-[#2DD4BF]/20 bg-[#2DD4BF]/5 text-sm text-[#E2E8F0]">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-[#F8FAFC]">Brief từ trợ lý</p>
+              <p className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap text-sm leading-6">
+                {handoffBrief}
+              </p>
+            </div>
+            <button
+              onClick={() => setHandoffBrief(null)}
+              className="btn-secondary btn-sm whitespace-nowrap"
+              type="button"
+            >
+              Ẩn
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* ═══════════════════════════════════════════════════════
           🤖 SMART INPUT: Central AI — mô tả 1 lần, fill tất cả
           ═══════════════════════════════════════════════════════ */}
       <SmartInput
         label="Mô tả ý tưởng tiểu thuyết"
         placeholder={`VD: Truyện xuyên không, nhân vật chính là lập trình viên bị isekai vào thế giới tu tiên. Có hệ thống level up. 2 nhân vật chính, 3 phụ. Bối cảnh cổ đại với 5 tông phái. Cốt truyện: từ phế vật thành cường giả...\n\nViết bất kỳ gì bạn muốn — AI sẽ tự phân tích và điền vào TẤT CẢ các mục bên dưới (thể loại, nhân vật, thế giới, dàn ý, phục bút).`}
-        buildPrompt={buildSmartProjectPrompt}
+        buildPrompt={async (text) => {
+          const preview = await getOrGenerateStoryPreview(project.id);
+          return buildSmartProjectPrompt(text, preview);
+        }}
         onResult={handleSmartResult}
       />
 
@@ -245,7 +332,7 @@ const BiblePage: React.FC<BiblePageProps> = ({ project, onUpdateProject, onOpenA
       {/* ═══════════════════════════════════════════════════════
           📌 SECTION 1: Thông tin cơ bản
           ═══════════════════════════════════════════════════════ */}
-      <div className="card mb-4">
+      <div className="bg-[#0F1115] rounded-2xl border border-[#1E232B] p-6 mb-4">
         <button
           className="section-header"
           onClick={() => setSection1Open(!section1Open)}
@@ -263,9 +350,10 @@ const BiblePage: React.FC<BiblePageProps> = ({ project, onUpdateProject, onOpenA
                 <label className="label">📚 Thể loại tiểu thuyết</label>
                 <select
                   className="select-base"
-                  value={project.genre || 'Đô thị ngôn tình'}
+                  value={project.genre || ''}
                   onChange={(e) => update('genre', e.target.value)}
                 >
+                  <option value="">Chọn thể loại</option>
                   {NOVEL_GENRES.map(g => (
                     <option key={g} value={g}>{g}</option>
                   ))}
@@ -275,9 +363,10 @@ const BiblePage: React.FC<BiblePageProps> = ({ project, onUpdateProject, onOpenA
                 <label className="label">✍️ Phong cách viết</label>
                 <select
                   className="select-base"
-                  value={project.writingStyle || 'Văn phong đẹp, ý cảnh sâu xa'}
+                  value={project.writingStyle || ''}
                   onChange={(e) => update('writingStyle', e.target.value)}
                 >
+                  <option value="">Chọn phong cách viết</option>
                   {WRITING_STYLES.map(s => (
                     <option key={s} value={s}>{s}</option>
                   ))}
@@ -324,10 +413,25 @@ const BiblePage: React.FC<BiblePageProps> = ({ project, onUpdateProject, onOpenA
               <label className="label">📖 Tên tiểu thuyết</label>
               <input
                 className="input-base mb-2"
-                value={project.title}
-                onChange={(e) => update('title', e.target.value)}
+                value={titleDraft}
+                onChange={(e) => {
+                  setTitleDraft(e.target.value);
+                  if (titleError) {
+                    setTitleError('');
+                  }
+                }}
+                onBlur={commitTitleDraft}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault();
+                    commitTitleDraft();
+                  }
+                }}
                 placeholder="Tiểu thuyết chưa đặt tên"
               />
+              {titleError && (
+                <div className="ai-error-box mt-2">{titleError}</div>
+              )}
 
               {/* Custom prompt + Suggest button row */}
               <div className="suggest-row">
@@ -374,7 +478,7 @@ const BiblePage: React.FC<BiblePageProps> = ({ project, onUpdateProject, onOpenA
       {/* ═══════════════════════════════════════════════════════
           🎭 SECTION 2: Thiết lập chi tiết
           ═══════════════════════════════════════════════════════ */}
-      <div className="card mb-4">
+      <div className="bg-[#0F1115] rounded-2xl border border-[#1E232B] p-6 mb-4">
         <button
           className="section-header"
           onClick={() => setSection2Open(!section2Open)}
@@ -512,7 +616,7 @@ const BiblePage: React.FC<BiblePageProps> = ({ project, onUpdateProject, onOpenA
       {/* ═══════════════════════════════════════════════════════
           📝 Endgame & Notes (simplified from original)
           ═══════════════════════════════════════════════════════ */}
-      <div className="card mb-4">
+      <div className="bg-[#0F1115] rounded-2xl border border-[#1E232B] p-6 mb-4">
         <label className="label">🎯 Đích đến cuối cùng (Endgame)</label>
         <p className="label-hint mb-2">AI cần biết đích đến để giữ đúng mạch truyện, tránh lan man.</p>
         <textarea
@@ -524,7 +628,7 @@ const BiblePage: React.FC<BiblePageProps> = ({ project, onUpdateProject, onOpenA
         />
       </div>
 
-      <div className="card mb-4">
+      <div className="bg-[#0F1115] rounded-2xl border border-[#1E232B] p-6 mb-4">
         <label className="label">📝 Ghi chú nhanh</label>
         <textarea
           rows={3}

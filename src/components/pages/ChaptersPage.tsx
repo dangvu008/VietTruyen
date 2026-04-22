@@ -4,21 +4,30 @@
  * Layer: UI Page
  * Domain: Chapters → [CRUD, status management, summary for Retcon]
  */
-import React, { useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import {
   BookText, Trash2, Copy, Check, Clock, Hash, Sparkles,
-  ChevronUp, ChevronDown, FileText, PenTool, Loader2,
+  FileText, PenTool, Loader2, ShieldAlert, History, Save, GitBranch, Users, MessageCircle,
 } from 'lucide-react';
 import type { Chapter } from '../../types/story';
-import { useRetconStore } from '../../store/use_retcon_store';
 import { useAiStore } from '../../store/use_ai_store';
 import { useProjectStore, getActiveProject } from '../../store/use_project_store';
+import { useAuthStore } from '../../store/use_auth_store';
 import { summarizeChapter } from '../../lib/ai/chapter_summarizer';
 import { batchSummarizeChapters } from '../../lib/ai/batch_summarizer';
 import { getModelForTask } from '../../lib/ai/model_router';
+import * as versionService from '../../lib/supabase/version_service';
 import PageHeader from '../layout/PageHeader';
 import EmptyState from '../shared/EmptyState';
 import StyleFeedbackPanel from '../shared/StyleFeedbackPanel';
+import VersionHistoryPanel from '../shared/VersionHistoryPanel';
+import BranchManagerPanel from '../shared/BranchManagerPanel';
+import CollaborationPanel from '../shared/CollaborationPanel';
+import DiscussionPanel from '../shared/DiscussionPanel';
+import { sortChaptersBySequence } from '../../lib/memory/chapter_order';
+import { getChapterContinuityTasks } from '../../lib/memory/memory_query';
+import { getProjectPropagationTasks } from '../../db/narrative_db';
+import type { PropagationTask } from '../../types/narrative_memory';
 
 interface ChaptersPageProps {
   chapters: Chapter[];
@@ -32,29 +41,80 @@ interface ChaptersPageProps {
 type FilterStatus = 'all' | 'draft' | 'revised' | 'final';
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
-  draft: { label: 'Bản nháp', color: 'text-accent-amber', bg: 'bg-accent-amber/15' },
-  revised: { label: 'Đã sửa', color: 'text-accent-teal', bg: 'bg-accent-teal/15' },
+  draft: { label: 'Bản nháp', color: 'text-[#F59E0B]', bg: 'bg-[#F59E0B]/15' },
+  revised: { label: 'Đã sửa', color: 'text-[#2DD4BF]', bg: 'bg-[#2DD4BF]/15' },
   final: { label: 'Hoàn thành', color: 'text-green-400', bg: 'bg-green-400/15' },
 };
 
 const ChaptersPage: React.FC<ChaptersPageProps> = ({
   chapters, projectId, onUpdateChapter, onRemoveChapter, onOpenAi, onNavigateToWriter,
 }) => {
+  const { user } = useAuthStore();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [filter, setFilter] = useState<FilterStatus>('all');
   const [copied, setCopied] = useState(false);
   const [isSummarizing, setIsSummarizing] = useState(false);
   const [isBatchSummarizing, setIsBatchSummarizing] = useState(false);
   const [batchProgress, setBatchProgress] = useState('');
+  const [chapterTasks, setChapterTasks] = useState<PropagationTask[]>([]);
+  const [projectTasks, setProjectTasks] = useState<PropagationTask[]>([]);
+  const [showHistory, setShowHistory] = useState(false);
+  const [showBranches, setShowBranches] = useState(false);
+  const [showCollab, setShowCollab] = useState(false);
+  const [showDiscussion, setShowDiscussion] = useState(false);
+  const [savingVersion, setSavingVersion] = useState(false);
+  const [isOwner, setIsOwner] = useState(false);
+
+  // Check ownership via Supabase
+  useEffect(() => {
+    if (!user) { setIsOwner(false); return; }
+    import('./../../lib/supabase/supabase_client').then(({ supabase }) => {
+      supabase
+        .from('projects')
+        .select('user_id')
+        .eq('id', projectId)
+        .single()
+        .then(({ data }) => {
+          setIsOwner(data?.user_id === user.id);
+        });
+    });
+  }, [projectId, user]);
+
+  // Save version when user explicitly triggers it
+  const handleSaveVersion = async () => {
+    if (!selected || !user || savingVersion) return;
+    setSavingVersion(true);
+    try {
+      await versionService.saveVersion(
+        selected.id,
+        projectId,
+        user.id,
+        selected.content,
+        selected.title,
+        selected.summary || undefined
+      );
+    } catch (err) {
+      console.error('[ChaptersPage] Save version failed:', err);
+    } finally {
+      setSavingVersion(false);
+    }
+  };
+
+  const handleRestoreVersion = (content: string, title: string) => {
+    if (!selected) return;
+    onUpdateChapter(projectId, selected.id, { content, title });
+  };
+
+  const orderedChapters = useMemo(() => sortChaptersBySequence(chapters), [chapters]);
 
   const filtered = useMemo(() => {
-    if (filter === 'all') return chapters;
-    return chapters.filter(c => c.status === filter);
-  }, [chapters, filter]);
+    if (filter === 'all') return orderedChapters;
+    return orderedChapters.filter(c => c.status === filter);
+  }, [orderedChapters, filter]);
 
   const selected = useMemo(
-    () => chapters.find(c => c.id === selectedId) ?? null,
-    [chapters, selectedId]
+    () => orderedChapters.find(c => c.id === selectedId) ?? null,
+    [orderedChapters, selectedId]
   );
 
   const wordCount = useMemo(
@@ -64,11 +124,11 @@ const ChaptersPage: React.FC<ChaptersPageProps> = ({
   const charCount = selected?.content.length ?? 0;
 
   const counts = useMemo(() => ({
-    all: chapters.length,
-    draft: chapters.filter(c => c.status === 'draft').length,
-    revised: chapters.filter(c => c.status === 'revised').length,
-    final: chapters.filter(c => c.status === 'final').length,
-  }), [chapters]);
+    all: orderedChapters.length,
+    draft: orderedChapters.filter(c => c.status === 'draft').length,
+    revised: orderedChapters.filter(c => c.status === 'revised').length,
+    final: orderedChapters.filter(c => c.status === 'final').length,
+  }), [orderedChapters]);
 
   const handleCopy = async () => {
     if (!selected) return;
@@ -82,14 +142,12 @@ const ChaptersPage: React.FC<ChaptersPageProps> = ({
     setIsSummarizing(true);
     try {
       const aiStore = useAiStore.getState();
-      const { models, apiKeys, activeModelId } = aiStore;
+      const { models, activeModelId, taskModelOverrides } = aiStore;
       // Ưu tiên Flash model cho tóm tắt (rẻ 10x)
-      const model = getModelForTask('summarize', models, apiKeys, activeModelId);
+      const model = getModelForTask('summarize', models, undefined, activeModelId, taskModelOverrides);
       if (!model) throw new Error('Không tìm thấy model khả dụng');
-      const apiKey = apiKeys[model.provider];
-      if (!apiKey) throw new Error(`Chưa cấu hình API key cho ${model.provider}`);
 
-      const summary = await summarizeChapter(selected.content, selected.title, apiKey, model);
+      const summary = await summarizeChapter(selected.content, selected.title, '', model);
       onUpdateChapter(projectId, selected.id, { summary });
     } catch (err: any) {
       console.error('[ChaptersPage] AI summarize error:', err);
@@ -100,24 +158,22 @@ const ChaptersPage: React.FC<ChaptersPageProps> = ({
   };
 
   const unsummarizedCount = useMemo(
-    () => chapters.filter(c => c.content.trim() && !c.summary).length,
-    [chapters]
+    () => orderedChapters.filter(c => c.content.trim() && !c.summary).length,
+    [orderedChapters]
   );
 
   const handleBatchSummarize = async () => {
-    const toSummarize = chapters.filter(c => c.content.trim() && !c.summary);
+    const toSummarize = orderedChapters.filter(c => c.content.trim() && !c.summary);
     if (toSummarize.length === 0) return;
     setIsBatchSummarizing(true);
     setBatchProgress(`0/${toSummarize.length}`);
     try {
       const aiStore = useAiStore.getState();
-      const { models, apiKeys, activeModelId } = aiStore;
-      const model = getModelForTask('summarize', models, apiKeys, activeModelId);
+      const { models, activeModelId, taskModelOverrides } = aiStore;
+      const model = getModelForTask('summarize', models, undefined, activeModelId, taskModelOverrides);
       if (!model) throw new Error('Không tìm thấy model');
-      const apiKey = apiKeys[model.provider];
-      if (!apiKey) throw new Error(`Chưa cấu hình API key cho ${model.provider}`);
 
-      const results = await batchSummarizeChapters(toSummarize, apiKey, model);
+      const results = await batchSummarizeChapters(toSummarize, '', model);
       let done = 0;
       for (const [chapterId, summary] of Object.entries(results)) {
         onUpdateChapter(projectId, chapterId, { summary });
@@ -133,24 +189,17 @@ const ChaptersPage: React.FC<ChaptersPageProps> = ({
     }
   };
 
-  const handleRetconScan = () => {
-    if (!selected) return;
-    const retconStore = useRetconStore.getState();
-    const aiStore = useAiStore.getState();
-    const projectStore = useProjectStore.getState();
-    const project = getActiveProject(projectStore);
-    const activeModel = aiStore.getActiveModel();
+  useEffect(() => {
+    void getProjectPropagationTasks(projectId).then(setProjectTasks);
+  }, [projectId, chapters]);
 
-    retconStore.startAnalysis({
-      entityType: 'chapter',
-      entityId: selected.id,
-      oldEntity: selected,
-      newEntity: selected,
-      chapters: project?.chapters || [],
-      activeModel: activeModel as any,
-      apiKey: activeModel ? aiStore.apiKeys[activeModel.provider] : '',
-    });
-  };
+  useEffect(() => {
+    if (!selected) {
+      setChapterTasks([]);
+      return;
+    }
+    void getChapterContinuityTasks(projectId, selected.id).then(setChapterTasks);
+  }, [projectId, selected]);
 
   return (
     <div className="animate-fade-in">
@@ -170,6 +219,21 @@ const ChaptersPage: React.FC<ChaptersPageProps> = ({
                   : <><Sparkles size={14} /> Tóm tắt tất cả ({unsummarizedCount})</>}
               </button>
             )}
+            {user && (
+              <button onClick={() => setShowBranches(true)} className="btn-ghost btn-sm">
+                <GitBranch size={14} /> Nhánh
+              </button>
+            )}
+            {user && (
+              <button onClick={() => setShowCollab(true)} className="btn-ghost btn-sm">
+                <Users size={14} /> Thành viên
+              </button>
+            )}
+            {user && selected && (
+              <button onClick={() => setShowDiscussion(true)} className="btn-ghost btn-sm">
+                <MessageCircle size={14} /> Thảo luận
+              </button>
+            )}
             <button onClick={onOpenAi} className="btn-ai">
               <Sparkles size={16} /> AI hỗ trợ
             </button>
@@ -180,7 +244,7 @@ const ChaptersPage: React.FC<ChaptersPageProps> = ({
         }
       />
 
-      {chapters.length === 0 ? (
+      {orderedChapters.length === 0 ? (
         <EmptyState
           icon={<BookText size={56} />}
           title="Chưa có chương nào"
@@ -206,8 +270,8 @@ const ChaptersPage: React.FC<ChaptersPageProps> = ({
                 onClick={() => setFilter(key)}
                 className={`px-3.5 py-1.5 rounded-full text-xs font-medium transition-all cursor-pointer
                   ${filter === key
-                    ? 'bg-accent-amber text-bg-deep'
-                    : 'bg-bg-elevated text-text-secondary border border-border-subtle hover:text-text-primary'
+                    ? 'bg-[#F59E0B] text-bg-deep'
+                    : 'bg-[#0F1115] text-[#E2E8F0] bg-[#0F1115] hover:text-[#F8FAFC]'
                   }`}
               >
                 {label} ({counts[key]})
@@ -218,37 +282,42 @@ const ChaptersPage: React.FC<ChaptersPageProps> = ({
           <div className="grid grid-cols-12 gap-5">
             {/* Chapter List (left) */}
             <div className="col-span-4 space-y-2 max-h-[calc(100vh-220px)] overflow-y-auto pr-1">
-              {filtered.map((chapter, index) => {
+              {filtered.map((chapter) => {
                 const isActive = chapter.id === selectedId;
                 const status = STATUS_CONFIG[chapter.status];
                 return (
                   <button
                     key={chapter.id}
                     onClick={() => setSelectedId(chapter.id)}
-                    className={`card-interactive w-full text-left transition-all ${
-                      isActive ? 'border-accent-amber/40 bg-accent-amber/5' : ''
+                    className={`bg-[#0F1115] rounded-2xl border border-[#1E232B] p-6 hover:bg-[#1E232B]/50 transition-colors cursor-pointer w-full text-left transition-all ${
+                      isActive ? 'border-[#F59E0B]/40 bg-[#F59E0B]/5' : ''
                     }`}
                   >
                     <div className="flex items-start gap-3">
                       {/* Chapter Number */}
-                      <div className="w-8 h-8 rounded-full bg-accent-amber/15 flex items-center justify-center
-                                      shrink-0 text-accent-amber font-display font-bold text-sm mt-0.5">
-                        {chapters.indexOf(chapter) + 1}
+                      <div className="w-8 h-8 rounded-full bg-[#F59E0B]/15 flex items-center justify-center
+                                      shrink-0 text-[#F59E0B] font-display font-bold text-sm mt-0.5">
+                        {chapter.sequenceNumber ?? orderedChapters.indexOf(chapter) + 1}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <h4 className="font-semibold text-text-primary text-sm truncate">
+                        <h4 className="font-semibold text-[#F8FAFC] text-sm truncate">
                           {chapter.title}
                         </h4>
                         <div className="flex items-center gap-2 mt-1">
                           <span className={`badge text-[10px] ${status.bg} ${status.color}`}>
                             {status.label}
                           </span>
-                          <span className="text-[10px] text-text-muted">
+                          {projectTasks.some((task) => task.chapterId === chapter.id && task.status !== 'done' && task.status !== 'dismissed') && (
+                            <span className="badge text-[10px] bg-status-error/15 text-status-error">
+                              continuity
+                            </span>
+                          )}
+                          <span className="text-[10px] text-[#94A3B8]">
                             {new Date(chapter.updatedAt).toLocaleDateString('vi-VN')}
                           </span>
                         </div>
                         {chapter.summary && (
-                          <p className="text-[11px] text-text-muted mt-1 line-clamp-1">
+                          <p className="text-[11px] text-[#94A3B8] mt-1 line-clamp-1">
                             {chapter.summary}
                           </p>
                         )}
@@ -264,7 +333,7 @@ const ChaptersPage: React.FC<ChaptersPageProps> = ({
               {selected ? (
                 <div className="space-y-4 animate-fade-in">
                   {/* Title + Meta */}
-                  <div className="card">
+                  <div className="bg-[#0F1115] rounded-2xl border border-[#1E232B] p-6">
                     <div className="flex items-start justify-between gap-3 mb-4">
                       <div className="flex-1">
                         <input
@@ -277,12 +346,32 @@ const ChaptersPage: React.FC<ChaptersPageProps> = ({
                         />
                       </div>
                       <div className="flex gap-2 shrink-0">
+                        {user && (
+                          <button
+                            onClick={handleSaveVersion}
+                            disabled={savingVersion || !selected.content}
+                            className="btn-ghost btn-sm flex items-center gap-1.5"
+                            title="Lưu phiên bản"
+                          >
+                            <Save size={14} className={savingVersion ? 'animate-pulse text-[#F59E0B]' : ''} />
+                            {savingVersion ? 'Đang lưu...' : 'Lưu version'}
+                          </button>
+                        )}
+                        {user && (
+                          <button
+                            onClick={() => setShowHistory(true)}
+                            className="btn-ghost btn-sm flex items-center gap-1.5"
+                            title="Xem lịch sử phiên bản"
+                          >
+                            <History size={14} /> Lịch sử
+                          </button>
+                        )}
                         <button
                           onClick={handleCopy}
                           className="btn-ghost btn-sm flex items-center gap-1.5"
                           disabled={!selected.content}
                         >
-                          {copied ? <Check size={14} className="text-accent-teal" /> : <Copy size={14} />}
+                          {copied ? <Check size={14} className="text-[#2DD4BF]" /> : <Copy size={14} />}
                           {copied ? 'Đã copy!' : 'Copy'}
                         </button>
                         <button
@@ -290,8 +379,8 @@ const ChaptersPage: React.FC<ChaptersPageProps> = ({
                             onRemoveChapter(projectId, selected.id);
                             setSelectedId(null);
                           }}
-                          className="btn btn-sm bg-transparent border border-accent-rose/30 text-accent-rose
-                                     hover:bg-accent-rose/10 hover:border-accent-rose/50"
+                          className="btn btn-sm bg-transparent border border-[#EF4444]/30 text-[#EF4444]
+                                     hover:bg-[#EF4444]/10 hover:border-[#EF4444]/50"
                         >
                           <Trash2 size={14} /> Xóa
                         </button>
@@ -299,9 +388,9 @@ const ChaptersPage: React.FC<ChaptersPageProps> = ({
                     </div>
 
                     {/* Status + Stats row */}
-                    <div className="flex items-center gap-4 text-xs text-text-muted">
+                    <div className="flex items-center gap-4 text-xs text-[#94A3B8]">
                       <div className="flex items-center gap-2">
-                        <label className="text-text-secondary font-medium">Trạng thái:</label>
+                        <label className="text-[#E2E8F0] font-medium">Trạng thái:</label>
                         <select
                           className="input-base py-1.5 px-3 text-xs w-auto"
                           value={selected.status}
@@ -317,6 +406,9 @@ const ChaptersPage: React.FC<ChaptersPageProps> = ({
                         </select>
                       </div>
                       <span className="flex items-center gap-1">
+                        Ch.{selected.sequenceNumber ?? 0}
+                      </span>
+                      <span className="flex items-center gap-1">
                         <Hash size={11} /> {wordCount} từ · {charCount} ký tự
                       </span>
                       <span className="flex items-center gap-1">
@@ -326,10 +418,10 @@ const ChaptersPage: React.FC<ChaptersPageProps> = ({
                   </div>
 
                   {/* Summary for Retcon */}
-                  <div className="card">
+                  <div className="bg-[#0F1115] rounded-2xl border border-[#1E232B] p-6">
                     <div className="flex items-center justify-between mb-2">
                       <label className="label mb-0 flex items-center gap-2">
-                        <FileText size={14} className="text-accent-amber" />
+                        <FileText size={14} className="text-[#F59E0B]" />
                         Tóm tắt chương
                       </label>
                       <div className="flex gap-2">
@@ -342,13 +434,10 @@ const ChaptersPage: React.FC<ChaptersPageProps> = ({
                              ? <><Loader2 size={14} className="animate-spin" /> Đang tóm tắt…</>
                              : <><Sparkles size={14} /> AI tóm tắt</>}
                          </button>
-                         <button onClick={handleRetconScan} className="btn-ghost btn-sm">
-                           <Sparkles size={14} /> Quét mâu thuẫn
-                         </button>
                        </div>
                     </div>
                     <p className="label-hint mb-2">
-                      Retcon Engine dùng tóm tắt này để phát hiện mâu thuẫn xuyên chương.
+                      Memory engine dùng tóm tắt để tăng độ phủ dependency khi scan continuity.
                     </p>
                     <textarea
                       rows={2}
@@ -361,6 +450,39 @@ const ChaptersPage: React.FC<ChaptersPageProps> = ({
                     />
                   </div>
 
+                  <div className="bg-[#0F1115] rounded-2xl border border-[#1E232B] p-6">
+                    <div className="flex items-center gap-2 mb-3">
+                      <ShieldAlert size={14} className="text-[#2DD4BF]" />
+                      <label className="label mb-0">Continuity tasks cho chapter này</label>
+                    </div>
+                    {chapterTasks.length === 0 ? (
+                      <p className="text-sm text-[#94A3B8]">Không có task continuity nào đang mở cho chapter này.</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {chapterTasks.map((task) => (
+                          <div key={task.id} className="p-3 rounded-xl bg-[#0F1115] bg-bg-surface">
+                            <div className="flex items-center justify-between">
+                              <p className="text-sm font-medium text-[#F8FAFC]">{task.attributeKey}</p>
+                              <span
+                                className={`badge text-[10px] ${
+                                  task.severity === 'breaking'
+                                    ? 'bg-status-error/15 text-status-error'
+                                    : task.severity === 'warning'
+                                    ? 'bg-[#F59E0B]/15 text-[#F59E0B]'
+                                    : 'bg-[#2DD4BF]/15 text-[#2DD4BF]'
+                                }`}
+                              >
+                                {task.severity}
+                              </span>
+                            </div>
+                            <p className="text-sm text-[#E2E8F0] mt-1">{task.recommendedAction}</p>
+                            <p className="text-xs text-[#94A3B8] mt-2">{task.dependencyContext}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
                   {/* Style Analysis Panel */}
                   {selected.content.trim().length >= 100 && (
                     <StyleFeedbackPanel
@@ -370,9 +492,9 @@ const ChaptersPage: React.FC<ChaptersPageProps> = ({
                   )}
 
                   {/* Content Editor */}
-                  <div className="card">
+                  <div className="bg-[#0F1115] rounded-2xl border border-[#1E232B] p-6">
                     <label className="label flex items-center gap-2">
-                      <PenTool size={14} className="text-accent-amber" />
+                      <PenTool size={14} className="text-[#F59E0B]" />
                       Nội dung chương
                     </label>
                     <textarea
@@ -387,16 +509,60 @@ const ChaptersPage: React.FC<ChaptersPageProps> = ({
                   </div>
                 </div>
               ) : (
-                <div className="card flex items-center justify-center h-64 text-center">
+                <div className="bg-[#0F1115] rounded-2xl border border-[#1E232B] p-6 flex items-center justify-center h-64 text-center">
                   <div>
-                    <BookText size={40} className="mx-auto text-text-muted mb-3 opacity-40" />
-                    <p className="text-sm text-text-muted">Chọn một chương ở bên trái để bắt đầu chỉnh sửa</p>
+                    <BookText size={40} className="mx-auto text-[#94A3B8] mb-3 opacity-40" />
+                    <p className="text-sm text-[#94A3B8]">Chọn một chương ở bên trái để bắt đầu chỉnh sửa</p>
                   </div>
                 </div>
               )}
             </div>
           </div>
         </>
+      )}
+
+      {/* Version History Panel */}
+      {showHistory && selected && (
+        <VersionHistoryPanel
+          chapterId={selected.id}
+          projectId={projectId}
+          currentTitle={selected.title}
+          currentContent={selected.content}
+          onClose={() => setShowHistory(false)}
+          onRestore={handleRestoreVersion}
+        />
+      )}
+
+      {/* Branch Manager Panel */}
+      {showBranches && (
+        <BranchManagerPanel
+          projectId={projectId}
+          mainChapters={orderedChapters}
+          onClose={() => setShowBranches(false)}
+          onMergeComplete={() => {
+            setShowBranches(false);
+            // Force reload — chapters sẽ được refreshed từ parent
+          }}
+        />
+      )}
+
+      {/* Collaboration Panel */}
+      {showCollab && (
+        <CollaborationPanel
+          projectId={projectId}
+          isOwner={isOwner}
+          onClose={() => setShowCollab(false)}
+        />
+      )}
+
+      {/* Discussion Panel */}
+      {showDiscussion && selected && (
+        <DiscussionPanel
+          projectId={projectId}
+          chapterId={selected.id}
+          chapterTitle={selected.title}
+          onClose={() => setShowDiscussion(false)}
+        />
       )}
     </div>
   );

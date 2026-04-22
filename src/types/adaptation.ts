@@ -2,17 +2,25 @@
  * File: adaptation.ts
  * Purpose: Types cho tính năng Phóng tác — tạo dự án mới từ truyện có sẵn
  * Layer: Types
- * Domain: Adaptation → [reskin, what-if, new-pov, era-shift, custom]
+ * Domain: Adaptation → [reskin, what-if, new-pov, era-shift, surgery, custom]
  *
  * Data Contract:
  * - Input:  AdaptationConfig (source project + options)
  * - Output: New Project with selective data from source
  */
 
-export type AdaptationType = 'reskin' | 'what-if' | 'new-pov' | 'era-shift' | 'custom';
+import type { RemovalDirective, SourceFormat } from './surgery';
+
+export type AdaptationType = 'reskin' | 'what-if' | 'new-pov' | 'era-shift' | 'surgery' | 'custom';
+export type AdaptationRewriteMode = 'branch';
 
 export interface AdaptationConfig {
-  sourceProjectId: string;
+  sourceProjectId?: string;
+  uploadedSource?: {
+    title: string;
+    text: string;
+    isSummary: boolean;
+  };
   adaptationType: AdaptationType;
   newTitle: string;
   newGenre: string;
@@ -25,6 +33,10 @@ export interface AdaptationConfig {
   divergeAtChapter?: number;       // What If mode: rẽ nhánh từ chương X
   newPovCharacterId?: string;      // New POV mode: kể từ góc nhìn nhân vật nào
   userNotes: string;               // Ghi chú tự do cho AI reference
+  rewriteMode?: AdaptationRewriteMode;
+  arcTargetSize?: number;
+  entityPolicies?: RemovalDirective[];
+  sourceFormat?: SourceFormat;
 }
 
 export const ADAPTATION_MODES: {
@@ -66,6 +78,14 @@ export const ADAPTATION_MODES: {
     hint: 'VD: Cổ đại → Hiện đại, Trung Cổ → Tương lai.',
     hex: '#d4a574',
     emoji: '⏳',
+  },
+  {
+    id: 'surgery',
+    label: 'Phẫu thuật cốt truyện',
+    desc: 'Tạo nhánh phóng tác để bỏ nhân vật, cắt subplot và rewrite theo arc.',
+    hint: 'VD: Xóa một nhân vật ghét nhưng vẫn giữ mạch truyện bằng impact scan và rewrite queue.',
+    hex: '#6fa8dc',
+    emoji: '🛠️',
   },
   {
     id: 'custom',

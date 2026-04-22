@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+
+<html class="light" lang="vi"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&amp;family=Newsreader:ital,opsz,wght@0,6..72,200..800;1,6..72,200..800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "inverse-primary": "#bac6ec",
+              "tertiary-container": "#433166",
+              "on-tertiary-fixed": "#220f44",
+              "secondary-fixed": "#e3dfff",
+              "primary": "#182442",
+              "on-primary-fixed": "#0d1a38",
+              "surface-bright": "#f8f9fc",
+              "outline-variant": "#c6c6ce",
+              "inverse-surface": "#2e3133",
+              "surface-container-lowest": "#ffffff",
+              "on-error": "#ffffff",
+              "inverse-on-surface": "#f0f1f4",
+              "on-surface-variant": "#45464e",
+              "secondary": "#4d41df",
+              "background": "#f8f9fc",
+              "primary-fixed-dim": "#bac6ec",
+              "surface-container": "#edeef1",
+              "tertiary": "#2d1b4f",
+              "secondary-fixed-dim": "#c4c0ff",
+              "secondary-container": "#675df9",
+              "surface-container-highest": "#e1e2e5",
+              "on-background": "#191c1e",
+              "surface-container-high": "#e7e8eb",
+              "primary-container": "#2e3a59",
+              "on-tertiary-fixed-variant": "#4f3d73",
+              "on-secondary-container": "#fffbff",
+              "outline": "#75777e",
+              "on-secondary-fixed": "#100069",
+              "error-container": "#ffdad6",
+              "on-secondary-fixed-variant": "#3622ca",
+              "surface-variant": "#e1e2e5",
+              "on-surface": "#191c1e",
+              "surface": "#f8f9fc",
+              "tertiary-fixed": "#ebddff",
+              "tertiary-fixed-dim": "#d2bcfb",
+              "on-primary": "#ffffff",
+              "surface-tint": "#525e7f",
+              "surface-dim": "#d9dadd",
+              "on-tertiary-container": "#b09bd8",
+              "primary-fixed": "#dae2ff",
+              "on-secondary": "#ffffff",
+              "error": "#ba1a1a",
+              "surface-container-low": "#f2f3f6",
+              "on-error-container": "#93000a",
+              "on-primary-fixed-variant": "#3a4666",
+              "on-primary-container": "#98a4c9",
+              "on-tertiary": "#ffffff"
+            },
+            fontFamily: {
+              "headline": ["Newsreader"],
+              "body": ["Manrope"],
+              "label": ["Manrope"]
+            },
+            borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+          },
+        },
+      }
+    </script>
+<style>
+        body { font-family: 'Manrope', sans-serif; background-color: #f8f9fc; color: #191c1e; }
+        .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+        .newsreader { font-family: 'Newsreader', serif; }
+        .ambient-shadow { box-shadow: 0 12px 40px rgba(24, 36, 66, 0.06); }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-surface text-on-surface antialiased">
+<!-- Top Navigation Shell -->
+<header class="bg-slate-50 dark:bg-slate-950 w-full h-20 sticky top-0 z-50 flex justify-between items-center px-8 max-w-screen-2xl mx-auto no-line-rule background-shift from-slate-50-to-white flat-no-shadows">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-indigo-900 dark:text-indigo-300" style="font-size: 28px;">auto_stories</span>
+<span class="text-2xl font-serif text-indigo-900 dark:text-indigo-100 tracking-tight newsreader italic">Creative Studio</span>
+</div>
+<div class="flex items-center gap-6">
+<nav class="hidden md:flex gap-8 items-center">
+<a class="text-indigo-900 dark:text-indigo-100 font-bold font-serif newsreader italic text-xl transition-transform active:scale-95" href="#">Dashboard</a>
+<a class="text-slate-500 dark:text-slate-400 font-serif newsreader italic text-xl hover:bg-slate-200/50 dark:hover:bg-slate-800/50 transition-colors rounded-lg px-3 py-1" href="#">Library</a>
+</nav>
+<div class="w-10 h-10 rounded-full overflow-hidden ring-2 ring-primary-container transition-transform active:scale-95 cursor-pointer">
+<img alt="User Profile" data-alt="professional headshot of a middle-aged creative director with a thoughtful expression in a minimalist studio setting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuA_1R4DnMCkpYd4OZQhTrMiyZmmse6E6iZQRmu9l_5bCddcTf0-61wvNDLdSLfEUEp7PpwAe9b5DxLpr7TBGqYHwz1Nk3j054_vjXg8hPPXWpfB6Ku_hjhLB5GaYzEpESy9o0ZjfNf1U9OjVLAu0RrO-nI_0BQMKKot7Q0s13_qSucPEvm5KsNDldJBhZaDFXRStzRsgmqdv_Di60snG1hi7xoDI0CPKN3uSHB6hB9ZnqZDsne-xbT97Q2Go6m2QAZ1AxuNvNvjRUFC"/>
+</div>
+</div>
+</header>
+<div class="flex max-w-screen-2xl mx-auto">
+<!-- Sidebar Navigation -->
+<aside class="hidden md:flex fixed left-0 top-0 h-full w-72 flex-col p-6 space-y-4 bg-slate-100 dark:bg-slate-900 tonal-transition-no-borders flat-tonal-layering z-40">
+<div class="mb-10 px-2">
+<span class="text-lg font-serif newsreader text-indigo-950 dark:text-indigo-100">Studio</span>
+</div>
+<nav class="flex flex-col space-y-2">
+<a class="flex items-center gap-3 px-4 py-3 bg-indigo-100 dark:bg-indigo-900/40 text-indigo-900 dark:text-indigo-100 font-bold rounded-lg gentle-fade-transition" href="#">
+<span class="material-symbols-outlined">home</span>
+<span class="font-sans manrope tracking-wider text-xs uppercase">Home</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-600 dark:text-slate-400 font-medium hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-lg gentle-fade-transition" href="#">
+<span class="material-symbols-outlined">edit_note</span>
+<span class="font-sans manrope tracking-wider text-xs uppercase">Manuscripts</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-600 dark:text-slate-400 font-medium hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-lg gentle-fade-transition" href="#">
+<span class="material-symbols-outlined">menu_book</span>
+<span class="font-sans manrope tracking-wider text-xs uppercase">World Bible</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-600 dark:text-slate-400 font-medium hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-lg gentle-fade-transition" href="#">
+<span class="material-symbols-outlined">inventory_2</span>
+<span class="font-sans manrope tracking-wider text-xs uppercase">Archive</span>
+</a>
+<div class="pt-8">
+<a class="flex items-center gap-3 px-4 py-3 text-slate-600 dark:text-slate-400 font-medium hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-lg gentle-fade-transition" href="#">
+<span class="material-symbols-outlined">settings</span>
+<span class="font-sans manrope tracking-wider text-xs uppercase">Settings</span>
+</a>
+</div>
+</nav>
+</aside>
+<!-- Main Content Canvas -->
+<main class="flex-1 md:ml-72 p-8 md:p-12">
+<header class="mb-12">
+<h1 class="newsreader text-4xl md:text-5xl font-light text-primary mb-2">Thống kê sáng tác</h1>
+<p class="text-on-surface-variant font-body text-sm tracking-wide uppercase opacity-70">Creative Analytics Dashboard • May 2024</p>
+</header>
+<!-- Analytics Widgets Row -->
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+<!-- Card 1: Chuỗi viết -->
+<div class="bg-surface-container-lowest p-6 rounded-lg ambient-shadow flex flex-col justify-between h-44">
+<div class="flex items-center justify-between mb-4">
+<span class="font-body font-semibold text-primary text-sm">🔥 Chuỗi viết</span>
+<span class="text-xs font-bold text-secondary px-2 py-0.5 bg-secondary-fixed rounded-full uppercase tracking-tighter">7 Days</span>
+</div>
+<div class="flex items-end gap-1.5 mb-2">
+<div class="w-full h-12 bg-primary/5 rounded-sm overflow-hidden flex items-end gap-1 px-1 py-1">
+<div class="flex-1 bg-secondary-container h-[40%] rounded-sm opacity-40"></div>
+<div class="flex-1 bg-secondary-container h-[70%] rounded-sm opacity-60"></div>
+<div class="flex-1 bg-secondary-container h-[30%] rounded-sm opacity-30"></div>
+<div class="flex-1 bg-secondary-container h-[90%] rounded-sm opacity-80"></div>
+<div class="flex-1 bg-secondary-container h-[60%] rounded-sm opacity-50"></div>
+<div class="flex-1 bg-secondary-container h-[100%] rounded-sm"></div>
+<div class="flex-1 bg-secondary-container h-[85%] rounded-sm opacity-90"></div>
+</div>
+</div>
+<div class="text-[10px] uppercase tracking-widest text-on-surface-variant font-medium">Hoạt động tuần này</div>
+</div>
+<!-- Card 2: Tiến độ -->
+<div class="bg-surface-container-lowest p-6 rounded-lg ambient-shadow flex items-center gap-5 h-44">
+<div class="relative flex items-center justify-center">
+<svg class="w-20 h-20 transform -rotate-90">
+<circle class="text-surface-container-high" cx="40" cy="40" fill="transparent" r="34" stroke="currentColor" stroke-width="6"></circle>
+<circle class="text-secondary" cx="40" cy="40" fill="transparent" r="34" stroke="currentColor" stroke-dasharray="213.6" stroke-dashoffset="128.16" stroke-width="6"></circle>
+</svg>
+<div class="absolute inset-0 flex flex-col items-center justify-center">
+<span class="text-primary font-bold text-lg leading-none">40%</span>
+</div>
+</div>
+<div class="flex flex-col">
+<span class="font-body font-semibold text-primary text-sm mb-1">📖 Tiến độ</span>
+<span class="newsreader italic text-xl text-primary">5/12 chương</span>
+<span class="text-[10px] uppercase tracking-widest text-on-surface-variant font-medium mt-2">Dự án: The Monolith</span>
+</div>
+</div>
+<!-- Card 3: Token -->
+<div class="bg-surface-container-lowest p-6 rounded-lg ambient-shadow flex flex-col justify-between h-44">
+<div class="flex items-center justify-between">
+<span class="font-body font-semibold text-primary text-sm">💰 Token</span>
+<span class="material-symbols-outlined text-secondary opacity-60">monetization_on</span>
+</div>
+<div>
+<div class="flex items-baseline gap-1 mb-3">
+<span class="newsreader text-3xl text-primary">2,450</span>
+<span class="text-xs text-on-surface-variant font-medium uppercase tracking-widest">Spent</span>
+</div>
+<div class="w-full h-1.5 bg-surface-container-high rounded-full overflow-hidden">
+<div class="h-full bg-gradient-to-r from-primary to-secondary w-[60%] rounded-full"></div>
+</div>
+</div>
+<div class="text-[10px] uppercase tracking-widest text-on-surface-variant font-medium">60% Ngân sách tuần</div>
+</div>
+<!-- Card 4: Từ hôm nay -->
+<div class="bg-surface-container-lowest p-6 rounded-lg ambient-shadow flex flex-col justify-between h-44">
+<div class="flex items-center justify-between">
+<span class="font-body font-semibold text-primary text-sm">✍️ Từ hôm nay</span>
+<span class="material-symbols-outlined text-secondary opacity-60">edit_square</span>
+</div>
+<div>
+<div class="flex items-baseline gap-2 mb-2">
+<span class="newsreader text-3xl text-primary">1,200</span>
+<span class="text-on-surface-variant text-sm font-light">/ 2,000 từ</span>
+</div>
+<div class="grid grid-cols-5 gap-1">
+<div class="h-1 bg-secondary rounded-full"></div>
+<div class="h-1 bg-secondary rounded-full"></div>
+<div class="h-1 bg-secondary rounded-full"></div>
+<div class="h-1 bg-surface-container-high rounded-full"></div>
+<div class="h-1 bg-surface-container-high rounded-full"></div>
+</div>
+</div>
+<div class="text-[10px] uppercase tracking-widest text-on-surface-variant font-medium">Tiếp tục nào, chỉ còn 800 từ!</div>
+</div>
+</div>
+<!-- Main Content Area: The Studio Plate -->
+<section class="mt-16 bg-surface-container-lowest rounded-xl p-8 md:p-12 ambient-shadow min-h-[600px] relative overflow-hidden">
+<div class="max-w-3xl mx-auto">
+<div class="flex items-center justify-between mb-12">
+<div class="h-px bg-surface-container-high flex-1"></div>
+<div class="px-6 text-[10px] uppercase tracking-[0.3em] font-bold text-secondary">Work in Progress</div>
+<div class="h-px bg-surface-container-high flex-1"></div>
+</div>
+<div class="newsreader italic text-indigo-900/30 text-8xl absolute -top-10 -left-10 select-none">"</div>
+<article class="prose prose-slate max-w-none">
+<h2 class="newsreader text-4xl font-light text-primary mb-8 leading-tight">Chương VI: Những mảnh vỡ kiến trúc kiến tạo</h2>
+<div class="font-body text-lg text-on-surface leading-relaxed space-y-6 opacity-90">
+<p>Không gian bao trùm lấy hắn, một màu trắng tĩnh lặng của studio vào lúc bình minh. Ở đây, giữa những bản thảo kỹ thuật và những ý tưởng mơ hồ, sự sáng tạo không phải là một cơn bão mà là một dòng suối chảy chậm, len lỏi qua các khe nứt của logic.</p>
+<p>Mỗi widget trên màn hình không chỉ là một con số. Chúng là những nhịp thở của dự án. Token là năng lượng, số từ là bước chân, và tiến độ là con đường dẫn đến đích cuối. Hắn nhìn vào chuỗi viết — bảy ngày liên tục không nghỉ, một kỷ lục cá nhân đáng tự hào.</p>
+<p>Hôm nay, mục tiêu 2000 từ có vẻ xa vời, nhưng 1200 đã nằm lại trên trang giấy điện tử. Ánh sáng từ màn hình phản chiếu trong mắt hắn, một màu indigo sâu thẳm giống như nền tảng mà hắn đang xây dựng.</p>
+</div>
+</article>
+<div class="mt-16 flex justify-center">
+<button class="px-10 py-4 bg-gradient-to-r from-primary to-primary-container text-white rounded-lg font-body font-semibold tracking-wide hover:opacity-90 transition-all active:scale-95 ambient-shadow">
+                            Tiếp tục bản thảo
+                        </button>
+</div>
+</div>
+</section>
+</main>
+</div>
+<!-- Mobile Bottom Navigation -->
+<footer class="md:hidden fixed bottom-0 left-0 w-full bg-surface-container-lowest h-20 flex justify-around items-center px-4 z-50 rounded-t-xl ambient-shadow">
+<a class="flex flex-col items-center gap-1 text-indigo-900" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">home</span>
+<span class="text-[10px] font-bold uppercase tracking-tighter">Home</span>
+</a>
+<a class="flex flex-col items-center gap-1 text-slate-400" href="#">
+<span class="material-symbols-outlined">edit_note</span>
+<span class="text-[10px] font-bold uppercase tracking-tighter">Drafts</span>
+</a>
+<div class="relative -top-6">
+<button class="w-14 h-14 bg-secondary rounded-full flex items-center justify-center text-white shadow-lg shadow-secondary/30">
+<span class="material-symbols-outlined" style="font-size: 32px;">add</span>
+</button>
+</div>
+<a class="flex flex-col items-center gap-1 text-slate-400" href="#">
+<span class="material-symbols-outlined">inventory_2</span>
+<span class="text-[10px] font-bold uppercase tracking-tighter">Archive</span>
+</a>
+<a class="flex flex-col items-center gap-1 text-slate-400" href="#">
+<span class="material-symbols-outlined">settings</span>
+<span class="text-[10px] font-bold uppercase tracking-tighter">Settings</span>
+</a>
+</footer>
+</body></html>

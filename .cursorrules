@@ -1,0 +1,326 @@
+# AGENTS.md
+
+This file provides guidance to AI coding agents (Claude Code, Cursor, Copilot, Antigravity, Kiro, etc.) when working with code in this repository.
+
+> **Also read: [GUARDRAILS.md](GUARDRAILS.md)** — Safety rules, Socratic Gate, ACE Tiers, and Signs (recurring failure patterns) that complement this file.
+
+## Repository Overview
+
+A **Professional Vibe Coding Hub** — a universal, agent-agnostic system that operates like a professional software development team. It combines the speed of natural-language-driven development ("vibe coding") with the rigor of senior engineering practices, coordinated across **8 specialist agent roles** with explicit handoff protocols.
+
+**Professional Vibe Coding** means:
+- ✅ Fast, natural-language-driven code generation
+- ✅ A team of specialist agents with clear roles (Tech Lead, Architect, Builder, Reviewer, etc.)
+- ✅ Architectural discipline enforced by Domain Maps and Code Maxims
+- ✅ Explicit handoff contracts between agents — no context loss
+- ✅ Quality gates that catch problems before they compound
+- ✅ Socratic questioning that prevents week-long rework from a 2-minute misunderstanding
+- ❌ ~~Spaghetti code from unconstrained generation~~
+- ❌ ~~"It looks right" as a verification standard~~
+- ❌ ~~God files, `utils.ts`, and implicit architecture~~
+- ❌ ~~Agents working in isolation without coordination~~
+
+### Core Execution Loop (OODA)
+
+**OODA:** Observe (read req) → Orient (ACE + domain) → Decide (skills + plan) → Act (micro-step) → Reflect → loop.
+
+**Exit conditions:**
+- ✅ Done (quality ≥ 8/10) — ship it
+- ⚠️ 3 loops on same approach — ask user for new direction
+- 🛑 Security / domain bleed detected — stop immediately
+
+## The Team Model
+
+This hub operates as a **virtual software team** with 8 specialist roles. Each role has defined responsibilities, handoff contracts, and escalation rules.
+
+### Agent Roles
+
+8 agent roles in `agents/`: tech-lead (orchestrator), product-thinker, architect, code-reviewer, test-engineer, security-auditor, database-engineer, devops-engineer. Load on activation by ACE tier.
+
+### Team Coordination Protocols
+
+Agents don't work in isolation — they follow defined coordination protocols:
+
+- **[Team Workflow](protocols/team-workflow.md)** — How requests flow through the team (LITE/MED/HEAVY paths)
+- **[Handoff Protocol](protocols/handoff.md)** — Contracts for passing work between agents
+- **[Escalation Protocol](protocols/escalation.md)** — When to stop and ask the human
+- **[Conflict Resolution](protocols/conflict-resolution.md)** — How to resolve agent disagreements
+
+### Workflow Summary
+
+```
+UNDERSTAND → TRIAGE (ACE + Model) → [LITE|MED|HEAVY] → PROVE
+
+UNDERSTAND: Rephrase WHAT/WHERE/WHY → if unclear ASK → get confirmation
+PROVE: Screenshot | Test output | Build log | Diff (no self-declaration)
+
+LITE(1-3):  Skill → PROVE
+MED(4-6):   Define → Build → Review → PROVE
+HEAVY(7-10): Full team workflow → PROVE → Retro
+```
+
+---
+
+## Rune Bootstrap
+
+This repository uses the installed Rune mesh at `.agents/skills/`.
+
+### Core Rules
+
+- For any technical request, read `.agents/skills/rune-skill-router/SKILL.md` first.
+- If a task changes code, default to `.agents/skills/rune-cook/SKILL.md`.
+- Use `.agents/skills/skill-index.json` to discover installed Rune skills before guessing.
+- Never use the removed `.agent-skills` submodule paths.
+- Persist durable context in `.rune/`.
+
+> [!CRITICAL INSTRUCTION FOR AGENTS WITHOUT A NATIVE SKILL TOOL]
+> To "invoke" a Rune skill, you MUST physically read the corresponding file in `.agents/skills/<skill-folder>/SKILL.md` before acting. Do not mentally simulate a skill you did not read.
+
+### Intent → Skill Mapping
+
+- Code change / implement / build / fix → `rune-cook`
+- Debug root cause only → `rune-debug`
+- Code review / audit → `rune-review`
+- Plan / architecture → `rune-plan`
+- UI system / design direction → `rune-design`
+- Large parallel task → `rune-team`
+- Refactor / legacy rescue → `rune-surgeon` or `rune-rescue`
+- Deploy / launch → `rune-deploy` or `rune-launch`
+- Database change → `rune-db`
+- If unclear, fallback to `rune-cook`
+
+### Lifecycle Mapping (Implicit Commands)
+
+Use this repo-local Rune flow instead:
+
+- ROUTE → `rune-skill-router`
+- IMPLEMENT → `rune-cook`
+- DEBUG → `rune-debug`
+- REVIEW → `rune-review`
+- PLAN → `rune-plan`
+- DESIGN → `rune-design`
+- PARALLEL / LARGE TASK → `rune-team`
+- PERSIST STATE → `rune-session-bridge`
+
+Repo-local truth wins:
+
+- `docs/CANONICAL_AGENT_SPEC.md`
+- `docs/AI_NATIVE_TECHNICAL_DESIGN.md`
+- `.rune/contract.md`
+
+### Execution Model
+
+For every request:
+
+1. **Understand & Confirm** — Rephrase the user's request in your own words. State WHAT you will do, WHERE in the codebase, and WHY. If anything is unclear (even 1%), ASK — do not assume. Wait for user confirmation before proceeding. This step is **mandatory for all ACE tiers**.
+2. **Classify ACE Tier** — See `GUARDRAILS.md` ACE Complexity Tiers. Prefix response with `[ACE:N/TIER]`
+3. **Select Model** — Route to optimal model based on ACE tier (see Model Selection below)
+4. **Socratic Gate** (ACE ≥ 4) — Locate impact, ask clarifying questions. See `GUARDRAILS.md`
+5. **Domain Check** (ACE ≥ 4) — Verify request fits within the Domain Map. If no map exists and ACE ≥ 7, create one first
+6. **Skill Match** — Determine if any Rune skill applies. Route through it before acting.
+7. **Implementation Maxims** — Follow canonical product truth, strict typing, micro-files, and proof-first verification.
+8. **Prove It** — Provide concrete evidence of completion. See Evidence-Based Verification below.
+
+### Model Selection
+
+Route tasks to the most cost-effective model that can handle the complexity:
+
+| ACE Tier | Task Examples | Recommended Model | Rationale |
+|----------|--------------|-------------------|----------|
+| 1-2 (LITE) | Fix typo, adjust CSS, rename variable, simple formatting | Gemini Flash / GPT-4o-mini | Fast, cheap, sufficient for mechanical tasks |
+| 3-4 (LITE/MED) | UI tweaks, add form field, simple bug fix, write test | Gemini Pro / Claude Sonnet | Good balance of speed and reasoning |
+| 5-6 (MED) | New feature, API design, refactor module, multi-file edit | Claude Sonnet / GPT-4o | Needs cross-file reasoning and context |
+| 7-8 (HEAVY) | Architecture design, complex debugging, multi-domain changes | Claude Opus / o3 | Requires deep reasoning, long context, planning |
+| 9-10 (HEAVY) | System redesign, security audit, migration strategy | Claude Opus (Thinking) | Maximum reasoning depth, cannot afford errors |
+
+**Rules:**
+- Default to the **cheapest capable model** — don't use Opus for CSS fixes
+- **Escalate up** if the model struggles after 2 attempts at the same approach
+- **Never downgrade** mid-task — if you started with Opus, finish with Opus
+- User can override: "use Opus for this" always takes priority
+- When uncertain between two tiers, pick the **higher** model — under-powering costs more in rework than the model price difference
+
+### Evidence-Based Verification (PROVE)
+
+Agents **must not** self-declare completion. Every task must end with **proof artifacts** — concrete evidence that the work was done correctly.
+
+**The agent MUST provide at least one:**
+
+| Evidence Type | When to Use | Example |
+|--------------|-------------|----------|
+| **Test output** | Any code change | `npm test` output showing pass/fail |
+| **Build log** | Any code change | `npm run build` output showing success |
+| **Screenshot/recording** | UI changes | Browser screenshot of the changed UI |
+| **Before/after diff** | Refactoring, edits | `render_diffs(file:///path)` showing what changed |
+| **Command output** | Infrastructure, config | Actual terminal output, not paraphrased |
+| **Type check** | TypeScript changes | `tsc --noEmit` output |
+
+**Anti-fabrication rules:**
+
+| ❌ NOT Acceptable | ✅ Required Instead |
+|---|---|
+| "I've updated the file" | Show the diff or read the file back to confirm |
+| "Tests should pass" | Run the tests and show output |
+| "The UI looks correct" | Take a screenshot or describe the exact visual result |
+| "I believe this works" | Prove it with a concrete artifact |
+| "Done!" (no evidence) | Provide at least one proof artifact from the table above |
+| Partial completion claimed as done | List what was completed AND what remains |
+
+**Escalation triggers:**
+- If you cannot produce evidence (e.g., no test suite exists) → state this explicitly and suggest what evidence the user should manually verify
+- If evidence reveals the task is NOT complete → do not hide it. Report what failed and propose a fix
+- If you're uncertain whether the result is correct → say so with `🔴LOW confidence` and explain why
+
+### Anti-Rationalization
+
+The following thoughts are incorrect and must be ignored:
+
+- "This is too small for a skill"
+- "I can just quickly implement this"
+- "I'll gather context first"
+- "I know this API, no need to check docs"
+- "I'll update the other files later"
+- "I'll split the file later" — No. Split NOW. 350 lines max.
+- "A quick utils.ts won't hurt" — No. Semantic names always. `verb_noun_condition.ext`.
+- "The user didn't ask for a Domain Map" — If ACE ≥ 7, create one anyway.
+- "I'll add types later" — No. Type-first. No `any`.
+- "I understand the request" — No. Rephrase it back. If user doesn't confirm, you don't understand.
+- "This is working" — No. Show the proof. Run the test. Take the screenshot.
+- "A simple model is fine for this" — Maybe. But if it fails twice, escalate model tier.
+
+Correct behavior:
+
+- Always understand and confirm the request first
+- Always classify ACE Tier and select appropriate model
+- Always check for and use skills first
+- Always follow Code Maxims for every file created
+- Always PROVE completion with evidence artifacts
+- Check [GUARDRAILS.md](GUARDRAILS.md) Signs for known failure patterns
+
+This ensures agents produce Professional Vibe Coding output — fast AND architecturally sound.
+
+See `GUARDRAILS.md` for **Quote First** (source verification) and **Impact Awareness** (blast radius) rules.
+
+## Creating a New Skill
+
+See [`references/skill-authoring.md`](references/skill-authoring.md) for directory structure, naming conventions, and `SKILL.md` format.
+# Guardrails
+
+Rules for **human contributors** and **AI agents** working with these skills. Adapted from [GitNexus](https://github.com/abhigyanpatwari/GitNexus) GUARDRAILS pattern, [anti-chaotic](https://github.com/kienhaminh/anti-chaotic) engineering principles, and ANTIGRAVITY v6.1 (Lean Core) standards.
+
+> **This is the safety layer for Professional Vibe Coding.** It ensures AI agents produce architecture-grade code at vibe-coding speed — not prototype spaghetti.
+
+## ACE Complexity Tiers
+
+Every task must be classified by complexity **before** execution begins. The ACE Tier determines which rules and skills are mandatory.
+
+| Tier | Label | Description | Example | Rules Applied |
+|------|-------|-------------|---------|---------------|
+| 1–3 | **LITE** | Single-file fixes, typos, formatting, config tweaks | Fix a typo, update a constant, add a comment | Scope, Non-Negotiables, Code Maxims (naming only) |
+| 4–6 | **MED** | Multi-file features, new components, API endpoints | Add a settings page, create a webhook handler | LITE + Socratic Gate, Domain Map check, full Code Maxims |
+| 7–10 | **HEAVY** | Architectural changes, new domains, migrations, security | Rewrite auth system, add payment domain, DB migration | ALL rules + mandatory Domain Map + spec + plan |
+
+**How to classify:**
+- Count files touched → 1-2 files = likely LITE, 3-5 = likely MED, 6+ = likely HEAVY
+- Assess blast radius → Local change = LITE, cross-module = MED, cross-domain = HEAVY
+- Check uncertainty → Clear requirements = lower tier, ambiguous = higher tier
+
+**Display format:** Agent should prefix responses with `[ACE:N/TIER]` (e.g., `[ACE:4/MED]`).
+
+---
+
+## Socratic Gate (Mandatory for ACE ≥ 4)
+
+_Adapted from ANTIGRAVITY v6.1 Anti-Drift and Socratic Gate principles._
+
+**Rule: 1% unclear? ASK. Do not guess. Do not assume.**
+
+Before implementing any task classified ACE 4 or above:
+
+1. **Rephrase** — Restate the user's request in your own words. Confirm understanding.
+2. **Locate Impact** — Identify which domains, layers, and files are affected.
+3. **Domain Check** — Verify the request stays within approved domain boundaries.
+4. **Ask Clarifying Questions** — If there is ANY ambiguity:
+   - New feature → Ask at least 3 clarifying questions
+   - Bug fix → Ask about reproduction steps and expected behavior
+   - Refactor → Ask about scope boundaries and acceptance criteria
+
+**Anti-Drift Protocol:**
+- Maximum **3 attempts** per approach. If the same strategy fails 3 times → STOP → ask the user for a different direction.
+- After each attempt, explicitly state what was tried and why it failed.
+
+**Confidence Declaration:**
+- 🟢 **HIGH** — Clear requirements, known patterns, low risk → proceed
+- 🟡 **MED** — Some ambiguity, moderate risk → state assumptions, proceed cautiously
+- 🔴 **LOW** — Significant uncertainty, high risk → explicitly state risks before any code
+
+---
+
+## Scope (Least Privilege)
+
+When automating changes in any project using these skills:
+
+- **Read:** Source, tests, docs, public config — only what the task requires.
+- **Write:** Only files required for the requested fix or feature; avoid unrelated formatting or refactors.
+- **Execute:** Tests, typecheck, and documented CLI commands. Never run destructive commands without explicit approval.
+- **Off-limits:** Production deployments, credentials, other people's machines, unrelated repos.
+
+---
+
+## Non-Negotiables
+
+1. **Never commit secrets** — API keys, tokens, `.env` with real values, session cookies. Use `.env.example` with placeholders only.
+2. **Never skip verification** — "It compiles" is not evidence. Run the tests. Check the build. Verify the behavior.
+3. **Never ignore failing tests to ship features** — Errors compound. A bug in Step 3 that goes unfixed makes Steps 4-10 wrong.
+4. **Cite your sources** — When using framework-specific patterns, link to official docs. Training data goes stale.
+5. **Surface conflicts, don't hide them** — When docs conflict with existing code, or two requirements contradict, tell the user.
+6. **Never use `any` in TypeScript** — Use `unknown` and narrow. See `references/code-maxims.md`.
+7. **Never create files named `utils`, `helpers`, or `misc`** — Use semantic names: `verb_noun_condition.ext`. See `references/code-maxims.md`.
+
+---
+
+## The Quote First Rule
+
+_Adapted from anti-chaotic's Golden Rule._
+
+Before implementing any framework-specific feature or fixing any bug:
+
+1. **Locate** the authoritative documentation (internal docs, official docs, or references in this repo).
+2. **Quote** the specific section that justifies your technical decision.
+3. **Implement** strictly according to that quote.
+
+If you cannot find a source, you must **PAUSE** and search official docs or ask the user. Never implement from memory alone when correctness depends on a specific version.
+
+---
+
+## Signs (Recurring Failure Patterns)
+
+See [`references/signs.md`](references/signs.md) for recurring failure patterns and anti-patterns.
+
+---
+
+## Escalation
+
+Stop and ask the **user** when:
+
+- Impact analysis shows **HIGH** risk and the task still requires the change.
+- Requirements conflict with each other or with project standards.
+- You are unsure whether data loss or breaking changes are acceptable.
+- You need to alter CI, release, or security-sensitive configuration.
+- The same approach has failed 3 times (Anti-Drift: max 3 attempts per approach).
+- ACE Tier is 🔴 LOW confidence — risks must be stated before proceeding.
+- A new domain is being introduced that isn't in the Domain Map.
+- Cross-project impact detected (change affects other projects connected to the hub).
+
+See [protocols/escalation.md](protocols/escalation.md) for the full escalation protocol with mandatory, conditional, and never-escalate categories.
+
+---
+
+## Related Docs
+
+- [AGENTS.md](AGENTS.md) — Team model, agent roles, skill mapping, lifecycle.
+- [protocols/](protocols/) — Team coordination: workflow, handoffs, escalation, conflict resolution.
+- [CONTRIBUTING.md](CONTRIBUTING.md) — PR, commit, and packaging expectations.
+- [skills/](skills/) — All available skills with their verification checklists.
+- [references/code-maxims.md](references/code-maxims.md) — Hard code quality rules (naming, file size, types, layers).
+- [references/domain-map-template.md](references/domain-map-template.md) — Architectural boundary template.

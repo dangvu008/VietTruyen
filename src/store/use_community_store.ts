@@ -11,15 +11,24 @@
  */
 
 import { create } from 'zustand';
-import type { SharedStory, StoryComment, PublishStoryInput } from '../types/community';
+import type {
+  SharedStory,
+  StoryComment,
+  PublishStoryInput,
+  PublishStoryResult,
+  StoryCommentKind,
+} from '../types/community';
+import { publishStoryWithKnowledgeCapture } from '../lib/community/publish_pipeline';
 import * as communityService from '../lib/supabase/community_service';
 
-type CommunityView = 'feed' | 'reader' | 'my-stories';
+type CommunityListView = 'feed' | 'workshops' | 'my-stories';
+type CommunityView = CommunityListView | 'reader';
 
 interface CommunityState {
   // View state
   view: CommunityView;
-  setView: (view: CommunityView) => void;
+  previousView: CommunityListView;
+  setView: (view: CommunityListView) => void;
 
   // Feed
   stories: SharedStory[];
@@ -41,12 +50,20 @@ interface CommunityState {
   comments: StoryComment[];
   isLoadingComments: boolean;
   loadComments: (storyId: string) => Promise<void>;
-  postComment: (storyId: string, userId: string, content: string) => Promise<void>;
+  postComment: (
+    storyId: string,
+    userId: string,
+    content: string,
+    options?: {
+      kind?: StoryCommentKind;
+      headline?: string;
+    }
+  ) => Promise<void>;
   removeComment: (commentId: string) => void;
 
   // Publish
   isPublishing: boolean;
-  publish: (userId: string, input: PublishStoryInput) => Promise<void>;
+  publish: (userId: string, input: PublishStoryInput) => Promise<PublishStoryResult>;
   unpublish: (storyId: string) => Promise<void>;
 
   // Like
@@ -61,7 +78,8 @@ interface CommunityState {
 export const useCommunityStore = create<CommunityState>()((set, get) => ({
   // View
   view: 'feed',
-  setView: (view) => set({ view }),
+  previousView: 'feed',
+  setView: (view) => set({ view, previousView: view }),
 
   // Feed
   stories: [],
@@ -72,7 +90,7 @@ export const useCommunityStore = create<CommunityState>()((set, get) => ({
   loadFeed: async () => {
     set({ isLoadingFeed: true, feedPage: 0 });
     try {
-      const stories = await communityService.fetchPublishedStories(0, 20);
+      const stories = await communityService.fetchCommunityStories(0, 20);
       set({ stories, isLoadingFeed: false, feedPage: 0, hasMore: stories.length >= 20 });
     } catch (err) {
       console.error('[Community] Load feed failed:', err);
@@ -87,7 +105,7 @@ export const useCommunityStore = create<CommunityState>()((set, get) => ({
     set({ isLoadingFeed: true });
     try {
       const nextPage = feedPage + 1;
-      const moreStories = await communityService.fetchPublishedStories(nextPage, 20);
+      const moreStories = await communityService.fetchCommunityStories(nextPage, 20);
       set((state) => ({
         stories: [...state.stories, ...moreStories],
         feedPage: nextPage,
@@ -106,7 +124,12 @@ export const useCommunityStore = create<CommunityState>()((set, get) => ({
   isLoadingStory: false,
 
   openStory: async (storyId) => {
-    set({ isLoadingStory: true, view: 'reader', activeChapterIndex: 0 });
+    set((state) => ({
+      isLoadingStory: true,
+      view: 'reader',
+      previousView: state.view === 'reader' ? state.previousView : state.view,
+      activeChapterIndex: 0,
+    }));
     try {
       const story = await communityService.fetchStoryById(storyId);
       set({ activeStory: story, isLoadingStory: false });
@@ -120,7 +143,12 @@ export const useCommunityStore = create<CommunityState>()((set, get) => ({
 
   setActiveChapter: (index) => set({ activeChapterIndex: index }),
 
-  closeStory: () => set({ activeStory: null, view: 'feed', comments: [] }),
+  closeStory: () =>
+    set((state) => ({
+      activeStory: null,
+      view: state.previousView,
+      comments: [],
+    })),
 
   // Comments
   comments: [],
@@ -137,9 +165,9 @@ export const useCommunityStore = create<CommunityState>()((set, get) => ({
     }
   },
 
-  postComment: async (storyId, userId, content) => {
+  postComment: async (storyId, userId, content, options) => {
     try {
-      await communityService.addComment(storyId, userId, content);
+      await communityService.addComment(storyId, userId, content, options);
       // Reload comments
       get().loadComments(storyId);
     } catch (err) {
@@ -164,10 +192,11 @@ export const useCommunityStore = create<CommunityState>()((set, get) => ({
   publish: async (userId, input) => {
     set({ isPublishing: true });
     try {
-      await communityService.publishStory(userId, input);
+      const result = await publishStoryWithKnowledgeCapture(userId, input);
       set({ isPublishing: false });
       // Reload feed
       get().loadFeed();
+      return result;
     } catch (err) {
       console.error('[Community] Publish failed:', err);
       set({ isPublishing: false });

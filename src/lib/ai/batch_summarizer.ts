@@ -11,7 +11,7 @@
  *
  * Token savings: gộp 5 chương = 1 system prompt thay vì 5 → tiết kiệm ~40% overhead
  */
-import { callAiModel } from './ai_client';
+import { callAiModelTracked } from './tracked_ai_client';
 import type { AiModel, Chapter } from '../../types/story';
 
 const BATCH_SYSTEM = `Bạn là trợ lý tóm tắt chương truyện. Nhiệm vụ: tóm tắt NHIỀU chương cùng lúc.
@@ -37,7 +37,7 @@ const MAX_CHARS_PER_CHAPTER = 4000;
  */
 export async function batchSummarizeChapters(
   chapters: Chapter[],
-  apiKey: string,
+  _apiKey: string, // DEPRECATED — proxy handles keys
   model: AiModel,
 ): Promise<Record<string, string>> {
   const results: Record<string, string> = {};
@@ -49,7 +49,7 @@ export async function batchSummarizeChapters(
   }
 
   for (const batch of batches) {
-    const chaptersText = batch.map((c, i) => {
+    const chaptersText = batch.map((c) => {
       const content = c.content.length > MAX_CHARS_PER_CHAPTER
         ? c.content.substring(0, MAX_CHARS_PER_CHAPTER) + '...'
         : c.content;
@@ -59,15 +59,16 @@ export async function batchSummarizeChapters(
     const userPrompt = `Tóm tắt ${batch.length} chương sau:\n\n${chaptersText}\n\nTrả về JSON array theo format đã yêu cầu.`;
 
     try {
-      const responseText = await callAiModel(
-        model.provider,
-        apiKey,
-        model.modelId,
-        model.baseUrl,
-        BATCH_SYSTEM,
-        userPrompt,
-        'json_object',
-      );
+      const responseText = await callAiModelTracked({
+        provider: model.provider,
+        modelId: model.id || model.modelId,
+        modelName: model.name || model.id || model.modelId,
+        baseUrl: model.baseUrl,
+        systemPrompt: BATCH_SYSTEM,
+        userPrompt: userPrompt,
+        taskType: 'summarize',
+        responseFormat: 'json_object',
+      });
 
       const cleaned = responseText.replace(/```json\n?|\n?```/g, '').trim();
       const parsed: Array<{ id: string; summary: string }> = JSON.parse(cleaned);

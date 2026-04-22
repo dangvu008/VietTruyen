@@ -6,6 +6,16 @@
  */
 import type { AiTaskType } from '../lib/ai/model_router';
 
+/** Pipeline step labels — dùng để nhóm API calls theo bước trong pipeline */
+export type PipelineStepLabel =
+  | 'context_build'
+  | 'plan_branches'
+  | 'write_chapter'
+  | 'review_checkers'
+  | 'style_analysis'
+  | 'data_extraction'
+  | 'memory_sync';
+
 /** Record cho mỗi lần gọi AI */
 export interface TokenUsageRecord {
   id: string;
@@ -21,6 +31,33 @@ export interface TokenUsageRecord {
   cached: boolean;         // Response từ cache → cost = 0
   durationMs: number;      // Thời gian phản hồi
   outputChars: number;     // Số ký tự output (đo chất lượng)
+  /** Pipeline session ID — nhóm theo lần chạy pipeline */
+  pipelineSessionId?: string;
+  /** Pipeline step label — bước nào trong pipeline */
+  pipelineStep?: PipelineStepLabel;
+}
+
+/** Session tracking cho 1 lần chạy full pipeline */
+export interface PipelineSession {
+  id: string;
+  projectId: string;
+  projectTitle: string;
+  chapterIndex: number;
+  startedAt: string;
+  finishedAt?: string;
+  /** Tổng token toàn pipeline */
+  totalTokens: number;
+  /** Tổng chi phí USD */
+  totalCost: number;
+  /** Số API calls */
+  totalCalls: number;
+  /** Breakdown per step */
+  stepBreakdown: Record<PipelineStepLabel, {
+    tokens: number;
+    cost: number;
+    calls: number;
+    durationMs: number;
+  }>;
 }
 
 /** Thống kê tổng hợp */
@@ -38,6 +75,29 @@ export interface TokenStats {
   efficiency: number;        // output chars / total tokens — hiệu suất
   byTaskType: Record<string, { calls: number; tokens: number; cost: number }>;
   byModel: Record<string, { calls: number; tokens: number; cost: number }>;
+  /** Avg tokens per pipeline run */
+  avgTokensPerPipeline: number;
+  /** Avg cost per pipeline run */
+  avgCostPerPipeline: number;
+}
+
+export type TokenOptimizationTaskStatus = 'open' | 'done' | 'dismissed';
+
+export type TokenOptimizationPhase = 'P0' | 'P1' | 'P2';
+
+export interface TokenOptimizationPhaseMeta {
+  id: TokenOptimizationPhase;
+  title: string;
+  subtitle: string;
+}
+
+export interface TokenOptimizationTask {
+  id: string;
+  phase: TokenOptimizationPhase;
+  title: string;
+  checklist: string[];
+  fileTargets?: string[];
+  note?: string;
 }
 
 /** Chi phí ước lượng per 1M tokens (input) theo provider, USD */
@@ -47,6 +107,7 @@ export const COST_PER_1M_INPUT: Record<string, number> = {
   'gemini-2.5-pro-preview-05-06': 1.25,
   'openai/gpt-4o-mini': 0.15,
   'anthropic/claude-3.5-sonnet': 3.00,
+  'anthropic/claude-sonnet-4': 3.00,
   'deepseek/deepseek-chat': 0.14,
 };
 
@@ -56,5 +117,6 @@ export const COST_PER_1M_OUTPUT: Record<string, number> = {
   'gemini-2.5-pro-preview-05-06': 5.00,
   'openai/gpt-4o-mini': 0.60,
   'anthropic/claude-3.5-sonnet': 15.00,
+  'anthropic/claude-sonnet-4': 15.00,
   'deepseek/deepseek-chat': 0.28,
 };

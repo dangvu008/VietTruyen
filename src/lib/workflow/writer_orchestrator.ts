@@ -1,0 +1,231 @@
+import { createId } from '../../core/id';
+import type {
+  SupportedWorkflowIntent,
+  WorkflowSession,
+  WorkflowSessionError,
+} from '../../types/workflow';
+import {
+  planChapterBranchesWithEngine,
+  writeChapterFromBranchWithEngine,
+} from './workflow_engine';
+import { executeFullWritePipeline } from './full_write_pipeline';
+
+interface ExecuteWorkflowIntentOptions {
+  onUpdate?: (session: WorkflowSession) => void;
+}
+
+function buildWorkflowError(error: unknown): WorkflowSessionError {
+  return {
+    code: 'workflow_execution_failed',
+    message: error instanceof Error ? error.message : 'Workflow execution thất bại.',
+    retryable: true,
+  };
+}
+
+function mergeSession(
+  session: WorkflowSession,
+  patch: Partial<WorkflowSession>,
+): WorkflowSession {
+  return {
+    ...session,
+    ...patch,
+    artifacts: {
+      ...session.artifacts,
+      ...patch.artifacts,
+    },
+    metrics: {
+      ...session.metrics,
+      ...patch.metrics,
+    },
+  };
+}
+
+function emitSession(
+  current: WorkflowSession,
+  patch: Partial<WorkflowSession>,
+  onUpdate?: (session: WorkflowSession) => void,
+): WorkflowSession {
+  const next = mergeSession(current, patch);
+  onUpdate?.(next);
+  return next;
+}
+
+function createWorkflowSession(intent: SupportedWorkflowIntent): WorkflowSession {
+  return {
+    id: createId(),
+    intent,
+    step: 'idle',
+    artifacts: {},
+    metrics: {
+      startedAt: new Date().toISOString(),
+    },
+  };
+}
+
+export async function executeWorkflowIntent(
+  intent: SupportedWorkflowIntent,
+  options: ExecuteWorkflowIntentOptions = {},
+): Promise<WorkflowSession> {
+  const startedAtMs = Date.now();
+  let session = createWorkflowSession(intent);
+  options.onUpdate?.(session);
+
+  try {
+    switch (intent.type) {
+      case 'plan_chapter_branches': {
+        const payload = intent.payload;
+        session = emitSession(
+          session,
+          {
+            step: 'planning',
+            statusMessage: 'Đang tạo 3 hướng branch...',
+          },
+          options.onUpdate,
+        );
+
+        const planningResult = await planChapterBranchesWithEngine(
+          payload.workflowEngine,
+          payload,
+        );
+
+        return emitSession(
+          session,
+          {
+            step: 'completed',
+            statusMessage: 'Đã tạo xong 3 hướng branch.',
+            artifacts: {
+              planningResult,
+              selectedBranchId: planningResult.recommendedBranchId ?? undefined,
+            },
+            metrics: {
+              startedAt: session.metrics.startedAt,
+              finishedAt: new Date().toISOString(),
+              latencyMs: Date.now() - startedAtMs,
+            },
+            error: undefined,
+          },
+          options.onUpdate,
+        );
+      }
+
+      case 'write_chapter_from_branch': {
+        const payload = intent.payload;
+        session = emitSession(
+          session,
+          {
+            step: 'drafting',
+            statusMessage: 'Đang viết chương theo branch đã chọn...',
+          },
+          options.onUpdate,
+        );
+
+        const chapterWriteResult = await writeChapterFromBranchWithEngine(
+          payload.workflowEngine,
+          payload,
+        );
+
+        return emitSession(
+          session,
+          {
+            step: 'completed',
+            statusMessage: 'Đã viết xong chương.',
+            artifacts: {
+              chapterWriteResult,
+              draftText: chapterWriteResult.content,
+              selectedBranchId: payload.branch.id,
+              divergenceReport: chapterWriteResult.divergence,
+            },
+            metrics: {
+              startedAt: session.metrics.startedAt,
+              finishedAt: new Date().toISOString(),
+              latencyMs: Date.now() - startedAtMs,
+            },
+            error: undefined,
+          },
+          options.onUpdate,
+        );
+      }
+
+      case 'full_write_pipeline': {
+        const payload = intent.payload;
+
+        // Map pipeline step labels to workflow steps
+        const stepToWorkflowStep: Record<number, WorkflowSession['step']> = {
+          1: 'context_building',
+          2: 'drafting',
+          3: 'reviewing',
+          4: 'polishing',
+          5: 'data_processing',
+          6: 'syncing',
+          7: 'persisting',
+        };
+
+        const pipelineResult = await executeFullWritePipeline({
+          project: payload.project,
+          targetChapterIndex: payload.targetChapterIndex,
+          mode: payload.mode,
+          tensionLevel: payload.tensionLevel,
+          prompt: payload.prompt,
+          notes: payload.notes,
+          sourceOverride: payload.sourceOverride,
+          styleInstruction: payload.styleInstruction,
+          skipReview: payload.skipReview,
+          skipPolish: payload.skipPolish,
+          onProgress: (progress) => {
+            const wfStep = stepToWorkflowStep[progress.step] || 'planning';
+            session = emitSession(
+              session,
+              {
+                step: wfStep,
+                statusMessage: `[${progress.step}/${progress.totalSteps}] ${progress.label}`,
+              },
+              options.onUpdate,
+            );
+          },
+        });
+
+        return emitSession(
+          session,
+          {
+            step: 'completed',
+            statusMessage: `Pipeline hoàn tất trong ${Math.round(pipelineResult.totalDurationMs / 1000)}s.`,
+            artifacts: {
+              chapterWriteResult: pipelineResult.writeResult,
+              draftText: pipelineResult.content,
+              selectedBranchId: pipelineResult.selectedBranch.id,
+              divergenceReport: pipelineResult.writeResult.divergence,
+              reviewReport: pipelineResult.reviewReport ?? undefined,
+              styleAnalysis: pipelineResult.styleAnalysis ?? undefined,
+              pipelineStepTimings: pipelineResult.stepTimings,
+            },
+            metrics: {
+              startedAt: session.metrics.startedAt,
+              finishedAt: new Date().toISOString(),
+              latencyMs: Date.now() - startedAtMs,
+            },
+            error: undefined,
+          },
+          options.onUpdate,
+        );
+      }
+    }
+  } catch (error) {
+    return emitSession(
+      session,
+      {
+        step: 'failed',
+        statusMessage: 'Workflow thất bại.',
+        error: buildWorkflowError(error),
+        metrics: {
+          startedAt: session.metrics.startedAt,
+          finishedAt: new Date().toISOString(),
+          latencyMs: Date.now() - startedAtMs,
+        },
+      },
+      options.onUpdate,
+    );
+  }
+
+  // Unreachable — all cases return above
+  return session;
+}

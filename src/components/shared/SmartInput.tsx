@@ -17,7 +17,7 @@ interface SmartInputProps {
   /** Placeholder text hướng dẫn user */
   placeholder: string;
   /** Build prompt từ freeText → { system, user } */
-  buildPrompt: (text: string) => { system: string; user: string };
+  buildPrompt: (text: string) => Promise<{ system: string; user: string }> | { system: string; user: string };
   /** Callback khi AI trả kết quả JSON thành công */
   onResult: (data: any) => void;
   /** Label hiện trên heading */
@@ -39,7 +39,7 @@ export const SmartInput: React.FC<SmartInputProps> = ({
     if (!text.trim()) return;
     setParseError(null);
 
-    const prompt = buildPrompt(text);
+    const prompt = await buildPrompt(text);
     const result = await ai.suggest(prompt);
 
     if (result) {
@@ -81,6 +81,13 @@ export const SmartInput: React.FC<SmartInputProps> = ({
             placeholder={placeholder}
             value={text}
             onChange={(e) => setText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                if (e.nativeEvent.isComposing) return;
+                e.preventDefault();
+                void handleAnalyze();
+              }
+            }}
           />
 
           <div className="flex items-center justify-between">

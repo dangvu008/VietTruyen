@@ -16,6 +16,62 @@
     -moz-osx-font-smoothing: grayscale;
   }
 
+  html[data-app-theme='ethereal-light'] {
+    --vt-shell-bg: #f9f8f6;
+    --vt-shell-text: #2d2825;
+    --vt-header-bg: rgba(249, 248, 246, 0.85);
+    --vt-header-border: rgba(0, 0, 0, 0.08);
+    --vt-accent-line: rgba(100, 100, 255, 0.1);
+    --vt-option-bg: #ffffff;
+    --vt-option-border: rgba(0, 0, 0, 0.06);
+    --vt-option-text: #6e655d;
+    --vt-option-active-bg: rgba(99, 102, 241, 0.08);
+    --vt-option-active-border: rgba(99, 102, 241, 0.4);
+    --vt-option-active-ring: rgba(99, 102, 241, 0.15);
+    --vt-option-active-text: #4f46e5;
+    --vt-section-title: #3f3933;
+    --vt-section-copy: #6e655d;
+    --vt-page-kicker: #9c9288;
+    --vt-divider: rgba(0, 0, 0, 0.08);
+    --vt-editor-bg: #ffffff;
+    --vt-editor-sidebar-bg: #f3f0ec;
+    --vt-editor-border: #e6e0d8;
+    --vt-editor-text: #1a1714;
+    --vt-chat-user-bg: #6366f1;
+    --vt-chat-user-text: #ffffff;
+    --vt-chat-ai-bg: #ffffff;
+    --vt-chat-ai-border: rgba(0,0,0,0.06);
+    --vt-chat-ai-text: #374151;
+  }
+
+  html[data-app-theme='ethereal-dark'] {
+    --vt-shell-bg: #111116;
+    --vt-shell-text: #e2e8f0;
+    --vt-header-bg: rgba(17, 17, 22, 0.85);
+    --vt-header-border: rgba(255, 255, 255, 0.06);
+    --vt-accent-line: rgba(129, 140, 248, 0.15);
+    --vt-option-bg: #1a1a24;
+    --vt-option-border: rgba(255, 255, 255, 0.05);
+    --vt-option-text: #94a3b8;
+    --vt-option-active-bg: rgba(99, 102, 241, 0.15);
+    --vt-option-active-border: rgba(99, 102, 241, 0.5);
+    --vt-option-active-ring: rgba(99, 102, 241, 0.2);
+    --vt-option-active-text: #818cf8;
+    --vt-section-title: #f1f5f9;
+    --vt-section-copy: #94a3b8;
+    --vt-page-kicker: #64748b;
+    --vt-divider: rgba(255, 255, 255, 0.08);
+    --vt-editor-bg: #0f0f13;
+    --vt-editor-sidebar-bg: #15151c;
+    --vt-editor-border: #232332;
+    --vt-editor-text: #f8fafc;
+    --vt-chat-user-bg: #4f46e5;
+    --vt-chat-user-text: #ffffff;
+    --vt-chat-ai-bg: #1e1e28;
+    --vt-chat-ai-border: rgba(255,255,255,0.05);
+    --vt-chat-ai-text: #e2e8f0;
+  }
+
   * {
     box-sizing: border-box;
   }
@@ -324,4 +380,112 @@
   .text-balance {
     text-wrap: balance;
   }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   AI Thinking Indicator Animations
+   ═══════════════════════════════════════════════════════════ */
+
+/* Brain wave bars — vertical equalizer effect */
+@keyframes aiBrainWave {
+  0%, 100% { height: 4px; opacity: 0.4; }
+  25% { height: 18px; opacity: 1; }
+  50% { height: 8px; opacity: 0.6; }
+  75% { height: 14px; opacity: 0.9; }
+}
+
+.ai-thinking-bar {
+  animation: aiBrainWave 1.4s ease-in-out infinite;
+}
+
+/* Pulsing ring around brain icon */
+@keyframes aiThinkingRing {
+  0%, 100% { 
+    transform: scale(1); 
+    opacity: 0.3;
+    border-color: rgba(212,165,116,0.3);
+  }
+  50% { 
+    transform: scale(1.15); 
+    opacity: 0.8;
+    border-color: rgba(212,165,116,0.6);
+  }
+}
+
+.ai-thinking-ring {
+  animation: aiThinkingRing 2s ease-in-out infinite;
+}
+
+/* Inner glow pulse */
+@keyframes aiThinkingGlow {
+  0%, 100% { opacity: 0.15; }
+  50% { opacity: 0.4; }
+}
+
+.ai-thinking-ring-inner {
+  animation: aiThinkingGlow 2s ease-in-out infinite;
+}
+
+/* Sparkle rotation */
+@keyframes aiSparkle {
+  0% { transform: rotate(0deg) scale(1); opacity: 0.5; }
+  25% { transform: rotate(90deg) scale(1.2); opacity: 1; }
+  50% { transform: rotate(180deg) scale(1); opacity: 0.5; }
+  75% { transform: rotate(270deg) scale(1.2); opacity: 1; }
+  100% { transform: rotate(360deg) scale(1); opacity: 0.5; }
+}
+
+.ai-thinking-sparkle {
+  animation: aiSparkle 3s linear infinite;
+}
+
+/* Compact spinner rotation */
+@keyframes aiThinkingSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.ai-thinking-spin {
+  animation: aiThinkingSpin 1s linear infinite;
+}
+
+/* Step label dot pulse */
+@keyframes aiDotPulse {
+  0%, 100% { opacity: 0.5; transform: scale(0.8); }
+  50% { opacity: 1; transform: scale(1.2); }
+}
+
+.ai-thinking-dot {
+  animation: aiDotPulse 1.5s ease-in-out infinite;
+}
+
+/* Full container fade in */
+@keyframes aiThinkingFadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.ai-thinking-full {
+  animation: aiThinkingFadeIn 0.4s ease-out;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   AI Debug Panel Animations
+   ═══════════════════════════════════════════════════════════ */
+
+@keyframes debugPanelSlideIn {
+  from { 
+    opacity: 0; 
+    transform: translateY(-8px) scale(0.98);
+  }
+  to { 
+    opacity: 1; 
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Creation chat enhanced pulse */
+@keyframes creationPulse {
+  0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); }
+  40% { opacity: 1; transform: scale(1.1); }
 }

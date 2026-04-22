@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&amp;family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&amp;family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "secondary": "#742fe5",
+              "on-tertiary-fixed-variant": "#7b0852",
+              "surface-dim": "#c6dbff",
+              "on-primary-fixed-variant": "#243f8f",
+              "tertiary-fixed-dim": "#ff81c1",
+              "surface-bright": "#f9f9ff",
+              "on-surface-variant": "#476084",
+              "error-dim": "#70030f",
+              "surface-variant": "#d4e3ff",
+              "primary-fixed-dim": "#9ab0ff",
+              "on-secondary-fixed": "#5100b3",
+              "on-error-container": "#65000b",
+              "surface-container-high": "#dde9ff",
+              "on-error": "#fff7f6",
+              "on-tertiary-container": "#6e0048",
+              "on-secondary-fixed-variant": "#702ae1",
+              "outline": "#637ca2",
+              "secondary-dim": "#681ad9",
+              "on-secondary": "#fdf7ff",
+              "secondary-container": "#eaddff",
+              "outline-variant": "#9ab3dc",
+              "on-primary": "#faf8ff",
+              "surface-tint": "#415aab",
+              "surface": "#f9f9ff",
+              "on-primary-container": "#193686",
+              "primary-container": "#aebeff",
+              "on-background": "#183355",
+              "surface-container": "#e7eeff",
+              "tertiary": "#a53173",
+              "on-surface": "#183355",
+              "secondary-fixed-dim": "#deccff",
+              "primary-dim": "#344e9e",
+              "on-tertiary": "#fff7f8",
+              "error-container": "#f56965",
+              "primary-fixed": "#aebeff",
+              "inverse-on-surface": "#919eb4",
+              "tertiary-dim": "#952467",
+              "primary": "#415aab",
+              "background": "#f9f9ff",
+              "on-primary-fixed": "#00206a",
+              "surface-container-lowest": "#ffffff",
+              "surface-container-low": "#f0f3ff",
+              "error": "#ac3434",
+              "tertiary-fixed": "#ff99ca",
+              "tertiary-container": "#ff99ca",
+              "surface-container-highest": "#d4e3ff",
+              "secondary-fixed": "#eaddff",
+              "on-secondary-container": "#6617d7",
+              "on-tertiary-fixed": "#46002c",
+              "inverse-surface": "#020e20",
+              "inverse-primary": "#8fa7fe"
+            },
+            fontFamily: {
+              "headline": ["Manrope"],
+              "body": ["Newsreader"],
+              "label": ["Inter"]
+            },
+            borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .diff-added { background-color: rgba(212, 227, 255, 0.5); border-bottom: 2px solid #742fe5; }
+        .diff-removed { text-decoration: line-through; background-color: rgba(245, 105, 101, 0.1); color: #ac3434; }
+        .ambient-shadow { box-shadow: 0 10px 40px rgba(24, 51, 85, 0.06); }
+    </style>
+</head>
+<body class="bg-surface font-label text-on-surface">
+<div class="flex min-h-screen">
+<!-- SideNavBar (Predicted & Shared) -->
+<aside class="hidden md:flex flex-col h-screen w-64 bg-slate-100 dark:bg-slate-900 p-6 space-y-8 sticky top-0">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-lg overflow-hidden">
+<img alt="Project Icon" data-alt="A stylized logo of a crimson sun rising over a dark horizon, minimalist vector style" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBQTtIl97MCyls2rsHy4TfxmPkqELZ1hGJnHa3BN47FnbqRdDuXBvq47iJhhZdNHsCJMUdnunkfG4ISoVtuSbOSPykGmdSO4OGVZWtaP2Ld3n8nSjRsj9HXX17bw3AeamQzxl2tSxQeznkyyA_uEiR1F99bZriEKz1BmePNeNrKEr8fyJmBymjDhecbx7xdAC_HofiLEM3hvqmkm5eb3ZSoc-1EQYwvgqx5qf_AZAmftSnMja4tXYjuq7of5zL8Dz4Le-z-KgSqzc1R"/>
+</div>
+<div>
+<h2 class="text-lg font-semibold text-slate-900 dark:text-slate-100 font-headline leading-tight">Crimson Horizon</h2>
+<p class="text-[10px] uppercase tracking-widest text-slate-500 font-bold">Book 1: The Awakening</p>
+</div>
+</div>
+<button class="w-full py-3 px-4 bg-primary text-on-primary rounded-xl font-semibold flex items-center justify-center gap-2 transition-all duration-300 ease-in-out hover:scale-[1.02] active:opacity-70">
+<span class="material-symbols-outlined text-sm">add</span>
+                New Chapter
+            </button>
+<nav class="flex-1 space-y-2">
+<a class="flex items-center gap-3 text-slate-500 dark:text-slate-400 hover:translate-x-1 transition-transform duration-200 cursor-pointer font-['Manrope'] text-sm font-medium" href="#">
+<span class="material-symbols-outlined">menu_book</span>
+                    Chapters
+                </a>
+<a class="flex items-center gap-3 text-slate-500 dark:text-slate-400 hover:translate-x-1 transition-transform duration-200 cursor-pointer font-['Manrope'] text-sm font-medium" href="#">
+<span class="material-symbols-outlined">auto_stories</span>
+                    World Bible
+                </a>
+<a class="flex items-center gap-3 text-slate-500 dark:text-slate-400 hover:translate-x-1 transition-transform duration-200 cursor-pointer font-['Manrope'] text-sm font-medium" href="#">
+<span class="material-symbols-outlined">person_book</span>
+                    Character Sheets
+                </a>
+<a class="flex items-center gap-3 text-slate-500 dark:text-slate-400 hover:translate-x-1 transition-transform duration-200 cursor-pointer font-['Manrope'] text-sm font-medium" href="#">
+<span class="material-symbols-outlined">format_list_bulleted</span>
+                    Outline
+                </a>
+<a class="flex items-center gap-3 text-slate-500 dark:text-slate-400 hover:translate-x-1 transition-transform duration-200 cursor-pointer font-['Manrope'] text-sm font-medium" href="#">
+<span class="material-symbols-outlined">history_edu</span>
+                    Timeline
+                </a>
+</nav>
+<div class="pt-6 border-t border-slate-200/50 space-y-2">
+<a class="flex items-center gap-3 text-slate-500 dark:text-slate-400 hover:translate-x-1 transition-transform duration-200 cursor-pointer font-['Manrope'] text-sm font-medium" href="#">
+<span class="material-symbols-outlined">inventory_2</span>
+                    Archive
+                </a>
+<a class="flex items-center gap-3 text-slate-500 dark:text-slate-400 hover:translate-x-1 transition-transform duration-200 cursor-pointer font-['Manrope'] text-sm font-medium" href="#">
+<span class="material-symbols-outlined">delete</span>
+                    Trash
+                </a>
+</div>
+</aside>
+<!-- Main Workspace -->
+<main class="flex-1 flex flex-col min-w-0">
+<!-- TopAppBar (Predicted & Shared) -->
+<header class="bg-slate-50/80 dark:bg-slate-950/80 backdrop-blur-xl shadow-sm dark:shadow-none flex justify-between items-center w-full px-6 py-3 sticky top-0 z-50">
+<div class="flex items-center gap-8">
+<span class="text-xl font-bold bg-gradient-to-r from-blue-700 to-purple-600 bg-clip-text text-transparent font-['Manrope'] tracking-tight">The Ethereal Editor</span>
+<nav class="hidden md:flex items-center gap-6">
+<a class="text-slate-500 dark:text-slate-400 hover:text-blue-700 transition-colors font-['Manrope'] tracking-tight" href="#">Drafts</a>
+<a class="text-blue-900 dark:text-blue-200 border-b-2 border-purple-500 pb-1 font-['Manrope'] tracking-tight" href="#">The Muse</a>
+<a class="text-slate-500 dark:text-slate-400 hover:text-blue-700 transition-colors font-['Manrope'] tracking-tight" href="#">Library</a>
+</nav>
+</div>
+<div class="flex items-center gap-4">
+<div class="flex items-center gap-2 px-3 py-1.5 bg-blue-50/50 dark:hover:bg-slate-800/50 rounded-lg transition-all duration-300 ease-in-out hover:scale-[1.02] cursor-pointer">
+<span class="text-blue-800 dark:text-blue-300 font-medium text-sm font-['Manrope']">Engine: GPT-4</span>
+<span class="material-symbols-outlined text-sm text-blue-800">expand_more</span>
+</div>
+<button class="px-4 py-1.5 bg-primary text-on-primary rounded-lg font-['Manrope'] font-semibold text-sm transition-all duration-300 ease-in-out hover:scale-[1.02]">
+                        Polish Mode
+                    </button>
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-slate-500 cursor-pointer hover:text-primary" style="font-variation-settings: 'FILL' 1;">auto_fix_high</span>
+<span class="material-symbols-outlined text-slate-500 cursor-pointer hover:text-primary">settings</span>
+</div>
+<img alt="Author Profile" class="w-8 h-8 rounded-full ring-2 ring-primary/20" data-alt="Close up portrait of a professional writer in a bright studio, soft lighting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBdB2wo4rHtLsEmosG81P_P9uT8cQe67lnm5MLMxWoU5doLQfbJgPj6QyxlBZrH2VwqZos6RAz5OXBY68IRIXz7OEtUwXxvk99AW2hwFnu-Yyd77Zqt-7HGvODvlHfIHI7D6FkOEIeqGttKQcaEqoum1RkuRK3ZPi2EOZohI6aavDYbB6NQc3ZIZk3G7JG1ogjgXaMf9o3bNmcw3D8XJxmU8AkSRPZVId1-UBdh1ppOvrL1Ct7yZDkD8PUcPsyv_8oCNclHJ8RB7I4r"/>
+</div>
+</header>
+<!-- Editor Content -->
+<div class="p-8 max-w-7xl mx-auto w-full pb-32">
+<!-- Polish Controls -->
+<div class="flex flex-wrap items-center justify-between mb-8 gap-4">
+<div class="flex items-center gap-4">
+<div class="relative group">
+<button class="flex items-center gap-2 px-4 py-2 bg-surface-container-low rounded-xl text-on-surface hover:bg-surface-container-high transition-colors">
+<span class="font-semibold text-sm">Mode: General Fix</span>
+<span class="material-symbols-outlined text-lg">expand_more</span>
+</button>
+</div>
+<div class="relative group">
+<button class="flex items-center gap-2 px-4 py-2 bg-surface-container-low rounded-xl text-on-surface hover:bg-surface-container-high transition-colors">
+<span class="font-semibold text-sm">Chapter 14: The Void</span>
+<span class="material-symbols-outlined text-lg">expand_more</span>
+</button>
+</div>
+</div>
+<div class="flex items-center gap-3 text-sm text-on-surface-variant italic">
+<span class="material-symbols-outlined text-secondary animate-pulse" style="font-variation-settings: 'FILL' 1;">magic_button</span>
+                        AI Muse is analyzing your manuscript...
+                    </div>
+</div>
+<!-- Comparison View -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-12">
+<!-- Original -->
+<div class="flex flex-col space-y-4">
+<label class="text-xs font-bold uppercase tracking-widest text-outline">Original Draft</label>
+<div class="bg-surface-container-lowest p-8 rounded-2xl ambient-shadow min-h-[400px]">
+<p class="font-body text-xl leading-relaxed text-on-surface/80">
+                                The knight walked into the dark room. He felt <span class="diff-removed">scared because the walls were cold</span> and the air was thin. "Is anyone there?" he shouted. <span class="diff-removed">There was no answer, only silence.</span> He pulled out his sword, but it was <span class="diff-removed">not glowing very much</span>.
+                            </p>
+</div>
+</div>
+<!-- Polished -->
+<div class="flex flex-col space-y-4">
+<label class="text-xs font-bold uppercase tracking-widest text-secondary">Polished Version</label>
+<div class="bg-surface-container-lowest p-8 rounded-2xl ambient-shadow min-h-[400px] border-t-4 border-secondary/20">
+<p class="font-body text-xl leading-relaxed text-on-surface">
+                                Sir Kaelen stepped into the obsidian chamber. <span class="diff-added">An icy dread coiled in his chest as the damp stone exhaled its frozen breath.</span> "Is anyone there?" he demanded, his voice fracturing against the gloom. <span class="diff-added">The silence that followed was heavy, like a shroud.</span> He unsheathed his blade, but the ancient steel <span class="diff-added">yielded only a dying, silver pulse</span>.
+                            </p>
+</div>
+</div>
+</div>
+<!-- Statistics & Rules (Bento Style) -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+<div class="bg-surface-container-low p-6 rounded-2xl flex flex-col justify-between">
+<span class="text-xs font-bold uppercase tracking-widest text-on-surface-variant">Changes Statistics</span>
+<div class="mt-4 flex items-end gap-2">
+<span class="text-4xl font-headline font-extrabold text-primary">14</span>
+<span class="text-on-surface-variant font-medium pb-1">Total Enhancements</span>
+</div>
+<div class="mt-4 flex flex-col gap-2">
+<div class="flex justify-between text-sm">
+<span class="text-on-surface-variant">Vocab Variety</span>
+<span class="text-secondary font-bold">+42%</span>
+</div>
+<div class="w-full bg-surface-container rounded-full h-1.5 overflow-hidden">
+<div class="bg-secondary h-full" style="width: 42%"></div>
+</div>
+</div>
+</div>
+<div class="bg-surface-container-low p-6 rounded-2xl col-span-2">
+<span class="text-xs font-bold uppercase tracking-widest text-on-surface-variant mb-4 block">Rules Applied &amp; Learned</span>
+<div class="flex flex-wrap gap-3">
+<div class="px-4 py-2 bg-surface-container-lowest rounded-full border border-outline-variant/10 text-sm font-medium flex items-center gap-2">
+<span class="material-symbols-outlined text-secondary text-sm" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+                                Show, Don't Tell: Emotions
+                            </div>
+<div class="px-4 py-2 bg-surface-container-lowest rounded-full border border-outline-variant/10 text-sm font-medium flex items-center gap-2">
+<span class="material-symbols-outlined text-secondary text-sm" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+                                Sensory Descriptions
+                            </div>
+<div class="px-4 py-2 bg-surface-container-lowest rounded-full border border-outline-variant/10 text-sm font-medium flex items-center gap-2">
+<span class="material-symbols-outlined text-secondary text-sm" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+                                Active Voice Priority
+                            </div>
+<div class="px-4 py-2 bg-surface-container-lowest rounded-full border border-outline-variant/10 text-sm font-medium flex items-center gap-2">
+<span class="material-symbols-outlined text-secondary text-sm" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+                                Eliminating Passive Filter Words
+                            </div>
+</div>
+</div>
+</div>
+<!-- Suggestions List -->
+<div class="space-y-4">
+<h3 class="font-headline font-bold text-xl text-on-surface">Detailed Suggestions</h3>
+<!-- Suggestion Item 1 -->
+<div class="bg-surface-container-lowest p-6 rounded-2xl ambient-shadow flex flex-col md:flex-row md:items-center justify-between gap-6 hover:bg-surface-container-high transition-all duration-300">
+<div class="flex-1">
+<div class="flex items-center gap-3 mb-2">
+<span class="px-2 py-0.5 bg-error-container/20 text-error-dim text-[10px] font-bold rounded uppercase">Verb Weakness</span>
+<span class="text-on-surface-variant text-xs">Line 1</span>
+</div>
+<p class="font-body text-lg mb-2">
+<span class="text-on-surface-variant line-through">The knight walked</span>
+<span class="material-symbols-outlined text-sm mx-2">arrow_forward</span>
+<span class="text-primary font-bold">Sir Kaelen stepped</span>
+</p>
+<p class="text-sm text-on-surface-variant leading-relaxed">Specific naming and stronger verbs establish character identity and movement intent early in the scene.</p>
+</div>
+<div class="flex items-center gap-3">
+<button class="px-4 py-2 text-on-surface-variant hover:text-on-surface font-semibold text-sm transition-colors">Ignore</button>
+<button class="px-6 py-2 bg-secondary text-on-secondary rounded-lg font-semibold text-sm shadow-md hover:shadow-lg transition-all">Accept</button>
+</div>
+</div>
+<!-- Suggestion Item 2 -->
+<div class="bg-surface-container-lowest p-6 rounded-2xl ambient-shadow flex flex-col md:flex-row md:items-center justify-between gap-6 hover:bg-surface-container-high transition-all duration-300">
+<div class="flex-1">
+<div class="flex items-center gap-3 mb-2">
+<span class="px-2 py-0.5 bg-primary-container/20 text-on-primary-container text-[10px] font-bold rounded uppercase">Atmosphere</span>
+<span class="text-on-surface-variant text-xs">Line 4</span>
+</div>
+<p class="font-body text-lg mb-2">
+<span class="text-on-surface-variant line-through">not glowing very much</span>
+<span class="material-symbols-outlined text-sm mx-2">arrow_forward</span>
+<span class="text-primary font-bold">yielded only a dying, silver pulse</span>
+</p>
+<p class="text-sm text-on-surface-variant leading-relaxed">Adds sensory texture and reinforces the themes of fading power and ancient remnants.</p>
+</div>
+<div class="flex items-center gap-3">
+<button class="px-4 py-2 text-on-surface-variant hover:text-on-surface font-semibold text-sm transition-colors">Ignore</button>
+<button class="px-6 py-2 bg-secondary text-on-secondary rounded-lg font-semibold text-sm shadow-md hover:shadow-lg transition-all">Accept</button>
+</div>
+</div>
+</div>
+</div>
+</main>
+</div>
+<!-- Floating Action Bar -->
+<div class="fixed bottom-8 left-1/2 -translate-x-1/2 w-[90%] max-w-2xl z-50">
+<div class="bg-surface-container-lowest/80 backdrop-blur-xl border border-outline-variant/15 p-3 rounded-full ambient-shadow flex items-center justify-between px-6">
+<div class="flex items-center gap-4">
+<button class="flex items-center gap-2 text-on-surface-variant hover:text-error transition-colors">
+<span class="material-symbols-outlined">close</span>
+<span class="hidden sm:inline font-semibold text-sm">Cancel</span>
+</button>
+<div class="h-6 w-px bg-outline-variant/30"></div>
+<button class="flex items-center gap-2 text-on-surface-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined">refresh</span>
+<span class="hidden sm:inline font-semibold text-sm">Retry</span>
+</button>
+</div>
+<div class="flex items-center gap-2">
+<span class="text-xs font-bold text-on-surface-variant mr-4 hidden md:block">12 PENDING EDITS</span>
+<button class="px-8 py-3 bg-gradient-to-r from-primary to-secondary text-on-primary rounded-full font-bold shadow-lg transition-all duration-300 hover:scale-[1.03] active:scale-95">
+                    Accept All Changes
+                </button>
+</div>
+</div>
+</div>
+</body></html>

@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Trinity Writer | The Whispering Woods</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&amp;family=Newsreader:ital,opsz,wght@0,6..72,200..800;1,6..72,200..800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "on-primary": "#ffffff",
+              "on-background": "#191c1d",
+              "primary-fixed": "#dfe0ff",
+              "tertiary-fixed-dim": "#e9c176",
+              "on-error": "#ffffff",
+              "surface": "#f8f9fa",
+              "on-secondary-fixed": "#0d1e25",
+              "on-error-container": "#93000a",
+              "on-tertiary": "#ffffff",
+              "surface-container-lowest": "#ffffff",
+              "on-primary-fixed": "#000c62",
+              "secondary": "#506169",
+              "surface-container-low": "#f3f4f5",
+              "primary-container": "#142283",
+              "outline-variant": "#c6c5d4",
+              "inverse-surface": "#2e3132",
+              "on-secondary-container": "#55656d",
+              "inverse-primary": "#bcc2ff",
+              "on-secondary": "#ffffff",
+              "secondary-container": "#d1e2ec",
+              "surface-bright": "#f8f9fa",
+              "on-primary-container": "#8390f2",
+              "surface-container-high": "#e7e8e9",
+              "surface-container": "#edeeef",
+              "inverse-on-surface": "#f0f1f2",
+              "on-tertiary-fixed-variant": "#5d4201",
+              "on-surface": "#191c1d",
+              "secondary-fixed-dim": "#b8c9d3",
+              "on-secondary-fixed-variant": "#394951",
+              "surface-dim": "#d9dadb",
+              "surface-container-highest": "#e1e3e4",
+              "secondary-fixed": "#d4e5ef",
+              "outline": "#767683",
+              "on-primary-fixed-variant": "#303c9a",
+              "on-tertiary-container": "#b6924c",
+              "surface-variant": "#e1e3e4",
+              "background": "#f8f9fa",
+              "surface-tint": "#4955b3",
+              "on-surface-variant": "#454652",
+              "error": "#ba1a1a",
+              "tertiary-container": "#402c00",
+              "tertiary": "#251800",
+              "primary-fixed-dim": "#bcc2ff",
+              "tertiary-fixed": "#ffdea5",
+              "error-container": "#ffdad6",
+              "primary": "#000b60",
+              "on-tertiary-fixed": "#261900"
+            },
+            fontFamily: {
+              "headline": ["Manrope"],
+              "body": ["Newsreader"],
+              "label": ["Manrope"]
+            },
+            borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        body { font-family: 'Manrope', sans-serif; background-color: #f8f9fa; }
+        .editor-container { box-shadow: 0 12px 32px -4px rgba(25, 28, 29, 0.05); }
+        .glass-panel { backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); }
+        .ghost-border { border-bottom: 1px solid rgba(198, 197, 212, 0.2); }
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+</head>
+<body class="text-on-surface">
+<!-- TopNavBar -->
+<header class="bg-slate-50/80 dark:bg-slate-950/80 backdrop-blur-xl w-full sticky top-0 z-50 flex justify-between items-center px-8 h-16 w-full max-w-full">
+<div class="flex items-center gap-8">
+<span class="text-xl font-bold tracking-tight text-indigo-950 dark:text-indigo-50 font-manrope">Trinity Writer</span>
+<nav class="hidden md:flex gap-6 items-center">
+<a class="text-indigo-900 dark:text-indigo-200 border-b-2 border-indigo-900 dark:border-indigo-400 font-semibold transition-all" href="#">Manuscripts</a>
+<a class="text-slate-500 dark:text-slate-400 font-medium hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors duration-300" href="#">Universe</a>
+<a class="text-slate-500 dark:text-slate-400 font-medium hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors duration-300" href="#">Analytics</a>
+<a class="text-slate-500 dark:text-slate-400 font-medium hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors duration-300" href="#">Library</a>
+</nav>
+</div>
+<div class="flex items-center gap-4">
+<button class="text-slate-500 hover:text-indigo-700 transition-colors">
+<span class="material-symbols-outlined" data-icon="history">history</span>
+</button>
+<button class="text-slate-500 hover:text-indigo-700 transition-colors">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+</button>
+<div class="w-8 h-8 rounded-full overflow-hidden">
+<img alt="Writer Profile" data-alt="professional portrait of a creative writer in a bright studio setting with a soft neutral background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuA0bBDmbnZFag0YgViLuMp1Y05a4h-dD8SJnMi-P0jbviyrHAoJz6QGFQsw4v-0KynN7_kHEUe3Qs5TTxPiJaMEvVG1HcL04KAReY9og4WJKdnsHrxSI2-DAb334Ofn_PKetw41gpCzguJ3FZdN1iAtUKL5mjmJyY-T1U8pt22QW-9DiFCWdF0DLRi9cEHBt7riV1BfRYmbUGGLXed0cTIu6MFlyR5UE3ZI2IgFxEFReG5ismHoWY9YA7VQy_CXbrSnXAIWKtAkJIQq"/>
+</div>
+</div>
+</header>
+<main class="flex min-h-[calc(100vh-64px)] overflow-hidden">
+<!-- Left Column: Outline (Background Shift) -->
+<aside class="w-[280px] bg-surface-container-low flex flex-col py-8 px-6 overflow-y-auto hide-scrollbar">
+<div class="mb-10">
+<div class="flex items-center gap-4 mb-6">
+<div class="relative w-12 h-12 flex items-center justify-center">
+<svg class="w-full h-full -rotate-90">
+<circle class="text-surface-container-highest" cx="24" cy="24" fill="none" r="20" stroke="currentColor" stroke-width="4"></circle>
+<circle class="text-surface-tint" cx="24" cy="24" fill="none" r="20" stroke="currentColor" stroke-dasharray="125.6" stroke-dashoffset="30" stroke-width="4"></circle>
+</svg>
+<span class="absolute text-[10px] font-bold font-headline">75%</span>
+</div>
+<div>
+<h4 class="font-headline font-bold text-xs uppercase tracking-widest text-on-surface-variant">Chapter 12</h4>
+<p class="font-headline font-semibold text-sm text-primary">The Crossing</p>
+</div>
+</div>
+<div class="space-y-6">
+<div>
+<h3 class="font-headline text-[10px] font-extrabold uppercase tracking-[0.2em] text-outline mb-4">Story Beats</h3>
+<div class="space-y-3">
+<div class="flex items-start gap-3">
+<span class="material-symbols-outlined text-sm text-green-600" data-icon="check_circle" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<span class="text-xs font-headline font-medium text-on-surface-variant">Elara enters the grove</span>
+</div>
+<div class="flex items-start gap-3">
+<span class="material-symbols-outlined text-sm text-surface-tint animate-pulse" data-icon="radio_button_checked">radio_button_checked</span>
+<span class="text-xs font-headline font-bold text-on-surface">The Spirit reveals itself</span>
+</div>
+<div class="flex items-start gap-3">
+<span class="material-symbols-outlined text-sm text-outline" data-icon="radio_button_unchecked">radio_button_unchecked</span>
+<span class="text-xs font-headline font-medium text-on-surface-variant">A warning is spoken</span>
+</div>
+</div>
+<button class="mt-6 flex items-center gap-2 text-xs font-headline font-bold text-primary hover:opacity-70 transition-all">
+<span class="material-symbols-outlined text-base" data-icon="add">add</span> Add Beat
+                        </button>
+</div>
+<div>
+<h3 class="font-headline text-[10px] font-extrabold uppercase tracking-[0.2em] text-outline mb-4">Active Characters</h3>
+<div class="flex -space-x-2">
+<div class="w-8 h-8 rounded-full border-2 border-surface-container-low overflow-hidden">
+<img alt="Elara" data-alt="close-up portrait of a young woman with determined eyes and braided hair, cinematic lighting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCP41YxjKLdNf5yQtllWaoeQpBh-abtnKTE70RiCy3vzr4LpTOeexmu0lLrmKdVI17VIDC58DZx8sMyXDI9Sa-IHlCVF7-5JKwkGmdDfsP67N6OexbJ3zRVWEdmSRXkJQbg31SmfDmKMsIMkHMDzNU85cf5Gn4bgaeLPwPtJAewEf88WbIQm9_Y6UbTXEUh2eqjvFp-PjD4vTzE32OOiMPlSrN_ILLC6giSUKWKuBsEpWYghem6D2b3GiqS0oSB2H95jlvYSZy_KJE7"/>
+</div>
+<div class="w-8 h-8 rounded-full border-2 border-surface-container-low bg-primary flex items-center justify-center">
+<span class="material-symbols-outlined text-white text-sm" data-icon="air">air</span>
+</div>
+</div>
+</div>
+<div class="bg-tertiary-fixed p-4 rounded-xl">
+<div class="flex items-center gap-2 mb-2">
+<span class="material-symbols-outlined text-on-tertiary-fixed-variant text-sm" data-icon="warning">warning</span>
+<h3 class="font-headline text-[10px] font-extrabold uppercase tracking-wider text-on-tertiary-fixed-variant">Foreshadowing</h3>
+</div>
+<p class="text-[11px] font-medium text-on-tertiary-fixed-variant leading-relaxed">The silver pendant must be visible before the spirit speaks.</p>
+</div>
+</div>
+</div>
+</aside>
+<!-- Middle Column: Editor (Surface Container Lowest) -->
+<section class="flex-1 bg-surface flex flex-col items-center py-12 px-8 overflow-y-auto hide-scrollbar">
+<div class="w-full max-w-[800px] editor-container bg-surface-container-lowest p-20 min-h-[1200px] rounded-sm">
+<header class="mb-16 text-center">
+<h1 class="font-body text-4xl italic text-on-background mb-2">The Whispering Woods</h1>
+<div class="w-12 h-px bg-outline-variant mx-auto mb-4 opacity-30"></div>
+<p class="font-headline text-[10px] uppercase tracking-[0.4em] text-outline">Chapter Twelve</p>
+</header>
+<article class="font-body text-lg leading-[1.8] text-on-surface-variant space-y-8 text-justify">
+<p>
+                        The air beneath the canopy of the Whispering Woods felt thick, as if the oxygen had been replaced by the weight of a thousand unspoken memories. Elara stepped over a gnarled root that pulsed with a faint, rhythmic bioluminescence. She didn't belong here, and the forest knew it. Every snap of a twig under her leather boots echoed like a gunshot in the oppressive silence.
+                    </p>
+<p>
+                        "I was told you were watching," Elara whispered, her hand instinctively drifting to the silver pendant tucked beneath her tunic. The metal felt ice-cold against her skin, a stark contrast to the humid warmth of the grove.
+                    </p>
+<p>
+                        Suddenly, the fog began to churn. It didn't drift with the wind; it spiraled, coiling like a serpent around the base of a monolithic oak. From the heart of the mist, a shape emerged—tall, ethereal, and flickering like a dying candle. The Ancient Spirit did not have a face, only a mask of woven bark and two points of starlight where eyes should have been.
+                    </p>
+<p>
+<span class="bg-primary/5 border-l-2 border-primary pl-4 py-1 inline-block">
+                            "The daughter of the Weaver returns," the Spirit’s voice was not a sound, but a vibration that resonated in Elara’s marrow. "You carry the weight of your father’s debt, yet you walk with the stride of a free woman. Why?"
+                        </span>
+</p>
+<p>
+                        Elara drew a shaky breath, forcing herself not to look away from those piercing starlight eyes. "I walk to settle that debt, once and for all. Or to burn the ledger entirely."
+                    </p>
+</article>
+<!-- Zen Toolbar (Specialized Component) -->
+<div class="fixed bottom-12 left-1/2 -translate-x-1/2 glass-panel bg-surface-container-lowest/80 px-6 py-3 rounded-full flex items-center gap-6 shadow-xl border border-outline-variant/10">
+<button class="hover:text-primary transition-colors"><span class="material-symbols-outlined" data-icon="format_bold">format_bold</span></button>
+<button class="hover:text-primary transition-colors"><span class="material-symbols-outlined" data-icon="format_italic">format_italic</span></button>
+<button class="hover:text-primary transition-colors"><span class="material-symbols-outlined" data-icon="format_quote">format_quote</span></button>
+<div class="w-px h-6 bg-outline-variant/30"></div>
+<button class="text-primary"><span class="material-symbols-outlined" data-icon="auto_awesome" style="font-variation-settings: 'FILL' 1;">auto_awesome</span></button>
+<button class="hover:text-primary transition-colors"><span class="material-symbols-outlined" data-icon="comment">comment</span></button>
+</div>
+</div>
+</section>
+<!-- Right Column: AI Panel (Background Shift) -->
+<aside class="w-[340px] bg-surface-container-high flex flex-col py-8 px-6">
+<div class="flex-1 overflow-y-auto hide-scrollbar space-y-6">
+<!-- Context Cards -->
+<div class="bg-surface-container-lowest p-5 rounded-xl border border-outline-variant/10">
+<div class="flex items-center gap-2 mb-3">
+<span class="material-symbols-outlined text-primary text-sm" data-icon="description">description</span>
+<h3 class="font-headline text-[10px] font-extrabold uppercase tracking-widest text-on-surface-variant">Active Beat Detail</h3>
+</div>
+<p class="text-xs text-on-surface leading-relaxed font-medium">The Spirit reveals itself. High tension. Elara must show her resolve. The tone should be mystical and slightly threatening.</p>
+</div>
+<div class="bg-surface-container-lowest p-5 rounded-xl border border-outline-variant/10">
+<div class="flex items-center gap-2 mb-3">
+<span class="material-symbols-outlined text-primary text-sm" data-icon="psychology">psychology</span>
+<h3 class="font-headline text-[10px] font-extrabold uppercase tracking-widest text-on-surface-variant">AI Suggestions</h3>
+</div>
+<div class="space-y-2">
+<button class="w-full text-left p-3 rounded-lg bg-surface-container-low text-[11px] font-headline font-bold text-primary-container hover:bg-primary-container hover:text-white transition-all">
+                            Expand Spirit's dialogue
+                        </button>
+<button class="w-full text-left p-3 rounded-lg bg-surface-container-low text-[11px] font-headline font-bold text-primary-container hover:bg-primary-container hover:text-white transition-all">
+                            Describe environmental shifts
+                        </button>
+</div>
+</div>
+<div class="bg-surface-container-lowest p-5 rounded-xl border border-outline-variant/10">
+<h3 class="font-headline text-[10px] font-extrabold uppercase tracking-widest text-on-surface-variant mb-3">Scene Context</h3>
+<div class="flex flex-wrap gap-2">
+<span class="px-2 py-1 bg-surface-container-low rounded text-[10px] font-headline font-bold text-outline">Silver Pendant</span>
+<span class="px-2 py-1 bg-surface-container-low rounded text-[10px] font-headline font-bold text-outline">Father's Debt</span>
+<span class="px-2 py-1 bg-surface-container-low rounded text-[10px] font-headline font-bold text-outline">The Ledger</span>
+</div>
+</div>
+</div>
+<!-- AI Chat Footer -->
+<div class="mt-8">
+<div class="bg-surface-container-lowest rounded-xl p-4 border border-outline-variant/20 shadow-sm">
+<div class="flex justify-between items-center mb-2">
+<span class="text-[10px] font-headline font-bold text-outline uppercase tracking-wider">Muse Chat</span>
+<span class="text-[9px] font-headline text-outline">432 tokens available</span>
+</div>
+<div class="relative">
+<textarea class="w-full bg-surface-container-low border-none rounded-lg text-xs p-3 focus:ring-1 focus:ring-primary min-h-[80px] resize-none font-headline" placeholder="Ask the Muse..."></textarea>
+<button class="absolute bottom-2 right-2 p-1.5 bg-primary rounded-lg text-white">
+<span class="material-symbols-outlined text-sm" data-icon="send">send</span>
+</button>
+</div>
+</div>
+</div>
+</aside>
+</main>
+<!-- SideNavBar (Hidden on Mobile) -->
+<nav class="fixed left-0 top-16 h-[calc(100vh-64px)] w-16 bg-slate-100 dark:bg-slate-900 flex flex-col py-8 items-center gap-8 hidden lg:flex">
+<button class="text-indigo-950 dark:text-indigo-100 font-bold border-l-4 border-indigo-900 dark:border-indigo-500 bg-white/50 dark:bg-white/5 w-full py-4 flex justify-center">
+<span class="material-symbols-outlined" data-icon="menu_book">menu_book</span>
+</button>
+<button class="text-slate-500 dark:text-slate-400 hover:bg-slate-200/50 dark:hover:bg-slate-800/50 w-full py-4 flex justify-center transition-all">
+<span class="material-symbols-outlined" data-icon="group">group</span>
+</button>
+<button class="text-slate-500 dark:text-slate-400 hover:bg-slate-200/50 dark:hover:bg-slate-800/50 w-full py-4 flex justify-center transition-all">
+<span class="material-symbols-outlined" data-icon="public">public</span>
+</button>
+<button class="text-slate-500 dark:text-slate-400 hover:bg-slate-200/50 dark:hover:bg-slate-800/50 w-full py-4 flex justify-center transition-all">
+<span class="material-symbols-outlined" data-icon="edit_note">edit_note</span>
+</button>
+<div class="mt-auto flex flex-col items-center gap-6 mb-4">
+<button class="text-slate-500 hover:text-primary"><span class="material-symbols-outlined" data-icon="help">help</span></button>
+<button class="text-slate-500 hover:text-primary"><span class="material-symbols-outlined" data-icon="self_improvement">self_improvement</span></button>
+</div>
+</nav>
+</body></html>

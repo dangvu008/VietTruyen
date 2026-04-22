@@ -14,6 +14,8 @@ import { create } from 'zustand';
 import type { User } from '@supabase/supabase-js';
 import {
   signInWithGoogle as googleSignIn,
+  signInWithEmailPassword,
+  signUpWithEmailPassword,
   signOut as authSignOut,
   getCurrentSession,
   onAuthStateChange,
@@ -28,11 +30,13 @@ interface AuthState {
   // Actions
   initAuth: () => void;
   signInWithGoogle: () => Promise<void>;
+  signInWithEmail: (email: string, password: string) => Promise<{ error: Error | null }>;
+  signUpWithEmail: (email: string, password: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
   continueAsGuest: () => void;
 }
 
-export const useAuthStore = create<AuthState>()((set, get) => ({
+export const useAuthStore = create<AuthState>()((set) => ({
   user: null,
   isLoading: true,
   isAuthenticated: false,
@@ -49,7 +53,7 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
     });
 
     // Listen for auth changes (login, logout, token refresh)
-    onAuthStateChange((event, session) => {
+    onAuthStateChange((_event, session) => {
       const user = session?.user ?? null;
       set({
         user,
@@ -68,6 +72,27 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
       set({ isLoading: false });
     }
     // Redirect will happen — state updates via onAuthStateChange
+  },
+
+  signInWithEmail: async (email, password) => {
+    set({ isLoading: true });
+    const { error } = await signInWithEmailPassword(email, password);
+    if (error) {
+      set({ isLoading: false });
+    }
+    return { error };
+  },
+
+  signUpWithEmail: async (email, password) => {
+    set({ isLoading: true });
+    const { error } = await signUpWithEmailPassword(email, password);
+    if (error) {
+      set({ isLoading: false });
+    } else {
+      // If sign up doesn't immediately log in (e.g. requires email confirmation), reset loading
+      set({ isLoading: false });
+    }
+    return { error };
   },
 
   signOut: async () => {

@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-parse-pdf-with-liteparse"
+description = "Allows the desktop app to parse uploaded PDF files with the local LiteParse CLI."
+commands.allow = ["parse_pdf_with_liteparse"]

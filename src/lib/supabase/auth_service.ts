@@ -28,6 +28,27 @@ export async function signInWithGoogle(): Promise<{ error: Error | null }> {
   return { error: error ? new Error(error.message) : null };
 }
 
+// ─── Sign in with Email / Password ─────────────────────────
+export async function signInWithEmailPassword(email: string, password: string): Promise<{ error: Error | null }> {
+  const { error } = await supabase.auth.signInWithPassword({
+    email,
+    password,
+  });
+  return { error: error ? new Error(error.message) : null };
+}
+
+// ─── Sign up with Email / Password ─────────────────────────
+export async function signUpWithEmailPassword(email: string, password: string): Promise<{ error: Error | null }> {
+  const { error } = await supabase.auth.signUp({
+    email,
+    password,
+    options: {
+      emailRedirectTo: window.location.origin,
+    }
+  });
+  return { error: error ? new Error(error.message) : null };
+}
+
 // ─── Sign out ──────────────────────────────────────────────
 export async function signOut(): Promise<{ error: Error | null }> {
   const { error } = await supabase.auth.signOut();

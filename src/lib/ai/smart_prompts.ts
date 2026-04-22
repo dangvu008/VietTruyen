@@ -13,16 +13,13 @@ const SYSTEM_BASE = `Bạn là chuyên gia sáng tạo tiểu thuyết mạng Vi
 Nhiệm vụ: Phân tích mô tả tự do của người dùng rồi trích xuất thông tin có cấu trúc.
 LUÔN trả về JSON hợp lệ. Không giải thích, không markdown — CHỈ JSON.`;
 
-/**
- * UNIFIED: Phân tích toàn bộ project từ 1 mô tả duy nhất
- * Dùng cho BiblePage — central input cho tất cả pages
- */
-export function buildSmartProjectPrompt(freeText: string) {
+export function buildSmartProjectPrompt(freeText: string, storyPreview?: string) {
+  const previewContext = storyPreview ? `\n\n--- NỘI DUNG GỐC CỦA TRUYỆN DỰA ĐỂ THAM KHẢO ---\n${storyPreview}\n--- KẾT THÚC NỘI DUNG GỐC ---\n` : '';
   return {
     system: SYSTEM_BASE,
     user: `Phân tích mô tả tiểu thuyết sau và trích xuất TOÀN BỘ thông tin có thể:
 
-"${freeText}"
+"${freeText}"${previewContext}
 
 Trả về JSON đúng format sau. Điền đầy đủ gì có thể suy luận, để chuỗi rỗng / mảng rỗng nếu không tìm thấy:
 {
@@ -75,12 +72,13 @@ Trả về JSON đúng format sau. Điền đầy đủ gì có thể suy luận
 /**
  * Bible Page: extract genre, tags, style, title, logline, characters, world, plot
  */
-export function buildSmartBiblePrompt(freeText: string) {
+export function buildSmartBiblePrompt(freeText: string, storyPreview?: string) {
+  const previewContext = storyPreview ? `\n\n--- NỘI DUNG GỐC CỦA TRUYỆN DỰA ĐỂ THAM KHẢO ---\n${storyPreview}\n--- KẾT THÚC NỘI DUNG GỐC ---\n` : '';
   return {
     system: SYSTEM_BASE,
     user: `Phân tích mô tả sau và trích xuất thông tin tiểu thuyết:
 
-"${freeText}"
+"${freeText}"${previewContext}
 
 Trả về JSON đúng format sau (điền gì có, để chuỗi rỗng nếu không tìm thấy):
 {
@@ -102,13 +100,14 @@ Trả về JSON đúng format sau (điền gì có, để chuỗi rỗng nếu k
 /**
  * Characters Page: extract array of Character objects
  */
-export function buildSmartCharacterPrompt(freeText: string, existingNames: string[]) {
+export function buildSmartCharacterPrompt(freeText: string, existingNames: string[], storyPreview?: string) {
   const existing = existingNames.length > 0 ? `\nNhân vật đã có: ${existingNames.join(', ')}. KHÔNG tạo trùng.` : '';
+  const previewContext = storyPreview ? `\n\n--- NỘI DUNG GỐC CỦA TRUYỆN DỰA ĐỂ THAM KHẢO ---\n${storyPreview}\n--- KẾT THÚC NỘI DUNG GỐC ---\n` : '';
   return {
     system: SYSTEM_BASE,
     user: `Phân tích mô tả nhân vật sau và trích xuất danh sách nhân vật:
 
-"${freeText}"${existing}
+"${freeText}"${existing}${previewContext}
 
 Trả về JSON đúng format:
 {
@@ -128,12 +127,13 @@ Trả về JSON đúng format:
 /**
  * World Page: extract WorldRules fields
  */
-export function buildSmartWorldPrompt(freeText: string) {
+export function buildSmartWorldPrompt(freeText: string, storyPreview?: string) {
+  const previewContext = storyPreview ? `\n\n--- NỘI DUNG GỐC CỦA TRUYỆN DỰA ĐỂ THAM KHẢO ---\n${storyPreview}\n--- KẾT THÚC NỘI DUNG GỐC ---\n` : '';
   return {
     system: SYSTEM_BASE,
     user: `Phân tích mô tả thế giới sau và trích xuất thông tin:
 
-"${freeText}"
+"${freeText}"${previewContext}
 
 Trả về JSON đúng format:
 {
@@ -150,12 +150,13 @@ Trả về JSON đúng format:
 /**
  * Outline Page: extract array of OutlineBeat objects
  */
-export function buildSmartOutlinePrompt(freeText: string, existingCount: number) {
+export function buildSmartOutlinePrompt(freeText: string, existingCount: number, storyPreview?: string) {
+  const previewContext = storyPreview ? `\n\n--- NỘI DUNG GỐC CỦA TRUYỆN DỰA ĐỂ THAM KHẢO ---\n${storyPreview}\n--- KẾT THÚC NỘI DUNG GỐC ---\n` : '';
   return {
     system: SYSTEM_BASE,
     user: `Phân tích mô tả dàn ý sau và tạo danh sách nhịp (beats):
 
-"${freeText}"
+"${freeText}"${previewContext}
 
 Đã có ${existingCount} nhịp. Tạo thêm nhịp mới dựa trên mô tả trên.
 
@@ -175,12 +176,13 @@ Trả về JSON đúng format:
 /**
  * Foreshadowing Page: extract array of foreshadowing items
  */
-export function buildSmartForeshadowingPrompt(freeText: string) {
+export function buildSmartForeshadowingPrompt(freeText: string, storyPreview?: string) {
+  const previewContext = storyPreview ? `\n\n--- NỘI DUNG GỐC CỦA TRUYỆN DỰA ĐỂ THAM KHẢO ---\n${storyPreview}\n--- KẾT THÚC NỘI DUNG GỐC ---\n` : '';
   return {
     system: SYSTEM_BASE,
     user: `Phân tích mô tả sau và trích xuất danh sách phục bút (foreshadowing):
 
-"${freeText}"
+"${freeText}"${previewContext}
 
 Trả về JSON đúng format:
 {

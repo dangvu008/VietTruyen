@@ -1,3 +1,14 @@
+import type { DivergenceLevel, TensionLevel } from './surprise';
+import type { GenreProfileOverrides } from './genre_profile';
+import type { StrandTracker } from './strand_weave';
+import type { ChapterMeta } from './chapter_meta';
+
+export interface StoryFact {
+  id: string;
+  key: string;
+  value: string;
+}
+
 export interface Character {
   id: string;
   name: string;
@@ -5,6 +16,8 @@ export interface Character {
   arc: string;
   currentStage: string;
   traits: string;
+  aliases?: string[];
+  facts?: StoryFact[];
 }
 
 export interface WorldRules {
@@ -14,6 +27,7 @@ export interface WorldRules {
   currency: string;
   factions: string[];
   rules: string;
+  facts?: StoryFact[];
 }
 
 export interface OutlineBeat {
@@ -23,14 +37,45 @@ export interface OutlineBeat {
   focus: string;
 }
 
+export interface Arc {
+  id: string;
+  projectId: string;
+  index: number;
+  label: string;
+  title: string;
+  chapterStart: number;
+  chapterEnd: number;
+  chapterIds: string[];
+  summary: string;
+  premise: string;
+  escalation: string;
+  climax: string;
+  exitState: string;
+  unresolvedDebts: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Chapter {
   id: string;
   title: string;
   summary?: string; // Tóm tắt nội dung dùng cho Retcon Engine quét mâu thuẫn
   content: string;
-  status: 'draft' | 'revised' | 'final';
+  sequenceNumber?: number;
+  status: 'draft' | 'revised' | 'final' | 'published';
   createdAt: string;
   updatedAt: string;
+  aiMeta?: ChapterAiMeta;
+  meta?: ChapterMeta; // Extended chapter metadata
+}
+
+export interface ChapterAiMeta {
+  runtime: 'quick' | 'ai';
+  tensionLevel?: TensionLevel;
+  branchId?: string;
+  branchSummary?: string;
+  divergenceLevel?: DivergenceLevel;
+  divergenceIssues?: string[];
 }
 
 export interface Foreshadowing {
@@ -41,9 +86,55 @@ export interface Foreshadowing {
   createdAt: string;
 }
 
+// ── 3-Tier Outline Planning (总纲 → 卷纲 → 章纲) ──────────────
+
+export interface ChapterOutline {
+  id: string;
+  chapterNumber: number;
+  title: string;
+  summary: string;
+  conflict: string;
+  focus: string;
+  hooks: string[];
+  wordCountTarget?: number;
+}
+
+export interface VolumeOutline {
+  id: string;
+  volumeIndex: number;
+  title: string;
+  premise: string;
+  escalation: string;
+  climax: string;
+  exitState: string;
+  chapterRange: [number, number];
+  chapters: ChapterOutline[];
+}
+
+export interface MasterOutline {
+  id: string;
+  projectId: string;
+  totalChapters: number;
+  totalVolumes: number;
+  logline: string;
+  threeActStructure: {
+    act1End: number;
+    act2Midpoint: number;
+    act2End: number;
+  };
+  volumes: VolumeOutline[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type ProjectStorageMode = 'inline' | 'indexeddb' | 'provider';
+
+export type ProjectStatus = 'draft' | 'ongoing' | 'paused' | 'completed';
+
 export interface Project {
   id: string;
   title: string;
+  status?: ProjectStatus;
   logline: string;
   genre: string;
   subGenre: string[];       // Tags / Chủ đề con
@@ -63,13 +154,25 @@ export interface Project {
   chapters: Chapter[];
   foreshadowings: Foreshadowing[];
   notes: string;
+  canonVersion: number;
+  storageMode: ProjectStorageMode;
+  arcCount: number;
+  hasGlobalIndex: boolean;
+  activeSurgerySpecId?: string;
+  lastImpactScanId?: string;
   sourceProjectId?: string;        // ID dự án gốc (nếu phóng tác)
   adaptationType?: import('./adaptation').AdaptationType; // Loại phóng tác
+  genreProfileId?: string;         // ID của genre_profile được chọn
+  genreOverrides?: GenreProfileOverrides; // Custom overrides cho profile
+  strandTracker?: StrandTracker;   // Theo dõi nhịp độ cốt truyện
+  masterOutline?: MasterOutline;   // Hệ thống dàn ý 3 tầng (总纲 → 卷纲 → 章纲)
+  storyPreview?: string;           // Dữ liệu nội dung gốc/tóm tắt mồi (caching cho AI)
   createdAt: string;
   updatedAt: string;
 }
 
-export type AiProvider = 'gemini' | 'openrouter' | 'openai' | 'custom';
+export type AiProvider = string; // Allows dynamic providers, built-ins: 'gemini' | 'openrouter' | 'openai' | 'claude' | 'custom'
+export type WorkflowEngineType = 'api' | 'claude_plugin';
 
 export type AiModelTier = 'fast' | 'balanced' | 'quality';
 

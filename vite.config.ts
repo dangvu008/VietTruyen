@@ -4,6 +4,21 @@ import react from "@vitejs/plugin-react";
 // https://vitejs.dev/config/
 export default defineConfig(async () => ({
   plugins: [react()],
+  test: {
+    environment: 'node',
+  },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'vendor-react': ['react', 'react-dom', 'zustand'],
+          'vendor-supabase': ['@supabase/supabase-js'],
+          'vendor-docs': ['mammoth', 'docx', '@llamaindex/liteparse', 'jszip'],
+          'vendor-pdf': ['pdfjs-dist'],
+        },
+      },
+    },
+  },
 
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //

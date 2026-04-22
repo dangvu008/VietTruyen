@@ -1,4 +1,4 @@
-import { callAiModel } from './ai_client';
+import { callAiModelTracked } from './tracked_ai_client';
 import type { AiModel } from '../../types/story';
 import type { Chapter } from '../../types/story';
 import type { RetconAnalysisResult } from '../../types/retcon';
@@ -12,15 +12,8 @@ interface RetconAnalyzerParams {
   apiKey: string;
 }
 
-export async function analyzeRetconImpact({
-  entityType,
-  oldEntity,
-  newEntity,
-  chapters,
-  activeModel,
-  apiKey
-}: RetconAnalyzerParams): Promise<RetconAnalysisResult> {
-  const systemPrompt = `Bạn là System Consistency Checker (Hệ thống Kiểm tra Tính Nhất Quán) của một phần mềm viết truyện.
+function buildSystemPrompt(entityType: string): string {
+  return `Bạn là System Consistency Checker (Hệ thống Kiểm tra Tính Nhất Quán) của một phần mềm viết truyện.
 Nhiệm vụ của bạn là đọc các bản tóm tắt chương (Outlines) và quét xem việc thay đổi thông tin của một ${entityType} có gây ra mâu thuẫn (plot hole) ở các chương đã viết hay không.
 
 QUY TẮC PHÂN TÍCH:
@@ -36,7 +29,7 @@ BẠN PHẢI TRẢ VỀ KẾT QUẢ DƯỚI DẠNG CHUẨN JSON SAU:
   "isSafe": boolean,
   "conflicts": [
     {
-      "id": "conflict_uuid", // Tạo uuid ngẫu nhiên
+      "id": "conflict_uuid",
       "chapterId": "id_của_chương",
       "chapterTitle": "Tên chương",
       "conflictDescription": "Mô tả ngắn gọn mâu thuẫn xảy ra",
@@ -45,45 +38,111 @@ BẠN PHẢI TRẢ VỀ KẾT QUẢ DƯỚI DẠNG CHUẨN JSON SAU:
     }
   ]
 }
-Chú ý: CHỈ trả về JSON. Không có markdown bọc ngoài hoặc lời giải thích thêm ngoài JSON.
-`;
+Chú ý: CHỈ trả về JSON. Không có markdown bọc ngoài hoặc lời giải thích thêm ngoài JSON.`;
+}
 
-  // Token optimization: chỉ gửi tối đa 20 chương gần nhất, ưu tiên summary
-  const limitedChapters = chapters.slice(-20);
-  const summariesText = limitedChapters.map(c => 
-    `--- Chương [${c.id}] - ${c.title} ---\n${c.summary || c.content.substring(0, 200) + '...'}`
-  ).join('\n\n');
-
-  const userPrompt = `DỮ LIỆU CŨ:
-${JSON.stringify(oldEntity, null, 2)}
+function buildChunkPrompt(params: {
+  oldEntity: any;
+  newEntity: any;
+  summariesText: string;
+  chunkIndex: number;
+  totalChunks: number;
+}): string {
+  return `DỮ LIỆU CŨ:
+${JSON.stringify(params.oldEntity, null, 2)}
 
 DỮ LIỆU MỚI DO NGƯỜI DÙNG CHỈNH SỬA:
-${JSON.stringify(newEntity, null, 2)}
+${JSON.stringify(params.newEntity, null, 2)}
+
+ĐÂY LÀ BATCH ${params.chunkIndex + 1}/${params.totalChunks} CỦA TOÀN BỘ TRUYỆN.
 
 TÓM TẮT CÁC CHƯƠNG ĐÃ VIẾT:
-${summariesText}
+${params.summariesText}
 
 Vui lòng phân tích mâu thuẫn và trả về JSON theo đúng định dạng được yêu cầu.`;
+}
 
+async function analyzeChunk(params: {
+  entityType: string;
+  oldEntity: any;
+  newEntity: any;
+  summariesText: string;
+  chunkIndex: number;
+  totalChunks: number;
+  activeModel: AiModel;
+  apiKey: string;
+}): Promise<RetconAnalysisResult> {
+  const responseText = await callAiModelTracked({
+    provider: params.activeModel.provider,
+    modelId: params.activeModel.id || params.activeModel.modelId,
+    modelName: params.activeModel.name || params.activeModel.id || params.activeModel.modelId,
+    baseUrl: params.activeModel.baseUrl,
+    systemPrompt: buildSystemPrompt(params.entityType),
+    userPrompt: buildChunkPrompt({
+      oldEntity: params.oldEntity,
+      newEntity: params.newEntity,
+      summariesText: params.summariesText,
+      chunkIndex: params.chunkIndex,
+      totalChunks: params.totalChunks,
+    }),
+    taskType: 'analyze_retcon',
+    responseFormat: 'json_object'
+  });
+
+  const cleanedText = responseText.replace(/```json\n?|\n?```/g, '').trim();
+  const result: RetconAnalysisResult = JSON.parse(cleanedText);
+  if (!result.conflicts) result.conflicts = [];
+  return result;
+}
+
+export async function analyzeRetconImpact({
+  entityType,
+  oldEntity,
+  newEntity,
+  chapters,
+  activeModel,
+  apiKey
+}: RetconAnalyzerParams): Promise<RetconAnalysisResult> {
   try {
-    const responseText = await callAiModel(
-      activeModel.provider,
-      apiKey,
-      activeModel.modelId,
-      activeModel.baseUrl,
-      systemPrompt,
-      userPrompt,
-      'json_object'
-    );
+    const chunkSize = 20;
+    const chapterChunks: Chapter[][] = [];
+    for (let index = 0; index < chapters.length; index += chunkSize) {
+      chapterChunks.push(chapters.slice(index, index + chunkSize));
+    }
 
-    // Parse JSON
-    // Đôi khi AI vẫn bọc markdown ```json ... ``` dù đã yêu cầu không làm vậy
-    const cleanedText = responseText.replace(/```json\n?|\n?```/g, '').trim();
-    const result: RetconAnalysisResult = JSON.parse(cleanedText);
-    
-    // Đảm bảo các field tồn tại
-    if (!result.conflicts) result.conflicts = [];
-    return result;
+    const aggregate: RetconAnalysisResult = {
+      isSafe: true,
+      conflicts: [],
+    };
+
+    for (let index = 0; index < chapterChunks.length; index += 1) {
+      const chunk = chapterChunks[index];
+      const summariesText = chunk.map((chapter) =>
+        `--- Chương [${chapter.id}] - ${chapter.title} ---\n${chapter.summary || `${chapter.content.substring(0, 200)}...`}`
+      ).join('\n\n');
+
+      const result = await analyzeChunk({
+        entityType,
+        oldEntity,
+        newEntity,
+        summariesText,
+        chunkIndex: index,
+        totalChunks: chapterChunks.length,
+        activeModel,
+        apiKey,
+      });
+
+      aggregate.isSafe = aggregate.isSafe && result.isSafe && result.conflicts.length === 0;
+      aggregate.conflicts.push(
+        ...result.conflicts.map((conflict, conflictIndex) => ({
+          ...conflict,
+          id: conflict.id || `retcon_${index}_${conflictIndex}`,
+          sourceChapterIds: [conflict.chapterId],
+        }))
+      );
+    }
+
+    return aggregate;
   } catch (error) {
     console.error('Lỗi phân tích Retcon:', error);
     throw new Error('Không thể phân tích mâu thuẫn cốt truyện. Vui lòng thử lại.');

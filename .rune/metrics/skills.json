@@ -1,0 +1,8 @@
+{
+  "recent": [
+    "rune-skill-router",
+    "rune-cook",
+    "rune-session-bridge"
+  ],
+  "note": "Bootstrap seed. Runtime sessions can overwrite this with real usage telemetry."
+}

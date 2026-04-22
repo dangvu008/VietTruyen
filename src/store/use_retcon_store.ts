@@ -1,125 +1,255 @@
 import { create } from 'zustand';
-import type { RetconConflict, RetconResolutionType } from '../types/retcon';
-import type { Chapter, AiModel } from '../types/story';
-import { analyzeRetconImpact } from '../lib/ai/retcon_analyzer';
+import { createId } from '../core/id';
+import { previewCanonicalEdits, persistPropagationPreview } from '../lib/memory/propagation_engine';
+import type { CanonicalEdit, EntityType, PropagationPreview } from '../types/narrative_memory';
+import { buildCharacterAttributes, buildWorldAttributes, normalizeAttributeKey } from '../lib/memory/memory_registry';
+
+type EditableEntityType = 'character' | 'world';
+
+interface DraftChange {
+  attributeKey: string;
+  oldValue: string;
+  newValue: string;
+}
+
+interface AnalysisParams {
+  projectId: string;
+  entityType: EditableEntityType;
+  entityId: string;
+  oldEntity: any;
+  newEntity: any;
+  effectiveFromChapter?: number;
+  reason?: string;
+  onApplyChanges: () => void;
+}
 
 interface RetconState {
   isOpen: boolean;
   isAnalyzing: boolean;
-  isSafe: boolean;
-  conflicts: RetconConflict[];
-  resolutions: Record<string, RetconResolutionType>;
-  
-  // Dữ liệu pending chưa submit vào DB chính cho đến khi Retcon kết thúc
+  projectId: string | null;
+  entityType: EditableEntityType | null;
+  entityId: string | null;
+  originalEntity: any | null;
   pendingEntityChange: any | null;
-  pendingEntityId: string | null;
-  entityType: string | null;
+  draftChanges: DraftChange[];
+  edits: CanonicalEdit[];
+  preview: PropagationPreview | null;
+  effectiveFromChapter: number;
+  reason: string;
+  applyCallback: (() => void) | null;
 
-  // Actions
-  startAnalysis: (params: {
-    entityType: string;
-    entityId: string;
-    oldEntity: any;
-    newEntity: any;
-    chapters: Chapter[];
-    activeModel: AiModel;
-    apiKey: string;
-  }) => Promise<void>;
-  
-  setResolution: (conflictId: string, resolution: RetconResolutionType) => void;
+  startAnalysis: (params: AnalysisParams) => Promise<void>;
+  setEffectiveFromChapter: (value: number) => Promise<void>;
+  setReason: (value: string) => Promise<void>;
+  applyChanges: () => Promise<void>;
   closeModal: () => void;
-  
-  // Callback khi User bấm [Đồng ý sửa] (ví dụ: Save nhân vật + apply các retcon)
-  onApplyComplete: () => void;
+}
+
+function buildAttributes(entityType: EditableEntityType, entity: any): Record<string, string> {
+  return entityType === 'character'
+    ? buildCharacterAttributes(entity)
+    : buildWorldAttributes(entity);
+}
+
+function diffEntities(entityType: EditableEntityType, oldEntity: any, newEntity: any): DraftChange[] {
+  const previous = buildAttributes(entityType, oldEntity);
+  const next = buildAttributes(entityType, newEntity);
+  const keys = Array.from(new Set([...Object.keys(previous), ...Object.keys(next)]));
+
+  return keys
+    .map((key) => ({
+      attributeKey: normalizeAttributeKey(key),
+      oldValue: previous[key] || '',
+      newValue: next[key] || '',
+    }))
+    .filter((change) => change.oldValue !== change.newValue);
+}
+
+function buildEdits(
+  projectId: string,
+  entityType: EditableEntityType,
+  entityId: string,
+  draftChanges: DraftChange[],
+  effectiveFromChapter: number,
+  reason: string
+): CanonicalEdit[] {
+  const now = new Date().toISOString();
+  return draftChanges.map((change) => ({
+    id: createId(),
+    projectId,
+    entityId,
+    entityType: entityType as EntityType,
+    attributeKey: change.attributeKey,
+    oldValue: change.oldValue,
+    newValue: change.newValue,
+    effectiveFromChapter,
+    reason,
+    sourceType: 'canonical_edit',
+    confidence: 1,
+    propagationStatus: 'ready',
+    createdAt: now,
+  }));
 }
 
 export const useRetconStore = create<RetconState>((set, get) => ({
   isOpen: false,
   isAnalyzing: false,
-  isSafe: false,
-  conflicts: [],
-  resolutions: {},
-  pendingEntityChange: null,
-  pendingEntityId: null,
+  projectId: null,
   entityType: null,
+  entityId: null,
+  originalEntity: null,
+  pendingEntityChange: null,
+  draftChanges: [],
+  edits: [],
+  preview: null,
+  effectiveFromChapter: 1,
+  reason: 'Cập nhật canon',
+  applyCallback: null,
 
-  startAnalysis: async ({ entityType, entityId, oldEntity, newEntity, chapters, activeModel, apiKey }) => {
-    // 1. Mở modal ở trạng thái Loading
+  startAnalysis: async ({
+    projectId,
+    entityType,
+    entityId,
+    oldEntity,
+    newEntity,
+    effectiveFromChapter = 1,
+    reason = 'Cập nhật canon',
+    onApplyChanges,
+  }) => {
+    const draftChanges = diffEntities(entityType, oldEntity, newEntity);
+
     set({
       isOpen: true,
       isAnalyzing: true,
-      isSafe: false,
-      conflicts: [],
-      resolutions: {},
-      pendingEntityChange: newEntity,
-      pendingEntityId: entityId,
+      projectId,
       entityType,
+      entityId,
+      originalEntity: oldEntity,
+      pendingEntityChange: newEntity,
+      draftChanges,
+      edits: [],
+      preview: null,
+      effectiveFromChapter,
+      reason,
+      applyCallback: onApplyChanges,
     });
 
-    try {
-      // 2. Fetch từ Gemini
-      const result = await analyzeRetconImpact({
-        entityType,
-        oldEntity,
-        newEntity,
-        chapters,
-        activeModel,
-        apiKey
-      });
-
-      // 3. Khởi tạo resolutions mặc định là 'ignore' (bỏ qua)
-      const defaultResolutions: Record<string, RetconResolutionType> = {};
-      result.conflicts.forEach(c => {
-        defaultResolutions[c.id || `temp_${Math.random()}`] = 'ignore';
-      });
-
+    if (draftChanges.length === 0) {
       set({
         isAnalyzing: false,
-        isSafe: result.isSafe && result.conflicts.length === 0,
-        conflicts: result.conflicts,
-        resolutions: defaultResolutions,
+        preview: {
+          id: createId(),
+          projectId,
+          edits: [],
+          blastRadius: [],
+          taskQueue: [],
+          createdAt: new Date().toISOString(),
+        },
       });
-    } catch (error) {
-      console.error(error);
-      set({
-        isAnalyzing: false,
-        // Fallback mở cảnh báo lỗi
-        isSafe: false,
-        conflicts: [
-          {
-            id: 'error_fallback',
-            chapterId: '',
-            chapterTitle: 'Phát sinh lỗi kết nối AI',
-            conflictDescription: 'Hệ thống AI không thể phân tích dữ liệu ngay lúc này. Bạn có thể Bỏ qua để lưu bình thường.',
-            fixOptionA: '',
-            fixOptionB: ''
-          }
-        ],
-        resolutions: { error_fallback: 'ignore' }
-      });
+      return;
     }
+
+    const edits = buildEdits(projectId, entityType, entityId, draftChanges, effectiveFromChapter, reason);
+    const preview = await previewCanonicalEdits(projectId, edits);
+
+    set({
+      isAnalyzing: false,
+      edits,
+      preview,
+    });
   },
 
-  setResolution: (conflictId, resolution) => {
-    set((state) => ({
-      resolutions: { ...state.resolutions, [conflictId]: resolution }
-    }));
+  setEffectiveFromChapter: async (value) => {
+    const state = get();
+    const effectiveFromChapter = Math.max(1, Math.floor(value || 1));
+
+    set({
+      effectiveFromChapter,
+      isAnalyzing: true,
+    });
+
+    if (!state.projectId || !state.entityId || !state.entityType) {
+      set({ isAnalyzing: false });
+      return;
+    }
+
+    const edits = buildEdits(
+      state.projectId,
+      state.entityType,
+      state.entityId,
+      state.draftChanges,
+      effectiveFromChapter,
+      state.reason
+    );
+    const preview = await previewCanonicalEdits(state.projectId, edits);
+
+    set({
+      effectiveFromChapter,
+      isAnalyzing: false,
+      edits,
+      preview,
+    });
+  },
+
+  setReason: async (value) => {
+    const reason = value || 'Cập nhật canon';
+    const state = get();
+
+    set({
+      reason,
+      isAnalyzing: true,
+    });
+
+    if (!state.projectId || !state.entityId || !state.entityType) {
+      set({ isAnalyzing: false });
+      return;
+    }
+
+    const edits = buildEdits(
+      state.projectId,
+      state.entityType,
+      state.entityId,
+      state.draftChanges,
+      state.effectiveFromChapter,
+      reason
+    );
+    const preview = await previewCanonicalEdits(state.projectId, edits);
+
+    set({
+      reason,
+      isAnalyzing: false,
+      edits,
+      preview,
+    });
+  },
+
+  applyChanges: async () => {
+    const state = get();
+    if (!state.preview) return;
+
+    state.applyCallback?.();
+    if (state.preview.edits.length > 0) {
+      await persistPropagationPreview(state.preview);
+    }
+
+    get().closeModal();
   },
 
   closeModal: () => {
     set({
       isOpen: false,
       isAnalyzing: false,
-      isSafe: false,
-      conflicts: [],
-      resolutions: {},
-      pendingEntityChange: null,
-      pendingEntityId: null,
+      projectId: null,
       entityType: null,
+      entityId: null,
+      originalEntity: null,
+      pendingEntityChange: null,
+      draftChanges: [],
+      edits: [],
+      preview: null,
+      effectiveFromChapter: 1,
+      reason: 'Cập nhật canon',
+      applyCallback: null,
     });
   },
-
-  onApplyComplete: () => {
-    get().closeModal();
-  }
 }));

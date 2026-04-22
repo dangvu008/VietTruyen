@@ -1,0 +1,117 @@
+# Universal Agent Briefing
+
+This repository uses a portable task-brief contract so coding agents can work safely across different tools and projects.
+
+## Default Rules
+
+- Inspect the repository before editing. Detect stack, package manager, test runner, and current state from local files.
+- Ask clarifying questions only for blockers, and keep it to 3 or fewer.
+- Do not widen scope beyond the requested deliverable.
+- Stop and ask before deleting files, adding dependencies, changing database schema, editing secrets, or changing CI/deploy config.
+- Prefer repo-local verification. Run the smallest useful test or build command for the affected area.
+- Report changed files, verification performed, and any remaining risk.
+
+## Universal Brief
+
+Use this structure for any non-trivial task:
+
+```text
+Objective:
+[What needs to change]
+
+Current State:
+- Stack:
+- Entry points:
+- Existing constraints:
+
+Allowed Scope:
+- Files or directories that may be changed
+
+Do Not Touch:
+- Files, systems, and behaviors that are out of scope
+
+Constraints:
+- Versions, coding standards, dependencies, product rules, UX or security limits
+
+Stop And Ask Before:
+- Deleting files
+- Adding dependencies
+- Changing DB schema
+- Running destructive commands
+- Modifying infra, secrets, billing, or external accounts
+
+Done When:
+- Concrete, testable completion criteria
+
+Verification:
+- Smallest commands or checks that prove the change works
+
+Return Format:
+- What the agent should report back when finished
+```
+
+## Codex Overlay
+
+When the active tool is Codex or another execution-first coding agent:
+
+- Keep the brief compact and path-anchored.
+- Prefer explicit file and function names when known.
+- Include a hard scope boundary and stop conditions.
+- Include a `Done When` section with observable behavior or tests.
+- Favor incremental execution over speculative refactors.
+
+## Antigravity Overlay
+
+When the active tool is Antigravity:
+
+- Route multi-file or multi-domain work through `.agent` workflows and specialist agents.
+- Keep ownership explicit by domain: UI, backend, database, tests, docs.
+- For larger tasks, create or update a plan before implementation.
+- Preserve the same `Allowed Scope`, `Do Not Touch`, `Stop And Ask Before`, and `Done When` contract.
+
+## Example
+
+```text
+Objective:
+Fix login form validation so invalid email and empty password are blocked before submit.
+
+Current State:
+- Stack: React 18 + TypeScript + Vite
+- Entry point: src/components/pages/LoginPage.tsx
+- Existing constraint: Keep current API contract unchanged
+
+Allowed Scope:
+- src/components/pages/LoginPage.tsx
+- src/lib/validation/*
+- related tests only
+
+Do Not Touch:
+- API routes
+- package.json
+- DB schema
+
+Constraints:
+- No new dependencies
+- Keep current design system
+
+Stop And Ask Before:
+- Adding packages
+- Renaming exported APIs
+- Removing files
+
+Done When:
+- Invalid email shows inline error
+- Empty password is blocked
+- Valid input still submits
+- Affected tests pass
+
+Verification:
+- Run the smallest relevant test suite
+- If no test exists, add one focused test
+
+Return Format:
+- Summary of changes
+- Files changed
+- Verification run
+- Residual risk
+```

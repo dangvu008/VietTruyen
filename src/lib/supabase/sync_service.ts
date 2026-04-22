@@ -110,7 +110,7 @@ export async function uploadProject(project: Project, userId: string): Promise<{
 
   // 6. Sync foreshadowings
   await supabase.from('foreshadowings').delete().eq('project_id', project.id);
-  if (project.foreshadowings.length > 0) {
+  if (project.foreshadowings && project.foreshadowings.length > 0) {
     const items = project.foreshadowings.map((f) => ({
       id: f.id,
       project_id: project.id,
@@ -214,6 +214,10 @@ export async function downloadProjects(): Promise<{ data: Project[]; error: Erro
       chapters,
       foreshadowings,
       notes: row.notes || '',
+      canonVersion: 1,
+      storageMode: 'inline',
+      arcCount: 0,
+      hasGlobalIndex: false,
       sourceProjectId: row.source_project_id || undefined,
       adaptationType: row.adaptation_type as any,
       createdAt: row.created_at || new Date().toISOString(),

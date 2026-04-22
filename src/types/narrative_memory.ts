@@ -17,7 +17,13 @@ export type EntityType =
   | 'faction'
   | 'item'
   | 'location'
-  | 'magic_system';
+  | 'magic_system'
+  | 'world';
+
+export type MemorySourceType = 'project' | 'chapter_extract' | 'canonical_edit' | 'ai_enriched';
+export type DependencyStatus = 'fresh' | 'stale';
+export type TaskStatus = 'pending' | 'in_progress' | 'done' | 'dismissed';
+export type JobStatus = 'queued' | 'running' | 'completed' | 'failed';
 
 // ═══════════════════════════════════════════════════════════
 // Layer 1: Entity Timeline
@@ -30,6 +36,21 @@ export interface AttributeDiff {
   reason: string; // "nhân vật bị thương mất cánh tay trái trong trận chiến"
 }
 
+export interface EntityDefinition {
+  id: string;
+  entityId: string;
+  projectId: string;
+  entityType: EntityType;
+  canonicalName: string;
+  aliases: string[];
+  attributes: Record<string, string>;
+  sourceType: MemorySourceType;
+  confidence: number;
+  extractorVersion: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface EntitySnapshot {
   id: string;
   entityId: string;
@@ -40,6 +61,24 @@ export interface EntitySnapshot {
   attributes: Record<string, string>; // key-value pairs of all attributes at this point
   diffs: AttributeDiff[]; // what changed from previous snapshot
   timestamp: string;
+}
+
+export interface TimelineFact {
+  id: string;
+  entityId: string;
+  projectId: string;
+  entityType: EntityType;
+  attributeKey: string;
+  value: string;
+  chapterFrom: number;
+  chapterTo?: number;
+  sourceChapterId?: string;
+  sourceType: MemorySourceType;
+  confidence: number;
+  reviewSuggested: boolean;
+  extractorVersion: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -59,6 +98,24 @@ export interface ChapterDependency {
   context: string; // "Mô tả ngoại hình nhân vật khi gặp lần đầu"
 }
 
+export interface AttributeDependency {
+  id: string;
+  chapterId: string;
+  projectId: string;
+  chapterIndex: number;
+  entityId: string;
+  entityType: EntityType;
+  attributeKey: string;
+  importance: DependencyImportance;
+  context: string;
+  snippets: string[];
+  dependencyStatus: DependencyStatus;
+  confidence: number;
+  contentHash: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 // AI-extracted metadata from a chapter
 export interface ChapterEntityRef {
   entityId: string;
@@ -73,7 +130,11 @@ export interface ChapterEntityRef {
 export interface ChapterMetadata {
   chapterId: string;
   projectId: string;
+  chapterIndex: number;
+  contentHash: string;
+  warnings: string[];
   entityRefs: ChapterEntityRef[];
+  extractorVersion: string;
   extractedAt: string;
 }
 
@@ -104,6 +165,40 @@ export interface PatchSuggestion {
   status: PatchStatus;
 }
 
+export interface CanonicalEdit {
+  id: string;
+  projectId: string;
+  entityId: string;
+  entityType: EntityType;
+  attributeKey: string;
+  oldValue: string;
+  newValue: string;
+  effectiveFromChapter: number;
+  reason: string;
+  sourceType: MemorySourceType;
+  confidence: number;
+  propagationStatus: PropagationStatus;
+  createdAt: string;
+  appliedAt?: string;
+}
+
+export interface PropagationTask {
+  id: string;
+  projectId: string;
+  canonicalEditId: string;
+  chapterId: string;
+  chapterIndex: number;
+  entityId: string;
+  attributeKey: string;
+  severity: Severity;
+  reason: string;
+  recommendedAction: string;
+  dependencyContext: string;
+  status: TaskStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface PropagationResult {
   id: string;
   projectId: string;
@@ -114,8 +209,42 @@ export interface PropagationResult {
   newValue: string;
   blastRadius: AffectedChapter[];
   patchSuggestions: PatchSuggestion[];
+  taskQueue: PropagationTask[];
   status: PropagationStatus;
   createdAt: string;
+}
+
+export interface PropagationPreview {
+  id: string;
+  projectId: string;
+  edits: CanonicalEdit[];
+  blastRadius: AffectedChapter[];
+  taskQueue: PropagationTask[];
+  createdAt: string;
+}
+
+export interface IndexJob {
+  id: string;
+  projectId: string;
+  jobType: 'backfill_project' | 'reindex_chapter' | 'reindex_project';
+  chapterId?: string;
+  status: JobStatus;
+  totalItems: number;
+  processedItems: number;
+  error?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ProjectIndexState {
+  projectId: string;
+  lastProjectHash: string;
+  lastIndexedAt?: string;
+  needsBackfill: boolean;
+  pendingChapterIds: string[];
+  extractorVersion: string;
+  activeJobId?: string;
+  updatedAt: string;
 }
 
 // ═══════════════════════════════════════════════════════════

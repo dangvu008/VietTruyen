@@ -39,18 +39,22 @@ export async function synthesizeRules(
   if (acceptedCorrections.length === 0) return existingRules;
 
   const aiStore = useAiStore.getState();
-  const model = getModelForTask('polish_style', aiStore.models, aiStore.apiKeys, aiStore.activeModelId);
+  const model = getModelForTask(
+    'polish_style',
+    aiStore.models,
+    undefined,
+    aiStore.activeModelId,
+    aiStore.taskModelOverrides
+  );
 
   if (!model) {
-    throw new Error('Không tìm thấy AI model. Hãy cấu hình API key.');
+    throw new Error('Không tìm thấy AI model.');
   }
 
-  const apiKey = aiStore.getApiKey(model.provider);
   const userPrompt = buildSynthesisPrompt(acceptedCorrections, existingRules);
 
   const response = await callAiModelTracked({
     provider: model.provider,
-    apiKey,
     modelId: model.modelId,
     modelName: model.name,
     baseUrl: model.baseUrl,

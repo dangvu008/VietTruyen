@@ -41,6 +41,8 @@ export const NOVEL_GENRES = [
   'Cạnh kỹ - Thể thao',
   'Đồng nhân Anime',
   'Vô hạn lưu',
+  'Truyện ma Việt Nam',
+  'Huyền sử Việt Nam',
   'Khác',
 ] as const;
 
@@ -65,6 +67,7 @@ export const NOVEL_TAGS = [
   'Câu cá', 'Nuôi thú', 'Pokemon', 'Anime', 'Harry Potter', 'Marvel',
   'Cổ đại', 'Dân quốc', 'Tu tiên', 'Trả thù', 'Pháo hôi',
   'Vai ác', 'Tiên tri', 'Phép thuật',
+  'Văn hóa Việt Nam', 'Dã sử Việt', 'Tâm linh Việt',
 ] as const;
 
 export const WRITING_STYLES = [

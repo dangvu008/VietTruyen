@@ -11,7 +11,15 @@
  */
 
 import { supabase } from './supabase_client';
-import type { SharedStory, StoryComment, PublishStoryInput, SharedChapter, SharedCharacter } from '../../types/community';
+import { parseStoryCommentPayload, serializeStoryCommentPayload } from '../community/comment_codec';
+import type {
+  SharedStory,
+  StoryComment,
+  PublishStoryInput,
+  SharedChapter,
+  SharedCharacter,
+  StoryCommentKind,
+} from '../../types/community';
 
 // ── Publish ──
 
@@ -33,13 +41,13 @@ export async function publishStory(userId: string, input: PublishStoryInput) {
       characters: JSON.parse(JSON.stringify(input.characters)),
       chapter_count: input.chapters.length,
       word_count: wordCount,
-      status: 'published',
+      status: input.status || 'published',
     })
     .select()
     .single();
 
   if (error) throw error;
-  return data;
+  return mapStoryRow(data as Record<string, unknown>);
 }
 
 export async function unpublishStory(storyId: string) {
@@ -53,7 +61,7 @@ export async function unpublishStory(storyId: string) {
 
 // ── Read Stories ──
 
-export async function fetchPublishedStories(page = 0, limit = 20): Promise<SharedStory[]> {
+export async function fetchCommunityStories(page = 0, limit = 20): Promise<SharedStory[]> {
   const from = page * limit;
   const to = from + limit - 1;
 
@@ -63,7 +71,7 @@ export async function fetchPublishedStories(page = 0, limit = 20): Promise<Share
       *,
       profiles!shared_stories_user_id_fkey ( full_name, avatar_url )
     `)
-    .eq('status', 'published')
+    .in('status', ['published', 'workshop'])
     .order('created_at', { ascending: false })
     .range(from, to);
 
@@ -115,20 +123,36 @@ export async function fetchComments(storyId: string): Promise<StoryComment[]> {
   if (error) throw error;
 
   return (data || []).map((row: Record<string, unknown>) => ({
+    ...parseStoryCommentPayload(row.content as string),
     id: row.id as string,
     story_id: row.story_id as string,
     user_id: row.user_id as string,
-    content: row.content as string,
     created_at: row.created_at as string,
     author_name: (row.profiles as Record<string, unknown>)?.full_name as string || 'Ẩn danh',
     author_avatar: (row.profiles as Record<string, unknown>)?.avatar_url as string || undefined,
   }));
 }
 
-export async function addComment(storyId: string, userId: string, content: string) {
+export async function addComment(
+  storyId: string,
+  userId: string,
+  content: string,
+  options?: {
+    kind?: StoryCommentKind;
+    headline?: string;
+  }
+) {
   const { data, error } = await supabase
     .from('story_comments')
-    .insert({ story_id: storyId, user_id: userId, content })
+    .insert({
+      story_id: storyId,
+      user_id: userId,
+      content: serializeStoryCommentPayload({
+        content,
+        kind: options?.kind || 'discussion',
+        headline: options?.headline,
+      }),
+    })
     .select()
     .single();
 

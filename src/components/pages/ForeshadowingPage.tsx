@@ -105,8 +105,8 @@ const ForeshadowingPage: React.FC<ForeshadowingPageProps> = ({
             onClick={() => setFilter(key)}
             className={`px-3.5 py-1.5 rounded-full text-xs font-medium transition-all cursor-pointer
               ${filter === key
-                ? 'bg-accent-amber text-bg-deep'
-                : 'bg-bg-elevated text-text-secondary border border-border-subtle hover:text-text-primary'
+                ? 'bg-[#F59E0B] text-bg-deep'
+                : 'bg-[#0F1115] text-[#E2E8F0] bg-[#0F1115] hover:text-[#F8FAFC]'
               }`}
           >
             {label} ({count})
@@ -133,7 +133,7 @@ const ForeshadowingPage: React.FC<ForeshadowingPageProps> = ({
             return (
               <div
                 key={f.id}
-                className={`card animate-slide-in-up border-l-[3px] transition-all ${
+                className={`bg-[#0F1115] rounded-2xl border border-[#1E232B] p-6 animate-slide-in-up border-l-[3px] transition-all ${
                   f.isResolved
                     ? 'border-l-green-500/60 opacity-70'
                     : 'border-l-accent-amber'
@@ -143,25 +143,25 @@ const ForeshadowingPage: React.FC<ForeshadowingPageProps> = ({
                   {/* Left: Icon + Content */}
                   <div className="flex gap-3 flex-1 min-w-0">
                     <div className={`shrink-0 w-9 h-9 rounded-lg flex items-center justify-center ${
-                      f.isResolved ? 'bg-green-500/15 text-green-400' : 'bg-accent-amber/15 text-accent-amber'
+                      f.isResolved ? 'bg-green-500/15 text-green-400' : 'bg-[#F59E0B]/15 text-[#F59E0B]'
                     }`}>
                       {f.isResolved ? <CheckCircle2 size={18} /> : <Lightbulb size={18} />}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className={`text-sm leading-relaxed ${f.isResolved ? 'text-text-muted line-through' : 'text-text-primary'}`}>
+                      <p className={`text-sm leading-relaxed ${f.isResolved ? 'text-[#94A3B8] line-through' : 'text-[#F8FAFC]'}`}>
                         {f.description}
                       </p>
-                      <div className="flex items-center gap-3 mt-2 text-xs text-text-muted">
+                      <div className="flex items-center gap-3 mt-2 text-xs text-[#94A3B8]">
                         <span className="flex items-center gap-1">
                           <Clock size={12} />
                           {new Date(f.createdAt).toLocaleDateString('vi-VN')}
                         </span>
                         {charName && (
-                          <span className="flex items-center gap-1 text-accent-teal">
+                          <span className="flex items-center gap-1 text-[#2DD4BF]">
                             <Link2 size={12} /> {charName}
                           </span>
                         )}
-                        <span className={`flex items-center gap-1 ${f.isResolved ? 'text-green-400' : 'text-accent-amber'}`}>
+                        <span className={`flex items-center gap-1 ${f.isResolved ? 'text-green-400' : 'text-[#F59E0B]'}`}>
                           {f.isResolved ? <><Eye size={12} /> Đã lật tẩy</> : <><EyeOff size={12} /> Ẩn giấu</>}
                         </span>
                       </div>
@@ -176,14 +176,14 @@ const ForeshadowingPage: React.FC<ForeshadowingPageProps> = ({
                       className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
                         f.isResolved
                           ? 'text-green-400 hover:bg-green-500/10'
-                          : 'text-text-muted hover:text-accent-amber hover:bg-accent-amber/10'
+                          : 'text-[#94A3B8] hover:text-[#F59E0B] hover:bg-[#F59E0B]/10'
                       }`}
                     >
                       {f.isResolved ? <EyeOff size={15} /> : <Eye size={15} />}
                     </button>
                     <button
                       onClick={() => onRemove(projectId, f.id)}
-                      className="p-1.5 rounded-lg text-text-muted hover:text-accent-rose hover:bg-accent-rose/10 transition-colors cursor-pointer"
+                      className="p-1.5 rounded-lg text-[#94A3B8] hover:text-[#EF4444] hover:bg-[#EF4444]/10 transition-colors cursor-pointer"
                     >
                       <Trash2 size={15} />
                     </button>
@@ -197,13 +197,13 @@ const ForeshadowingPage: React.FC<ForeshadowingPageProps> = ({
 
       {/* Stats Footer */}
       {foreshadowings.length > 0 && (
-        <div className="mt-6 p-4 bg-bg-surface border border-border-subtle rounded-xl flex items-center justify-between">
-          <div className="flex items-center gap-2 text-text-muted text-xs">
-            <Sparkles size={14} className="text-accent-amber" />
+        <div className="mt-6 p-4 bg-bg-surface bg-[#0F1115] rounded-xl flex items-center justify-between">
+          <div className="flex items-center gap-2 text-[#94A3B8] text-xs">
+            <Sparkles size={14} className="text-[#F59E0B]" />
             <span>Các phục bút được tạo tự động bởi Retcon Engine khi bạn chọn "Bẻ lái cốt truyện"</span>
           </div>
           <div className="flex gap-4 text-xs font-medium">
-            <span className="text-accent-amber">{openCount} ẩn</span>
+            <span className="text-[#F59E0B]">{openCount} ẩn</span>
             <span className="text-green-400">{resolvedCount} lật</span>
           </div>
         </div>
@@ -214,9 +214,9 @@ const ForeshadowingPage: React.FC<ForeshadowingPageProps> = ({
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
           <div className="bg-bg-surface border border-border rounded-xl w-full max-w-md p-6 animate-slide-in-up shadow-2xl">
             <div className="flex items-center justify-between mb-5">
-              <h3 className="font-display font-bold text-text-primary text-lg">Thêm phục bút</h3>
+              <h3 className="font-display font-bold text-[#F8FAFC] text-lg">Thêm phục bút</h3>
               <button onClick={() => setShowModal(false)}
-                className="p-1.5 rounded-lg text-text-muted hover:text-text-primary hover:bg-bg-elevated cursor-pointer"
+                className="p-1.5 rounded-lg text-[#94A3B8] hover:text-[#F8FAFC] hover:bg-[#0F1115] cursor-pointer"
               >
                 <X size={18} />
               </button>

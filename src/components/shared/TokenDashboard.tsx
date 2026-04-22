@@ -1,16 +1,17 @@
 /**
  * File: TokenDashboard.tsx
- * Purpose: Dashboard thống kê token usage — hiệu suất, chi phí, phân bổ theo task/model
+ * Purpose: Dashboard thống kê token usage — hiệu suất, chi phí, phân bổ theo task/model + pipeline sessions
  * Layer: UI Component
  * Domain: AI → [analytics, cost monitoring, efficiency metrics]
  */
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   BarChart3, Zap, DollarSign, Clock, Flame, Shield,
-  Trash2, TrendingUp, Cpu, Activity,
+  Trash2, TrendingUp, Cpu, Activity, GitBranch, ChevronDown, ChevronRight,
 } from 'lucide-react';
 import { useTokenStore } from '../../store/use_token_store';
 import { getPromptCacheStats } from '../../lib/ai/prompt_cache';
+import type { PipelineSession, PipelineStepLabel } from '../../types/token_tracker';
 
 const TASK_LABELS: Record<string, string> = {
   summarize: 'Tóm tắt',
@@ -18,15 +19,38 @@ const TASK_LABELS: Record<string, string> = {
   extract_metadata: 'Trích xuất',
   analyze_retcon: 'Quét mâu thuẫn',
   brainstorm: 'Brainstorm',
+  plan_chapter: 'Lập nhánh chương',
   write_chapter: 'Viết chương',
+};
+
+const STEP_LABELS: Record<PipelineStepLabel, string> = {
+  context_build:  'Context',
+  plan_branches:  'Lập nhánh',
+  write_chapter:  'Viết chương',
+  review_checkers:'Review',
+  style_analysis: 'Văn phong',
+  data_extraction:'Trích xuất',
+  memory_sync:    'Bộ nhớ',
+};
+
+const STEP_COLORS: Record<PipelineStepLabel, string> = {
+  context_build:  'bg-accent-teal/40',
+  plan_branches:  'bg-accent-amber/60',
+  write_chapter:  'bg-accent-amber/90',
+  review_checkers:'bg-accent-rose/50',
+  style_analysis: 'bg-purple-400/50',
+  data_extraction:'bg-accent-teal/30',
+  memory_sync:    'bg-green-400/30',
 };
 
 const TokenDashboard: React.FC = () => {
   const records = useTokenStore((s) => s.records);
   const clearRecords = useTokenStore((s) => s.clearRecords);
   const getStats = useTokenStore((s) => s.getStats);
+  const pipelineSessions = useTokenStore((s) => s.pipelineSessions);
+  const [expandedSessionId, setExpandedSessionId] = useState<string | null>(null);
 
-  const stats = useMemo(() => getStats(), [records]);
+  const stats = useMemo(() => getStats(), [records, pipelineSessions]);
   const cacheStats = useMemo(() => getPromptCacheStats(), [records]);
 
   const formatTokens = (n: number) => {
@@ -110,11 +134,20 @@ const TokenDashboard: React.FC = () => {
           sub={`${cacheStats.size}/${cacheStats.maxSize} cached`}
           color="text-purple-400"
         />
+        {stats.avgTokensPerPipeline > 0 && (
+          <StatCard
+            icon={<GitBranch size={14} />}
+            label="TB/chương"
+            value={formatTokens(stats.avgTokensPerPipeline)}
+            sub={`$${stats.avgCostPerPipeline.toFixed(4)}/lần`}
+            color="text-accent-teal"
+          />
+        )}
       </div>
 
       {/* Input vs Output */}
       <div className="grid grid-cols-2 gap-3 mb-5">
-        <div className="p-3 rounded-xl bg-bg-elevated border border-border-subtle">
+        <div className="p-3 rounded-xl bg-bg-elevated bg-surface-container-low">
           <div className="flex items-center gap-2 mb-2">
             <Activity size={12} className="text-accent-amber" />
             <span className="text-[11px] font-medium text-text-secondary">Input / Output</span>
@@ -129,7 +162,7 @@ const TokenDashboard: React.FC = () => {
           </div>
         </div>
 
-        <div className="p-3 rounded-xl bg-bg-elevated border border-border-subtle">
+        <div className="p-3 rounded-xl bg-bg-elevated bg-surface-container-low">
           <div className="flex items-center gap-2 mb-2">
             <Clock size={12} className="text-accent-teal" />
             <span className="text-[11px] font-medium text-text-secondary">Hiệu suất</span>
@@ -181,6 +214,29 @@ const TokenDashboard: React.FC = () => {
         </div>
       )}
 
+      {/* Pipeline Sessions */}
+      {pipelineSessions.length > 0 && (
+        <div>
+          <h4 className="text-[11px] font-semibold text-text-secondary uppercase tracking-wider mb-2 flex items-center gap-1.5">
+            <GitBranch size={12} /> Lịch sử Pipeline ({pipelineSessions.length} lần chạy)
+          </h4>
+          <div className="space-y-1">
+            {pipelineSessions.slice(0, 8).map((session) => (
+              <PipelineSessionRow
+                key={session.id}
+                session={session}
+                expanded={expandedSessionId === session.id}
+                onToggle={() => setExpandedSessionId(
+                  expandedSessionId === session.id ? null : session.id
+                )}
+                formatTokens={formatTokens}
+                formatCost={formatCost}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* By Model */}
       {modelEntries.length > 0 && (
         <div>
@@ -223,7 +279,7 @@ const StatCard: React.FC<{
   sub: string;
   color: string;
 }> = ({ icon, label, value, sub, color }) => (
-  <div className="p-3 rounded-xl bg-bg-elevated border border-border-subtle">
+  <div className="p-3 rounded-xl bg-bg-elevated bg-surface-container-low">
     <div className={`flex items-center gap-1.5 mb-1.5 ${color}`}>
       {icon}
       <span className="text-[10px] font-medium uppercase tracking-wider text-text-muted">{label}</span>
@@ -249,5 +305,93 @@ const TokenBar: React.FC<{
     </div>
   </div>
 );
+
+const PipelineSessionRow: React.FC<{
+  session: PipelineSession;
+  expanded: boolean;
+  onToggle: () => void;
+  formatTokens: (n: number) => string;
+  formatCost: (n: number) => string;
+}> = ({ session, expanded, onToggle, formatTokens, formatCost }) => {
+  const steps = Object.entries(session.stepBreakdown) as [PipelineStepLabel, { tokens: number; cost: number; calls: number; durationMs: number }][];
+  const maxStepTokens = Math.max(...steps.map(([, d]) => d.tokens), 1);
+  const startedAt = new Date(session.startedAt);
+  const timeLabel = startedAt.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+  const dateLabel = startedAt.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' });
+
+  return (
+    <div className="rounded-lg overflow-hidden border border-border-subtle/30">
+      {/* Row header */}
+      <button
+        onClick={onToggle}
+        className="w-full flex items-center gap-2 px-3 py-2 bg-bg-surface hover:bg-bg-elevated transition-colors text-left"
+      >
+        <span className="shrink-0 text-text-muted">
+          {expanded ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
+        </span>
+
+        {/* Project + chapter */}
+        <span className="flex-1 min-w-0">
+          <span className="text-[11px] font-medium text-text-primary truncate block">
+            {session.projectTitle}
+          </span>
+          <span className="text-[10px] text-text-muted">
+            Chương {session.chapterIndex + 1} · {dateLabel} {timeLabel}
+          </span>
+        </span>
+
+        {/* Mini stacked bar */}
+        <div className="flex gap-px h-3 w-20 rounded overflow-hidden shrink-0">
+          {steps.filter(([, d]) => d.tokens > 0).map(([step, d]) => (
+            <div
+              key={step}
+              title={`${STEP_LABELS[step]}: ${d.tokens.toLocaleString()} tokens`}
+              className={`${STEP_COLORS[step]} transition-all`}
+              style={{ width: `${(d.tokens / (session.totalTokens || 1)) * 100}%` }}
+            />
+          ))}
+        </div>
+
+        {/* Cost + tokens */}
+        <div className="text-right shrink-0">
+          <div className="text-[11px] font-semibold text-accent-amber">
+            {formatTokens(session.totalTokens)}
+          </div>
+          <div className="text-[10px] text-green-400/80">
+            {formatCost(session.totalCost)}
+          </div>
+        </div>
+      </button>
+
+      {/* Step breakdown (expanded) */}
+      {expanded && (
+        <div className="px-3 py-2 bg-bg-deep/40 space-y-1.5 border-t border-border-subtle/20">
+          {steps.filter(([, d]) => d.tokens > 0).map(([step, d]) => (
+            <div key={step} className="flex items-center gap-2">
+              <span className="text-[10px] text-text-muted w-20 shrink-0 truncate">
+                {STEP_LABELS[step]}
+              </span>
+              <div className="flex-1 h-2.5 bg-bg-deep/50 rounded-full overflow-hidden">
+                <div
+                  className={`h-full ${STEP_COLORS[step]} rounded-full transition-all`}
+                  style={{ width: `${(d.tokens / maxStepTokens) * 100}%` }}
+                />
+              </div>
+              <span className="text-[10px] text-text-muted w-12 text-right shrink-0">
+                {formatTokens(d.tokens)}
+              </span>
+              <span className="text-[10px] text-text-muted/60 w-10 text-right shrink-0">
+                {d.calls > 0 ? `${d.calls}×` : '—'}
+              </span>
+            </div>
+          ))}
+          {steps.every(([, d]) => d.tokens === 0) && (
+            <p className="text-[10px] text-text-muted italic">Chưa có dữ liệu step (cần chạy pipeline mới).</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
 
 export default TokenDashboard;

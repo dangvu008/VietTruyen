@@ -227,7 +227,16 @@ const BrainstormPage: React.FC<BrainstormPageProps> = ({ onNavigate }) => {
         title="🧠 Brainstorm"
         subtitle="Nhập ý tưởng → AI brainstorm → Tự động tạo toàn bộ cấu trúc dự án"
         action={
-          <div className="flex gap-2">
+          <div className="flex gap-2 items-center">
+            {project.genreProfileId ? (
+              <span className="badge-teal flex items-center gap-1 cursor-pointer" onClick={() => onNavigate('genre-library')} title="Đổi thể loại">
+                <BookOpen size={14} /> {project.genre}
+              </span>
+            ) : (
+              <button onClick={() => onNavigate('genre-library')} className="btn-secondary btn-sm border-[#F59E0B]/50 text-[#F59E0B]">
+                <BookOpen size={14} /> Chọn Thể loại
+              </button>
+            )}
             {msgCount > 0 && (
               <button onClick={handleReset} className="btn-secondary btn-sm">
                 <RefreshCcw size={14} /> Bắt đầu lại
@@ -240,7 +249,7 @@ const BrainstormPage: React.FC<BrainstormPageProps> = ({ onNavigate }) => {
       {/* ═══════════════════════════════════════════════════════
           💬 Chat Interface — brainstorm tương tác
           ═══════════════════════════════════════════════════════ */}
-      <div className="card mb-4">
+      <div className="bg-[#0F1115] rounded-2xl border border-[#1E232B] p-6 mb-4">
         {/* Chat messages */}
         <div
           className="overflow-y-auto space-y-4 mb-4"
@@ -249,10 +258,10 @@ const BrainstormPage: React.FC<BrainstormPageProps> = ({ onNavigate }) => {
           {msgCount === 0 && (
             <div className="text-center py-8">
               <Brain size={48} className="mx-auto mb-4" style={{ color: 'var(--accent-teal)', opacity: 0.5 }} />
-              <p className="text-text-secondary text-sm">
+              <p className="text-[#E2E8F0] text-sm">
                 Nhập bất kỳ ý tưởng nào — AI sẽ brainstorm cùng bạn.
               </p>
-              <p className="text-text-muted text-xs mt-1">
+              <p className="text-[#94A3B8] text-xs mt-1">
                 VD: "Truyện tu tiên kết hợp sci-fi, nhân vật chính là lập trình viên bị isekai"
               </p>
             </div>
@@ -266,8 +275,8 @@ const BrainstormPage: React.FC<BrainstormPageProps> = ({ onNavigate }) => {
               <div
                 className={`rounded-xl px-4 py-3 max-w-[80%] text-sm leading-relaxed ${
                   msg.role === 'user'
-                    ? 'bg-accent-amber/15 text-text-primary'
-                    : 'bg-bg-elevated text-text-primary border border-border-subtle'
+                    ? 'bg-[#F59E0B]/15 text-[#F8FAFC]'
+                    : 'bg-[#0F1115] text-[#F8FAFC] bg-[#0F1115]'
                 }`}
               >
                 {msg.role === 'ai' && (
@@ -292,6 +301,7 @@ const BrainstormPage: React.FC<BrainstormPageProps> = ({ onNavigate }) => {
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
+                if (e.nativeEvent.isComposing) return;
                 e.preventDefault();
                 handleSend();
               }
@@ -339,14 +349,14 @@ const BrainstormPage: React.FC<BrainstormPageProps> = ({ onNavigate }) => {
           Extract hint — khi đã nói đủ nhưng chưa extract
           ═══════════════════════════════════════════════════════ */}
       {msgCount >= 4 && !hasResult && !isExtracting && (
-        <div className="card mb-4 border-accent-teal/30 bg-accent-teal/5">
+        <div className="bg-[#0F1115] rounded-2xl border border-[#1E232B] p-6 mb-4 border-[#2DD4BF]/30 bg-[#2DD4BF]/5">
           <div className="flex items-center gap-3">
-            <Sparkles size={20} className="text-accent-teal shrink-0" />
+            <Sparkles size={20} className="text-[#2DD4BF] shrink-0" />
             <div className="flex-1">
-              <p className="text-sm font-medium text-text-primary">
+              <p className="text-sm font-medium text-[#F8FAFC]">
                 Đã brainstorm đủ?
               </p>
-              <p className="text-xs text-text-muted mt-0.5">
+              <p className="text-xs text-[#94A3B8] mt-0.5">
                 Bấm nút bên dưới để AI phân tích cuộc trò chuyện và tạo cấu trúc dự án tự động.
               </p>
             </div>
@@ -369,7 +379,7 @@ const BrainstormPage: React.FC<BrainstormPageProps> = ({ onNavigate }) => {
           📋 Preview kết quả — xem trước khi apply
           ═══════════════════════════════════════════════════════ */}
       {hasResult && (
-        <div className="card mb-4">
+        <div className="bg-[#0F1115] rounded-2xl border border-[#1E232B] p-6 mb-4">
           <button
             className="section-header"
             onClick={() => setPreviewOpen(!previewOpen)}
@@ -455,7 +465,7 @@ const BrainstormPage: React.FC<BrainstormPageProps> = ({ onNavigate }) => {
               )}
 
               {/* Apply buttons */}
-              <div className="flex items-center justify-between pt-3 border-t border-border-subtle">
+              <div className="flex items-center justify-between pt-3 pt-4 mt-4">
                 {applied ? (
                   <div className="flex items-center gap-2 text-emerald-400 text-sm font-medium">
                     <CheckCircle2 size={16} /> Đã áp dụng vào dự án!
@@ -481,10 +491,10 @@ const BrainstormPage: React.FC<BrainstormPageProps> = ({ onNavigate }) => {
                       Xem Nhân vật
                     </button>
                     <button
-                      onClick={() => onNavigate('chapters')}
+                      onClick={() => onNavigate('outline')}
                       className="btn-secondary btn-sm"
                     >
-                      Xem Chương
+                      Xem Dàn ý
                     </button>
                   </div>
                 )}
@@ -506,20 +516,20 @@ interface PreviewCardProps {
 }
 
 const PreviewCard: React.FC<PreviewCardProps> = ({ icon, title, items, truncated }) => (
-  <div className="bg-bg-elevated rounded-lg p-3">
+  <div className="bg-[#0F1115] rounded-lg p-3">
     <div className="flex items-center gap-2 mb-2">
-      <span className="text-accent-amber">{icon}</span>
-      <span className="text-sm font-semibold text-text-primary">{title}</span>
+      <span className="text-[#F59E0B]">{icon}</span>
+      <span className="text-sm font-semibold text-[#F8FAFC]">{title}</span>
     </div>
     <ul className="list-disc list-inside space-y-0.5">
       {items.filter(Boolean).map((item, i) => (
-        <li key={i} className="text-xs text-text-secondary leading-relaxed">
+        <li key={i} className="text-xs text-[#E2E8F0] leading-relaxed">
           {item}
         </li>
       ))}
     </ul>
     {truncated && (
-      <p className="text-xs text-text-muted mt-1 italic">...và nhiều hơn nữa</p>
+      <p className="text-xs text-[#94A3B8] mt-1 italic">...và nhiều hơn nữa</p>
     )}
   </div>
 );

@@ -1,0 +1,23 @@
+import { lazy } from 'react';
+
+export const LazyDashboardPage = lazy(() => import('../components/pages/DashboardPage'));
+export const LazyStudioPage = lazy(() => import('../components/pages/StudioPage'));
+export const LazyProjectsPage = lazy(() => import('../components/pages/ProjectsPage'));
+export const LazyBrainstormPage = lazy(() => import('../components/pages/BrainstormPage'));
+export const LazyAdaptationPage = lazy(() => import('../components/pages/AdaptationPage'));
+export const LazyChuaCanonPage = lazy(() => import('../components/pages/ChuaCanonPage'));
+export const LazyBiblePage = lazy(() => import('../components/pages/BiblePage'));
+export const LazyCharactersPage = lazy(() => import('../components/pages/CharactersPage'));
+export const LazyWorldPage = lazy(() => import('../components/pages/WorldPage'));
+export const LazyOutlinePage = lazy(() => import('../components/pages/OutlinePage'));
+export const LazyGenreLibraryPage = lazy(() => import('../components/pages/GenreLibraryPage'));
+export const LazyWriterPage = lazy(() => import('../components/pages/WriterPage'));
+export const LazyWritingWizardPage = lazy(() => import('../components/pages/WritingWizardPage'));
+export const LazyChaptersPage = lazy(() => import('../components/pages/ChaptersPage'));
+export const LazyMemoryPage = lazy(() => import('../components/pages/MemoryPage'));
+export const LazyForeshadowingPage = lazy(() => import('../components/pages/ForeshadowingPage'));
+export const LazyExportPage = lazy(() => import('../components/pages/ExportPage'));
+export const LazyCommunityPage = lazy(() => import('../components/pages/CommunityPage'));
+export const LazyAnalyticsPage = lazy(() => import('../components/pages/AnalyticsPage'));
+export const LazyAiSettingsPage = lazy(() => import('../components/pages/AiSettingsPage'));
+export const LazyCreationChatPage = lazy(() => import('../components/pages/CreationChatPage'));

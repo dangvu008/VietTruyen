@@ -29,7 +29,7 @@ QUY TẮC:
 export async function summarizeChapter(
   content: string,
   title: string,
-  apiKey: string,
+  _apiKey: string,
   model: AiModel,
 ): Promise<string> {
   // Limit input: chỉ gửi tối đa 8000 ký tự (~2300 tokens) để tiết kiệm
@@ -46,7 +46,6 @@ Hãy tóm tắt chương trên trong 150-200 chữ.`;
 
   const summary = await callAiModelTracked({
     provider: model.provider,
-    apiKey,
     modelId: model.modelId,
     modelName: model.name,
     baseUrl: model.baseUrl,

@@ -1,0 +1,7 @@
+# KANBAN BOARD
+
+## TO DO (BACKLOG)
+
+## IN PROGRESS
+
+## DONE

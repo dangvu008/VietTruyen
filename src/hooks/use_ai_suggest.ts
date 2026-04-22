@@ -7,11 +7,15 @@
  * Data Contract:
  * - Input: prompt { system, user } from bible_prompts.ts
  * - Output: { suggest, isLoading, result, error, clear }
+ *
+ * v2: Removed apiKey validation — proxy handles keys server-side
  */
 
 import { useState, useCallback } from 'react';
 import { useAiStore } from '../store/use_ai_store';
-import { callAiModel } from '../lib/ai/ai_client';
+import { callAiModelTracked } from '../lib/ai/tracked_ai_client';
+import { TokenLimitError } from '../lib/ai/ai_client';
+import { getModelForTask } from '../lib/ai/model_router';
 
 interface AiSuggestState {
   isLoading: boolean;
@@ -27,35 +31,35 @@ export function useAiSuggest() {
   });
 
   const suggest = useCallback(async (prompt: { system: string; user: string }) => {
-    const { models, activeModelId, apiKeys } = useAiStore.getState();
-    const model = models.find(m => m.id === activeModelId);
+    const { models, activeModelId, taskModelOverrides } = useAiStore.getState();
+    const model = getModelForTask('brainstorm', models, undefined, activeModelId, taskModelOverrides);
 
     if (!model) {
       setState({ isLoading: false, result: null, error: 'Chưa chọn model AI. Vào Cài đặt để cấu hình.' });
       return null;
     }
 
-    const apiKey = apiKeys[model.id] || apiKeys[model.provider];
-    if (!apiKey) {
-      setState({ isLoading: false, result: null, error: `Chưa nhập API Key cho ${model.name}. Vào Cài đặt AI để thêm.` });
-      return null;
-    }
-
     setState({ isLoading: true, result: null, error: null });
 
     try {
-      const response = await callAiModel(
-        model.provider,
-        apiKey,
-        model.modelId,
-        model.baseUrl,
-        prompt.system,
-        prompt.user
-      );
+      const response = await callAiModelTracked({
+        provider: model.provider,
+        modelId: model.modelId,
+        modelName: model.name || model.modelId,
+        baseUrl: model.baseUrl,
+        systemPrompt: prompt.system,
+        userPrompt: prompt.user,
+        taskType: 'brainstorm',
+      });
       setState({ isLoading: false, result: response, error: null });
       return response;
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : 'Lỗi không xác định khi gọi AI';
+      let errorMsg: string;
+      if (err instanceof TokenLimitError) {
+        errorMsg = `Đã hết token tháng này (${err.tokensUsed}/${err.tokensLimit}). Nâng cấp gói để tiếp tục.`;
+      } else {
+        errorMsg = err instanceof Error ? err.message : 'Lỗi không xác định khi gọi AI';
+      }
       setState({ isLoading: false, result: null, error: errorMsg });
       return null;
     }

@@ -1,0 +1,115 @@
+import { describe, expect, it, vi } from 'vitest';
+import type { Project } from '../../types/story';
+
+const {
+  retrieveForWriting,
+  getClusterAwareNarrativeState,
+  getContinuityWarnings,
+} = vi.hoisted(() => ({
+  retrieveForWriting: vi.fn(),
+  getClusterAwareNarrativeState: vi.fn(),
+  getContinuityWarnings: vi.fn(),
+}));
+
+vi.mock('../memory/hybrid_memory_query', () => ({
+  retrieveForWriting,
+}));
+
+vi.mock('../memory/memory_query', () => ({
+  buildTemporalProjectView: vi.fn(),
+  getClusterAwareNarrativeState,
+  getContinuityWarnings,
+  getEntityTimelineSnapshots: vi.fn(),
+}));
+
+import { buildWritingContext } from './context_builder';
+
+function makeProject(): Project {
+  return {
+    id: 'project-context-hybrid',
+    title: 'VietTruyen Test',
+    logline: 'Một tu sĩ trẻ bước vào bí cảnh.',
+    genre: 'Tiên hiệp',
+    subGenre: [],
+    writingStyle: 'Nhanh, rõ',
+    tone: 'Căng thẳng',
+    styleId: 'style-1',
+    targetChapters: 20,
+    endgame: '',
+    mainCharacterCount: 1,
+    supportCharacterCount: 2,
+    characterSetup: '',
+    worldSetting: '',
+    mainPlot: 'Tu sĩ bước vào bí cảnh tìm kiếm cơ duyên',
+    world: {
+      geography: 'Thiên Nam vực',
+      magicSystem: 'Linh lực',
+      techLevel: 'Cổ đại',
+      currency: 'Linh thạch',
+      factions: [],
+      rules: 'Mạnh được yếu thua',
+      facts: [],
+    },
+    characters: [
+      {
+        id: 'char-lam-te',
+        name: 'Lâm Tề',
+        role: 'Chính',
+        arc: '',
+        currentStage: 'Luyện Khí',
+        traits: 'Gan lì',
+        aliases: [],
+        facts: [],
+      },
+    ],
+    outline: [
+      { id: 'beat-1', title: 'Mở màn', summary: 'Lâm Tề tiến vào bí cảnh.', focus: 'Lâm Tề' },
+    ],
+    chapters: [
+      {
+        id: 'ch-1',
+        title: 'Chương 1',
+        summary: 'Lâm Tề bước vào bí cảnh.',
+        content: 'Sương mù dày đặc bao phủ lối đi.',
+        sequenceNumber: 1,
+        status: 'draft',
+        createdAt: '2026-01-01',
+        updatedAt: '2026-01-01',
+      },
+    ],
+    foreshadowings: [],
+    notes: '',
+    canonVersion: 1,
+    storageMode: 'indexeddb',
+    arcCount: 0,
+    hasGlobalIndex: true,
+    createdAt: '2026-01-01',
+    updatedAt: '2026-01-01',
+  };
+}
+
+describe('buildWritingContext hybrid retrieval', () => {
+  it('injects hard canon and semantic prose recall into the writing context', async () => {
+    retrieveForWriting.mockResolvedValue({
+      hardCanon: ['- Lâm Tề đang ở cảnh giới Trúc Cơ'],
+      graphContext: ['1. Lâm Tề / Bí cảnh'],
+      semanticContext: ['- Sương mù dày đặc bao phủ lối đi vào cửa đá.'],
+      warnings: ['Continuity: giữ kín át chủ bài của Lâm Tề'],
+    });
+    getClusterAwareNarrativeState.mockResolvedValue({
+      communities: [],
+      highlightedNodes: [],
+      continuityWarnings: [],
+      openForeshadowings: [],
+    });
+    getContinuityWarnings.mockResolvedValue([]);
+
+    const context = await buildWritingContext(makeProject(), 0);
+
+    expect(retrieveForWriting).toHaveBeenCalled();
+    expect(context.contextText).toContain('## CANON ƯU TIÊN');
+    expect(context.contextText).toContain('Trúc Cơ');
+    expect(context.contextText).toContain('## TRÍCH ĐOẠN NGỮ NGHĨA LIÊN QUAN');
+    expect(context.contextText).toContain('Sương mù dày đặc');
+  });
+});

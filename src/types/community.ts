@@ -20,13 +20,17 @@ export interface SharedStory {
   word_count: number;
   view_count: number;
   like_count: number;
-  status: 'published' | 'draft' | 'archived';
+  status: SharedStoryStatus;
   created_at: string;
   updated_at: string;
   // Joined from profiles
   author_name?: string;
   author_avatar?: string;
 }
+
+export type SharedStoryStatus = 'published' | 'workshop' | 'draft' | 'archived';
+
+export type StoryCommentKind = 'discussion' | 'scene' | 'plot-twist' | 'revision';
 
 export interface SharedChapter {
   title: string;
@@ -44,6 +48,8 @@ export interface StoryComment {
   story_id: string;
   user_id: string;
   content: string;
+  kind: StoryCommentKind;
+  headline?: string;
   created_at: string;
   // Joined from profiles
   author_name?: string;
@@ -59,4 +65,23 @@ export interface PublishStoryInput {
   cover_emoji: string;
   chapters: SharedChapter[];
   characters: SharedCharacter[];
+  status?: Extract<SharedStoryStatus, 'published' | 'workshop'>;
+}
+
+export type PublishKnowledgeCaptureStatus = 'captured' | 'skipped' | 'warning';
+
+export interface PublishKnowledgeCaptureResult {
+  status: PublishKnowledgeCaptureStatus;
+  reason?: 'project_not_found';
+  indexedChapterCount?: number;
+  summaryEntriesUpdated?: number;
+  graphNodeCount?: number;
+  graphEdgeCount?: number;
+  graphCommunityCount?: number;
+  warning?: string;
+}
+
+export interface PublishStoryResult {
+  story: SharedStory;
+  knowledgeCapture: PublishKnowledgeCaptureResult;
 }

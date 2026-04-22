@@ -43,3 +43,33 @@ export function quickTruncate(text: string, maxChars: number): string {
   const lastSpace = cut.lastIndexOf(' ');
   return (lastSpace > maxChars * 0.5 ? cut.substring(0, lastSpace) : cut) + '…';
 }
+
+/** Ước lượng chi phí USD cho một lượng tokens nhất định */
+export function estimateCost(
+  inputTokens: number,
+  outputTokens: number,
+  modelId: string,
+  costTable?: { input: Record<string, number>; output: Record<string, number> }
+): number {
+  // Lazy import to avoid circular dependency — fallback defaults
+  const inputRate = costTable?.input[modelId] ?? 0.10;
+  const outputRate = costTable?.output[modelId] ?? 0.40;
+  return (inputTokens / 1_000_000) * inputRate + (outputTokens / 1_000_000) * outputRate;
+}
+
+/** Format số tiền USD → chuỗi thân thiện (VND hoặc USD tùy mức) */
+export function formatCostDisplay(usd: number): string {
+  if (usd <= 0) return 'Miễn phí';
+  if (usd < 0.001) return '< $0.001';
+  if (usd < 0.01) return `~$${usd.toFixed(4)}`;
+  if (usd < 1) return `~$${usd.toFixed(3)}`;
+  return `~$${usd.toFixed(2)}`;
+}
+
+/** Format token count thân thiện: 1234 → "1.2K", 12345 → "12.3K" */
+export function formatTokenCount(tokens: number): string {
+  if (tokens < 1000) return `${tokens}`;
+  if (tokens < 10_000) return `${(tokens / 1000).toFixed(1)}K`;
+  if (tokens < 1_000_000) return `${Math.round(tokens / 1000)}K`;
+  return `${(tokens / 1_000_000).toFixed(1)}M`;
+}

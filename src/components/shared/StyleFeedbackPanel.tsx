@@ -122,7 +122,7 @@ const StyleFeedbackPanel: React.FC<Props> = ({ chapter, project }) => {
 
       {/* Learned Rules Section */}
       {showRules && rules.length > 0 && (
-        <div className="mb-3 p-3 rounded-lg bg-bg-elevated border border-border-subtle">
+        <div className="mb-3 p-3 rounded-lg bg-bg-elevated bg-surface-container-low">
           <h5 className="text-xs font-semibold text-text-secondary mb-2">
             Quy tắc đã học (sắp theo độ ưu tiên)
           </h5>
