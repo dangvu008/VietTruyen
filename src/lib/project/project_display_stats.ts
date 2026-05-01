@@ -10,11 +10,25 @@ export interface ProjectDisplayStats {
   beatText: string;
 }
 
+export interface ChapterProgress {
+  actual: number;
+  target?: number;
+  percentage: number;
+  status: 'on-track' | 'behind' | 'over' | 'no-target';
+}
+
+export interface ProjectProgressStats {
+  totalWords: number;
+  totalTarget?: number;
+  overallPercentage: number;
+  chapterCount: number;
+}
+
 interface BuildProjectDisplayStatsOptions {
   chapters?: Project['chapters'];
 }
 
-function countWords(text: string): number {
+export function countWords(text: string): number {
   const trimmed = text.trim();
   if (!trimmed) return 0;
   return trimmed.split(/\s+/).filter(Boolean).length;
@@ -95,5 +109,60 @@ export function buildProjectDisplayStats(
       : importedProject
         ? 'Chưa dựng'
         : '0 nhịp',
+  };
+}
+
+export function getChapterProgress(content: string, target?: number): ChapterProgress {
+  const actual = countWords(content);
+
+  if (!target) {
+    return {
+      actual,
+      target: undefined,
+      percentage: 0,
+      status: 'no-target',
+    };
+  }
+
+  const percentage = actual / target;
+  let status: ChapterProgress['status'];
+
+  if (percentage >= 0.9 && percentage <= 1.1) {
+    status = 'on-track';
+  } else if (percentage < 0.9) {
+    status = 'behind';
+  } else {
+    status = 'over';
+  }
+
+  return {
+    actual,
+    target,
+    percentage,
+    status,
+  };
+}
+
+export function getProjectProgressStats(project: Project): ProjectProgressStats {
+  const totalWords = getProjectWordCount(project.chapters);
+  const chapterCount = project.chapters.length;
+
+  // Calculate total target from masterOutline if available
+  let totalTarget: number | undefined;
+  if (project.masterOutline?.volumes) {
+    totalTarget = project.masterOutline.volumes.reduce((sum, volume) => {
+      return sum + volume.chapters.reduce((volSum, chapter) => {
+        return volSum + (chapter.wordCountTarget || 0);
+      }, 0);
+    }, 0);
+  }
+
+  const overallPercentage = totalTarget ? totalWords / totalTarget : 0;
+
+  return {
+    totalWords,
+    totalTarget,
+    overallPercentage,
+    chapterCount,
   };
 }

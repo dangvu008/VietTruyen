@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import type { Chapter } from '../../types/story';
 import { useAiStore } from '../../store/use_ai_store';
-import { useProjectStore, getActiveProject } from '../../store/use_project_store';
+import { useProjectStore } from '../../store/use_project_store';
 import { useAuthStore } from '../../store/use_auth_store';
 import { summarizeChapter } from '../../lib/ai/chapter_summarizer';
 import { batchSummarizeChapters } from '../../lib/ai/batch_summarizer';
@@ -28,6 +28,9 @@ import { sortChaptersBySequence } from '../../lib/memory/chapter_order';
 import { getChapterContinuityTasks } from '../../lib/memory/memory_query';
 import { getProjectPropagationTasks } from '../../db/narrative_db';
 import type { PropagationTask } from '../../types/narrative_memory';
+import { countWords, getChapterProgress, getProjectProgressStats } from '../../lib/project/project_display_stats';
+import type { ChapterProgress } from '../../lib/project/project_display_stats';
+import { getActiveProject } from '../../store/use_project_store';
 
 interface ChaptersPageProps {
   chapters: Chapter[];
@@ -130,6 +133,30 @@ const ChaptersPage: React.FC<ChaptersPageProps> = ({
     final: orderedChapters.filter(c => c.status === 'final').length,
   }), [orderedChapters]);
 
+  // Calculate progress for each chapter
+  const chapterProgressMap = useMemo(() => {
+    const project = getActiveProject(useProjectStore.getState());
+    if (!project?.masterOutline?.volumes) return {};
+
+    const map: Record<string, ChapterProgress> = {};
+    project.masterOutline.volumes.forEach(volume => {
+      volume.chapters.forEach(chapterOutline => {
+        const chapter = orderedChapters.find(c => c.sequenceNumber === chapterOutline.chapterNumber);
+        if (chapter) {
+          map[chapter.id] = getChapterProgress(chapter.content, chapterOutline.wordCountTarget);
+        }
+      });
+    });
+    return map;
+  }, [orderedChapters]);
+
+  // Project-level stats
+  const projectStats = useMemo(() => {
+    const project = getActiveProject(useProjectStore.getState());
+    if (!project) return null;
+    return getProjectProgressStats(project);
+  }, [chapters]);
+
   const handleCopy = async () => {
     if (!selected) return;
     await navigator.clipboard.writeText(selected.content);
@@ -142,9 +169,9 @@ const ChaptersPage: React.FC<ChaptersPageProps> = ({
     setIsSummarizing(true);
     try {
       const aiStore = useAiStore.getState();
-      const { models, activeModelId, taskModelOverrides } = aiStore;
+      const { models, activeModelId, taskModelOverrides, modelHealth, preferredProvider } = aiStore;
       // Ưu tiên Flash model cho tóm tắt (rẻ 10x)
-      const model = getModelForTask('summarize', models, undefined, activeModelId, taskModelOverrides);
+      const model = getModelForTask('summarize', models, undefined, activeModelId, taskModelOverrides, modelHealth, [], preferredProvider);
       if (!model) throw new Error('Không tìm thấy model khả dụng');
 
       const summary = await summarizeChapter(selected.content, selected.title, '', model);
@@ -169,8 +196,8 @@ const ChaptersPage: React.FC<ChaptersPageProps> = ({
     setBatchProgress(`0/${toSummarize.length}`);
     try {
       const aiStore = useAiStore.getState();
-      const { models, activeModelId, taskModelOverrides } = aiStore;
-      const model = getModelForTask('summarize', models, undefined, activeModelId, taskModelOverrides);
+      const { models, activeModelId, taskModelOverrides, modelHealth, preferredProvider } = aiStore;
+      const model = getModelForTask('summarize', models, undefined, activeModelId, taskModelOverrides, modelHealth, [], preferredProvider);
       if (!model) throw new Error('Không tìm thấy model');
 
       const results = await batchSummarizeChapters(toSummarize, '', model);
@@ -257,6 +284,53 @@ const ChaptersPage: React.FC<ChaptersPageProps> = ({
         />
       ) : (
         <>
+          {/* Project Statistics Panel */}
+          {projectStats && (
+            <div className="bg-[#0F1115] rounded-2xl border border-[#1E232B] p-5 mb-5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-6">
+                  <div>
+                    <p className="text-[10px] text-[#94A3B8] uppercase tracking-wider mb-1">Tổng số từ</p>
+                    <p className="text-2xl font-display font-bold text-[#F8FAFC]">
+                      {projectStats.totalWords.toLocaleString()}
+                    </p>
+                  </div>
+                  <div className="h-8 w-px bg-[#1E232B]" />
+                  <div>
+                    <p className="text-[10px] text-[#94A3B8] uppercase tracking-wider mb-1">Số chương</p>
+                    <p className="text-2xl font-display font-bold text-[#F8FAFC]">
+                      {projectStats.chapterCount}
+                    </p>
+                  </div>
+                  {projectStats.totalTarget && (
+                    <>
+                      <div className="h-8 w-px bg-[#1E232B]" />
+                      <div>
+                        <p className="text-[10px] text-[#94A3B8] uppercase tracking-wider mb-1">Mục tiêu</p>
+                        <p className="text-2xl font-display font-bold text-[#F8FAFC]">
+                          {projectStats.totalTarget.toLocaleString()}
+                        </p>
+                      </div>
+                      <div className="h-8 w-px bg-[#1E232B]" />
+                      <div>
+                        <p className="text-[10px] text-[#94A3B8] uppercase tracking-wider mb-1">Tiến độ</p>
+                        <p className={`text-2xl font-display font-bold ${
+                          projectStats.overallPercentage >= 0.9 && projectStats.overallPercentage <= 1.1
+                            ? 'text-[#2DD4BF]'
+                            : projectStats.overallPercentage < 0.9
+                            ? 'text-[#F59E0B]'
+                            : 'text-[#e8708a]'
+                        }`}>
+                          {Math.round(projectStats.overallPercentage * 100)}%
+                        </p>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Filter Bar */}
           <div className="flex gap-2 mb-5">
             {([
@@ -285,6 +359,9 @@ const ChaptersPage: React.FC<ChaptersPageProps> = ({
               {filtered.map((chapter) => {
                 const isActive = chapter.id === selectedId;
                 const status = STATUS_CONFIG[chapter.status];
+                const progress = chapterProgressMap[chapter.id];
+                const wordCount = countWords(chapter.content || '');
+
                 return (
                   <button
                     key={chapter.id}
@@ -303,7 +380,7 @@ const ChaptersPage: React.FC<ChaptersPageProps> = ({
                         <h4 className="font-semibold text-[#F8FAFC] text-sm truncate">
                           {chapter.title}
                         </h4>
-                        <div className="flex items-center gap-2 mt-1">
+                        <div className="flex items-center gap-2 mt-1 flex-wrap">
                           <span className={`badge text-[10px] ${status.bg} ${status.color}`}>
                             {status.label}
                           </span>
@@ -313,9 +390,41 @@ const ChaptersPage: React.FC<ChaptersPageProps> = ({
                             </span>
                           )}
                           <span className="text-[10px] text-[#94A3B8]">
+                            {wordCount.toLocaleString()} từ
+                          </span>
+                          <span className="text-[10px] text-[#94A3B8]">
                             {new Date(chapter.updatedAt).toLocaleDateString('vi-VN')}
                           </span>
                         </div>
+
+                        {/* Progress Bar */}
+                        {progress && progress.target && (
+                          <div className="mt-2">
+                            <div className="flex items-center justify-between text-[10px] mb-1">
+                              <span className="text-[#94A3B8]">
+                                Tiến độ: {progress.actual.toLocaleString()} / {progress.target.toLocaleString()}
+                              </span>
+                              <span className={`font-medium ${
+                                progress.status === 'on-track' ? 'text-[#2DD4BF]' :
+                                progress.status === 'behind' ? 'text-[#F59E0B]' :
+                                'text-[#e8708a]'
+                              }`}>
+                                {Math.round(progress.percentage * 100)}%
+                              </span>
+                            </div>
+                            <div className="h-1.5 bg-[#1E232B] rounded-full overflow-hidden">
+                              <div
+                                className={`h-full rounded-full transition-all ${
+                                  progress.status === 'on-track' ? 'bg-[#2DD4BF]' :
+                                  progress.status === 'behind' ? 'bg-[#F59E0B]' :
+                                  'bg-[#e8708a]'
+                                }`}
+                                style={{ width: `${Math.min(progress.percentage * 100, 100)}%` }}
+                              />
+                            </div>
+                          </div>
+                        )}
+
                         {chapter.summary && (
                           <p className="text-[11px] text-[#94A3B8] mt-1 line-clamp-1">
                             {chapter.summary}
