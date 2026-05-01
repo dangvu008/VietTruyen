@@ -33,6 +33,9 @@ interface Props {
   onNavigate?: (tab: string) => void;
   onOpenCreationChat?: () => void;
   creationProgressSummary?: CreationProgressSummary | null;
+  emptyChapterCount?: number;
+  batchProgress?: { current: number; total: number; isRunning: boolean } | null;
+  onBatchGenerateAll?: () => void;
 }
 
 /** [Domain:StoryEditor] STEP 1 — Format token count for display */
@@ -142,6 +145,9 @@ export const EditorTopbar: React.FC<Props> = ({
   onNavigate,
   onOpenCreationChat,
   creationProgressSummary,
+  emptyChapterCount = 0,
+  batchProgress,
+  onBatchGenerateAll,
 }) => {
   const status = getStatusLabel(chapter);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -273,6 +279,17 @@ export const EditorTopbar: React.FC<Props> = ({
                   + Thêm
                 </button>
               )}
+              {onBatchGenerateAll && emptyChapterCount > 1 && (
+                <button
+                  onClick={() => { setIsDropdownOpen(false); onBatchGenerateAll(); }}
+                  disabled={batchProgress?.isRunning}
+                  className="rounded bg-[#c6a6ff]/10 px-2 py-0.5 text-[10px] font-bold text-[#c6a6ff] transition hover:bg-[#c6a6ff]/20 disabled:opacity-50"
+                >
+                  {batchProgress?.isRunning
+                    ? `✨ ${batchProgress.current}/${batchProgress.total}`
+                    : `✨ Viết ${emptyChapterCount} chương`}
+                </button>
+              )}
             </div>
 
             {/* Chapter Items */}
@@ -381,18 +398,18 @@ export const EditorTopbar: React.FC<Props> = ({
         {sessionTokens > 0 && (
           <div className="flex items-center gap-1.5 text-[12px] font-medium text-accent-amber/80">
             <Zap className="h-3 w-3" />
-            <span>{formatTokenCount(sessionTokens)} tokens</span>
+            <span>{formatTokenCount(sessionTokens)} token</span>
           </div>
         )}
 
         <button className="rounded-full bg-[#E2B182] px-5 py-1.5 text-[13px] font-semibold text-[#1B140F] transition hover:bg-[#F0C59A] active:scale-[0.98]">
-          Export
+          Xuất file
         </button>
         
         {/* Hidden controls to trigger saves */}
         <div className="hidden">
-          <button onClick={onSave} disabled={!chapter || (!isDirty && !isSaving)}>Save</button>
-          <button onClick={onApprove} disabled={!chapter}>Approve</button>
+          <button onClick={onSave} disabled={!chapter || (!isDirty && !isSaving)}>Lưu</button>
+          <button onClick={onApprove} disabled={!chapter}>Duyệt</button>
         </div>
       </div>
     </div>

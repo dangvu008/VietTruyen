@@ -1,6 +1,7 @@
 ---
 name: rune-deploy
 description: "Deploy application to target platform. Use when user explicitly says 'deploy', 'push to production', 'ship it'. Handles Vercel, Netlify, AWS, GCP, DigitalOcean, and VPS with pre-deploy verification and health checks."
+model: gemini-3-flash
 ---
 
 

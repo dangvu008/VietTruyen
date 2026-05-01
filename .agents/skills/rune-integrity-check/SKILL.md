@@ -1,6 +1,7 @@
 ---
 name: rune-integrity-check
-description: "Verify integrity of persisted state, skill outputs, and context bus data. Detects prompt injection, memory poisoning, identity spoofing, and adversarial payloads in .rune/ files and agent outputs. Called by sentinel, team, and session-bridge."
+description: "Verify integrity of persisted state, skill outputs, and context bus data. Use when validating .rune/ files or sub-agent outputs against prompt injection, memory poisoning, identity spoofing, or adversarial payloads. Called by sentinel, team, session-bridge."
+model: gemini-3-flash-lite
 ---
 
 

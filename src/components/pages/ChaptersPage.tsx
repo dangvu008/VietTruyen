@@ -32,8 +32,8 @@ import type { PropagationTask } from '../../types/narrative_memory';
 interface ChaptersPageProps {
   chapters: Chapter[];
   projectId: string;
-  onUpdateChapter: (id: string, chapterId: string, patch: Partial<Chapter>) => void;
-  onRemoveChapter: (id: string, chapterId: string) => void;
+  onUpdateChapter: (id: string, chapterId: string, patch: Partial<Chapter>) => Promise<void> | void;
+  onRemoveChapter: (id: string, chapterId: string) => Promise<void> | void;
   onOpenAi: () => void;
   onNavigateToWriter: () => void;
 }

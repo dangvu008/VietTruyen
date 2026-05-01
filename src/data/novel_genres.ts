@@ -6,6 +6,7 @@
  */
 
 export const NOVEL_GENRES = [
+  'Huyền huyễn tiên hiệp',
   'Đô thị ngôn tình',
   'Khoa học viễn tưởng',
   'Võ hiệp',
@@ -68,9 +69,15 @@ export const NOVEL_TAGS = [
   'Cổ đại', 'Dân quốc', 'Tu tiên', 'Trả thù', 'Pháo hôi',
   'Vai ác', 'Tiên tri', 'Phép thuật',
   'Văn hóa Việt Nam', 'Dã sử Việt', 'Tâm linh Việt',
+  'Hậu cung', 'Đa nhân cách', 'Tâm thần phân liệt',
+  'Biển sao', 'Truyền thuyết đô thị', 'Thực dân', 'Lĩnh chúa',
+  'Thập niên 70', 'Thập niên 80', 'Thập niên 90', 'Dân quốc',
+  'Bộ lạc', 'Nguyên thủy', 'Đại lục', 'Dị thế',
+  'Mau xuyên', 'Quy tắc quái đàm',
 ] as const;
 
 export const WRITING_STYLES = [
+  'Mượt mà tự nhiên, cốt truyện chặt chẽ, nhân vật tinh tế',
   'Văn phong đẹp, ý cảnh sâu xa',
   'Nhịp nhanh, cốt truyện kịch tính',
   'Mô tả tinh tế, cảm xúc phong phú',

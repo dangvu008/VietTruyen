@@ -1,6 +1,7 @@
 ---
 name: rune-video-creator
 description: "Video content planning. Writes narration scripts, storyboards, shot lists, and asset checklists. Saves plan to marketing/video-plan.md."
+model: gemini-3-flash
 ---
 
 

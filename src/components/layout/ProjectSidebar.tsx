@@ -13,15 +13,17 @@ import {
   FileOutput,
   Globe,
   LayoutList,
+  Map,
   PenTool,
   Users,
+  Cpu,
 } from 'lucide-react';
 import type { ProjectTabId } from '../../types/navigation';
 import type { Project } from '../../types/story';
 import { getProjectWorkflowSnapshot } from '../../lib/navigation/project_workflow';
 
 interface ProjectNavItem {
-  id: ProjectTabId;
+  id: ProjectTabId | 'action:settings';
   label: string;
   icon: React.ReactNode;
 }
@@ -36,6 +38,8 @@ const PROJECT_NAV_GROUPS: ProjectNavGroup[] = [
     label: 'VIẾT',
     items: [
       { id: 'writer', label: 'Viết tiếp', icon: <PenTool size={18} className="h-[18px] w-[18px]" /> },
+      { id: 'chapters', label: 'Chương', icon: <BookText size={18} className="h-[18px] w-[18px]" /> },
+      { id: 'storymap', label: 'Bản đồ truyện', icon: <Map size={18} className="h-[18px] w-[18px]" /> },
     ],
   },
   {
@@ -45,6 +49,7 @@ const PROJECT_NAV_GROUPS: ProjectNavGroup[] = [
       { id: 'characters', label: 'Nhân vật', icon: <Users size={18} className="h-[18px] w-[18px]" /> },
       { id: 'world', label: 'Thế giới', icon: <Globe size={18} className="h-[18px] w-[18px]" /> },
       { id: 'outline', label: 'Dàn ý', icon: <LayoutList size={18} className="h-[18px] w-[18px]" /> },
+      { id: 'action:settings', label: 'Cài đặt AI', icon: <Cpu size={18} className="h-[18px] w-[18px]" /> },
     ],
   },
 
@@ -62,6 +67,7 @@ export interface ProjectSidebarProps {
   onNavigate: (tab: ProjectTabId) => void;
   onExitProject: () => void;
   onGoHome?: () => void;
+  onNavigateSettings?: () => void;
   project: Project;
   recommendedTab: ProjectTabId;
   projectTitle: string;
@@ -73,6 +79,7 @@ const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
   onNavigate,
   onExitProject,
   onGoHome,
+  onNavigateSettings,
   project,
   recommendedTab,
   projectTitle,
@@ -127,7 +134,13 @@ const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
                 return (
                   <button
                     key={item.id}
-                    onClick={() => onNavigate(item.id)}
+                    onClick={() => {
+                      if (item.id === 'action:settings') {
+                        onNavigateSettings?.();
+                      } else {
+                        onNavigate(item.id);
+                      }
+                    }}
                     className={`group flex w-full items-center gap-3 rounded-[10px] px-3 py-2.5 text-left transition ${
                       isActive
                         ? 'bg-[#1a1514] border border-white/5 text-[#f5ede4]'

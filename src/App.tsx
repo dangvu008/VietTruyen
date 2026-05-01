@@ -12,19 +12,20 @@ import GlobalShell from './components/layout/GlobalShell';
 import ProjectWorkspace from './components/layout/ProjectWorkspace';
 import LoginPage from './components/pages/LoginPage';
 import AiAssistant, { type AssistantAction } from './components/shared/AiAssistant';
+import AiActivityOverlay from './components/shared/AiActivityOverlay';
 import RetconImpactModal from './components/shared/RetconImpactModal';
 import NotificationCenter from './components/shared/NotificationCenter';
 import NotificationToast from './components/shared/NotificationToast';
 import MemoryBootstrap from './components/system/MemoryBootstrap';
 import LanguageSwitcher from './components/shared/LanguageSwitcher';
 
-import type { AnyTabId, GlobalTabId, ProjectTabId, AppShell } from './types/navigation';
-import { DEFAULT_GLOBAL_TAB, DEFAULT_PROJECT_TAB, isGlobalTab } from './types/navigation';
-import type { SettingsTabId } from './components/layout/GlobalSidebar';
+import type { AnyTabId, AppShell, ProjectTabId } from './types/navigation';
+import { DEFAULT_PROJECT_TAB, isGlobalTab } from './types/navigation';
 
 import { useTranslation } from './hooks/use_translation';
 import { useAiStore } from './store/use_ai_store';
 import { applyAppearanceToDocument, useAppearanceStore } from './store/use_appearance_store';
+import { useAppSessionStore } from './store/use_app_session_store';
 import { useAuthStore } from './store/use_auth_store';
 import { useProjectStore } from './store/use_project_store';
 import { getUnreadCount, useNotificationStore } from './store/use_notification_store';
@@ -62,10 +63,28 @@ function hasEnvDirectApiKey(): boolean {
 
 const App: React.FC = () => {
   // ── Shell & Tab State ──
-  const [activeShell, setActiveShell] = useState<AppShell>('global');
-  const [globalTab, setGlobalTab] = useState<GlobalTabId>(DEFAULT_GLOBAL_TAB);
-  const [projectTab, setProjectTab] = useState<ProjectTabId>(DEFAULT_PROJECT_TAB);
-  const [settingsTab, setSettingsTab] = useState<SettingsTabId>('ai');
+  const {
+    activeShell,
+    globalTab,
+    projectTab,
+    settingsTab,
+    setActiveShell,
+    setGlobalTab,
+    setProjectTab,
+    setSettingsTab,
+  } = useAppSessionStore(
+    (state) => ({
+      activeShell: state.activeShell,
+      globalTab: state.globalTab,
+      projectTab: state.projectTab,
+      settingsTab: state.settingsTab,
+      setActiveShell: state.setActiveShell,
+      setGlobalTab: state.setGlobalTab,
+      setProjectTab: state.setProjectTab,
+      setSettingsTab: state.setSettingsTab,
+    }),
+    shallow,
+  );
 
   // ── Overlay State ──
   const [showAi, setShowAi] = useState(false);
@@ -328,6 +347,7 @@ const App: React.FC = () => {
           onNavigate={setProjectTab}
           onExitProject={handleExitProject}
           onGoHome={handleGoHome}
+          onNavigateSettings={handleNavigateToSettings}
           project={activeProject!}
           projectTitle={activeProject!.title}
           rightActions={sharedRightActions}
@@ -355,6 +375,7 @@ const App: React.FC = () => {
       />
       <NotificationToast />
       <RetconImpactModal />
+      <AiActivityOverlay />
     </>
     </StorageContext.Provider>
   );

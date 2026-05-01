@@ -1,6 +1,7 @@
 ---
 name: rune-incident
 description: "Structured incident response. Use when user reports an outage, production error, or says 'incident', 'something is down', 'users are affected'. Triage severity, contain blast radius, root-cause, document timeline, generate postmortem."
+model: gemini-3-flash
 ---
 
 

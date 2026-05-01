@@ -11,15 +11,21 @@ import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { Sparkles, Send, BookOpen, FileClock, MessageSquareQuote } from 'lucide-react';
 import { getProjectSnapshot, useProjectStore } from '../../store/use_project_store';
 import { createId } from '../../core/id';
+import { useAiStore } from '../../store/use_ai_store';
 import { useCreationChatStore } from '../../store/use_creation_chat_store';
+import { useTokenStore } from '../../store/use_token_store';
 import SuggestionChips from '../creation/SuggestionChips';
 import PlotPreviewCard from '../creation/PlotPreviewCard';
 import FrameworkPreview from '../creation/FrameworkPreview';
 import ChapterDraftCard from '../creation/ChapterDraftCard';
 import ChapterSidebarPanel from '../creation/ChapterSidebarPanel';
+import CreationCostPanel from '../creation/CreationCostPanel';
 import { AiThinkingIndicator } from '../shared/AiThinkingIndicator';
 import { AiConnectionDebugPanel } from '../shared/AiConnectionDebugPanel';
+import ModelSelectorDropdown from '../shared/ModelSelectorDropdown';
 import { STARTER_IDEAS } from '../../lib/ai/creation_discuss_config';
+import { estimateCreationCost } from '../../lib/ai/creation_cost_estimator';
+import { getModelForTask } from '../../lib/ai/model_router';
 import { buildCreationProjectSeed } from '../../lib/creation/project_seed';
 import {
   handleDescribeSubmit,
@@ -32,8 +38,10 @@ import {
   handleWriteChapter,
   handleAcceptChapter,
   retryFrameworkGeneration,
+  batchComposeAllChapters,
 } from '../../lib/ai/creation_orchestrator';
 import type { ProjectTabId } from '../../types/navigation';
+import type { CreationMessageTokenUsage } from '../../types/creation_chat';
 import { describeCreationProgress } from '../../lib/creation/creation_progress';
 
 // ─── Styles ─────────────────────────────────────────────────
@@ -211,6 +219,21 @@ const S = {
     whiteSpace: 'pre-wrap' as const,
     fontStyle: role === 'system' ? 'italic' as const : 'normal' as const,
   }),
+  tokenBadge: {
+    display: 'inline-flex',
+    alignItems: 'center' as const,
+    gap: 6,
+    alignSelf: 'flex-start' as const,
+    marginTop: 4,
+    padding: '3px 8px',
+    borderRadius: 9999,
+    border: '1px solid rgba(212,165,116,0.18)',
+    background: 'rgba(22,19,16,0.72)',
+    color: '#bda999',
+    fontSize: 10,
+    fontWeight: 700,
+    lineHeight: 1.2,
+  },
   loadingDots: {
     display: 'flex',
     gap: 4,
@@ -267,6 +290,30 @@ const PHASE_LABELS: Record<string, { label: string; color: string; bg: string }>
   compose: { label: '✍️ Sáng tác', color: '#68d391', bg: 'rgba(104,211,145,0.1)' },
 };
 
+function formatTokenCount(value: number): string {
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
+  if (value >= 1_000) return `${(value / 1_000).toFixed(value >= 10_000 ? 0 : 1)}K`;
+  return value.toLocaleString('vi-VN');
+}
+
+function TokenUsageBadge({ usage }: { usage?: CreationMessageTokenUsage }) {
+  if (!usage || usage.totalTokens <= 0) return null;
+
+  const details = [
+    `Input ${formatTokenCount(usage.inputTokens)}`,
+    `Output ${formatTokenCount(usage.outputTokens)}`,
+    usage.callCount && usage.callCount > 1 ? `${usage.callCount} calls` : null,
+    usage.cached ? 'cache' : null,
+  ].filter(Boolean).join(' · ');
+
+  return (
+    <div style={S.tokenBadge} title={details}>
+      <span>⚡</span>
+      <span>{formatTokenCount(usage.totalTokens)} token</span>
+    </div>
+  );
+}
+
 // ─── Component ──────────────────────────────────────────────
 
 interface CreationChatPageProps {
@@ -279,10 +326,10 @@ export default function CreationChatPage({
   onOpenProjectDraft,
 }: CreationChatPageProps = {}) {
   const {
-    phase, messages, isAiWorking, error,
+    phase, messages, isAiWorking, isBatchComposing, error,
     plotPreview, plotPreviewConfirmed,
     framework, frameworkConfirmed,
-    acceptedChapters, draftInput, draftSavedAt, progress,
+    acceptedChapters, currentTopicIndex, answers, draftInput, draftSavedAt, progress,
     setPlotPreview,
     setFramework,
     setDraftInput,
@@ -295,10 +342,118 @@ export default function CreationChatPage({
     updateProject: state.updateProject,
     replaceProjectChapters: state.replaceProjectChapters,
   }));
+  const {
+    models,
+    activeModelId,
+    taskModelOverrides,
+    subscription,
+    fetchSubscription,
+  } = useAiStore((state) => ({
+    models: state.models,
+    activeModelId: state.activeModelId,
+    taskModelOverrides: state.taskModelOverrides,
+    subscription: state.subscription,
+    fetchSubscription: state.fetchSubscription,
+  }));
+  const avgTokensPerPipeline = useTokenStore((state) => state.getStats().avgTokensPerPipeline);
 
   const [showChapterPanel, setShowChapterPanel] = useState(false);
   const linkedProjectId = progress.linkedProjectId;
   const statusSummary = useMemo(() => describeCreationProgress(progress), [progress]);
+  const hasIncompleteBatchCompose = Boolean(
+    progress.batchCompose &&
+    progress.batchCompose.total > 0 &&
+    progress.batchCompose.successCount < progress.batchCompose.total,
+  );
+  const canOpenLinkedDraft = Boolean(linkedProjectId) && !isBatchComposing && !hasIncompleteBatchCompose;
+  const brainstormModel = useMemo(
+    () => getModelForTask('brainstorm', models, undefined, activeModelId, taskModelOverrides),
+    [activeModelId, models, taskModelOverrides],
+  );
+  const planModel = useMemo(
+    () => getModelForTask('plan_chapter', models, undefined, activeModelId, taskModelOverrides),
+    [activeModelId, models, taskModelOverrides],
+  );
+  const writeModel = useMemo(
+    () => getModelForTask('write_chapter', models, undefined, activeModelId, taskModelOverrides),
+    [activeModelId, models, taskModelOverrides],
+  );
+  const summarizeModel = useMemo(
+    () => getModelForTask('summarize', models, undefined, activeModelId, taskModelOverrides)
+      || getModelForTask('extract_metadata', models, undefined, activeModelId, taskModelOverrides),
+    [activeModelId, models, taskModelOverrides],
+  );
+  const originalIdeaForEstimate = useMemo(() => {
+    const firstIdea = messages.find((message) => message.role === 'user' && message.type === 'text')?.content || '';
+    if (firstIdea.trim()) return firstIdea;
+    return phase === 'describe' ? draftInput : '';
+  }, [draftInput, messages, phase]);
+  const estimateChatHistory = useMemo(
+    () =>
+      messages
+        .filter((message) => message.role === 'user' && message.type === 'text')
+        .slice(1)
+        .map((message) => ({
+          role: 'user' as const,
+          content: message.content,
+        })),
+    [messages],
+  );
+  const creationCostEstimate = useMemo(() => {
+    if (!brainstormModel || !planModel || !writeModel || !summarizeModel) return null;
+
+    return estimateCreationCost({
+      phase,
+      originalIdea: originalIdeaForEstimate,
+      answers,
+      currentTopicIndex,
+      chatHistory: estimateChatHistory,
+      plotPreview,
+      framework,
+      acceptedChapterCount: acceptedChapters.length,
+      brainstormModel: {
+        modelId: brainstormModel.modelId,
+        modelName: brainstormModel.name,
+      },
+      planModel: {
+        modelId: planModel.modelId,
+        modelName: planModel.name,
+      },
+      writeModel: {
+        modelId: writeModel.modelId,
+        modelName: writeModel.name,
+      },
+      summarizeModel: {
+        modelId: summarizeModel.modelId,
+        modelName: summarizeModel.name,
+      },
+      avgTokensPerPipeline,
+    });
+  }, [
+    acceptedChapters.length,
+    answers,
+    avgTokensPerPipeline,
+    brainstormModel,
+    currentTopicIndex,
+    estimateChatHistory,
+    framework,
+    originalIdeaForEstimate,
+    phase,
+    planModel,
+    plotPreview,
+    summarizeModel,
+    writeModel,
+  ]);
+  const remainingMonthlyTokens = useMemo(() => {
+    const used = subscription.tokensUsed || 0;
+    const limit = subscription.tokensLimit || 0;
+    if (limit <= 0) return null;
+    return Math.max(0, limit - used);
+  }, [subscription.tokensLimit, subscription.tokensUsed]);
+
+  useEffect(() => {
+    void fetchSubscription();
+  }, [fetchSubscription]);
 
   // ── Transition handler: migrate creation data → Project → Editor ──
   const handleTransitionToEditor = useCallback(async () => {
@@ -364,7 +519,9 @@ export default function CreationChatPage({
 
   const handleConfirmAndOpenWriter = useCallback(async () => {
     const result = await handleFrameworkConfirm();
-    if (!result?.projectId) return;
+    if (!result?.projectId || !result.readyForEditor) return;
+    // [Domain:CreationChat] Batch compose completes inside handleFrameworkConfirm.
+    // Navigation happens AFTER all chapters have been written.
     onComplete?.(result.projectId, 'writer');
   }, [onComplete]);
 
@@ -397,12 +554,17 @@ export default function CreationChatPage({
     }
 
     if (phase === 'compose' || progress.step === 'compose') {
+      if (linkedProjectId && hasIncompleteBatchCompose) {
+        void batchComposeAllChapters(linkedProjectId);
+        return;
+      }
+
       const latestComposeNote = [...messages]
         .reverse()
         .find((message) => message.role === 'user' && message.type === 'text');
       void handleWriteChapter(latestComposeNote?.content);
     }
-  }, [messages, phase, plotPreview, progress.step]);
+  }, [hasIncompleteBatchCompose, linkedProjectId, messages, phase, plotPreview, progress.step]);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -469,10 +631,11 @@ export default function CreationChatPage({
           }}>
             {phaseInfo.label}
           </span>
-          {linkedProjectId && onOpenProjectDraft && (
+          <ModelSelectorDropdown />
+          {canOpenLinkedDraft && onOpenProjectDraft && (
             <button
               style={S.headerBtn(true)}
-              onClick={() => onOpenProjectDraft(linkedProjectId, 'writer')}
+              onClick={() => onOpenProjectDraft(linkedProjectId!, 'writer')}
               title="Mở lại bản thảo hiện tại"
             >
               <FileClock size={14} />
@@ -514,12 +677,52 @@ export default function CreationChatPage({
             <span>{acceptedChapters.length} chương để duyệt</span>
             {progress.lastGeneratedChapterTitle && <span>Nháp mới nhất: {progress.lastGeneratedChapterTitle}</span>}
           </div>
+          {/* Batch compose progress bar */}
+          {progress.batchCompose && progress.batchCompose.isRunning && (
+            <div style={{ marginTop: 8 }}>
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                fontSize: 12,
+                color: '#f2c08d',
+                fontWeight: 700,
+                marginBottom: 4,
+              }}>
+                <span style={{ animation: 'pulse 1.5s ease-in-out infinite' }}>✍️</span>
+                <span>Đang viết chương {progress.batchCompose.current}/{progress.batchCompose.total}</span>
+                <span style={{ color: '#9c8e82', fontWeight: 400 }}>
+                  ({Math.round((progress.batchCompose.current / progress.batchCompose.total) * 100)}%)
+                </span>
+              </div>
+              <div style={{
+                width: '100%',
+                height: 4,
+                borderRadius: 2,
+                background: 'rgba(80,69,59,0.3)',
+                overflow: 'hidden',
+              }}>
+                <div style={{
+                  width: `${(progress.batchCompose.current / progress.batchCompose.total) * 100}%`,
+                  height: '100%',
+                  borderRadius: 2,
+                  background: 'linear-gradient(90deg, #f2c08d, #d4a574)',
+                  transition: 'width 0.5s ease-out',
+                }} />
+              </div>
+              {progress.batchCompose.failCount > 0 && (
+                <div style={{ fontSize: 11, color: '#e57373', marginTop: 2 }}>
+                  {progress.batchCompose.failCount} chương gặp lỗi
+                </div>
+              )}
+            </div>
+          )}
         </div>
         <div style={{ display: 'flex', gap: 10, flexShrink: 0 }}>
-          {linkedProjectId && onOpenProjectDraft && (
+          {canOpenLinkedDraft && onOpenProjectDraft && (
             <button
               style={S.headerBtn(true)}
-              onClick={() => onOpenProjectDraft(linkedProjectId, 'writer')}
+              onClick={() => onOpenProjectDraft(linkedProjectId!, 'writer')}
             >
               <FileClock size={14} />
               Về editor
@@ -534,6 +737,14 @@ export default function CreationChatPage({
           </button>
         </div>
       </div>
+
+      {creationCostEstimate && (
+        <CreationCostPanel
+          estimate={creationCostEstimate}
+          remainingMonthlyTokens={remainingMonthlyTokens}
+          hasIdeaSignal={originalIdeaForEstimate.trim().length > 0}
+        />
+      )}
 
       {/* Chat Area */}
       <div style={S.chatArea}>
@@ -595,6 +806,7 @@ export default function CreationChatPage({
                     onChange={(next) => setPlotPreview(next)}
                     onConfirm={() => void handlePlotPreviewConfirm()}
                   />
+                  <TokenUsageBadge usage={msg.tokenUsage} />
                 </div>
               );
             }
@@ -611,6 +823,7 @@ export default function CreationChatPage({
                     onConfirm={handleConfirmAndOpenWriter}
                     onChange={setFramework}
                   />
+                  <TokenUsageBadge usage={msg.tokenUsage} />
                 </div>
               );
             }
@@ -631,6 +844,7 @@ export default function CreationChatPage({
                     onRewrite={() => handleWriteChapter('Viết lại chương này với hướng khác')}
                     onEdit={(newContent) => handleAcceptChapter(draft.chapterIndex, draft.title, newContent)}
                   />
+                  <TokenUsageBadge usage={msg.tokenUsage} />
                 </div>
               );
             }
@@ -655,6 +869,7 @@ export default function CreationChatPage({
                       onSmartSkip={phase === 'discuss' ? handleSmartSkip : undefined}
                     />
                   </div>
+                  <TokenUsageBadge usage={msg.tokenUsage} />
                 </div>
               );
             }
@@ -675,6 +890,7 @@ export default function CreationChatPage({
                   {msg.role === 'user' ? '✍️ BẠN' : '🤖 AI'}
                 </div>
                 <div style={S.msgBubble(msg.role)}>{msg.content}</div>
+                {msg.role === 'ai' && <TokenUsageBadge usage={msg.tokenUsage} />}
               </div>
             );
           })
@@ -732,7 +948,7 @@ export default function CreationChatPage({
         isOpen={showChapterPanel}
         onClose={() => setShowChapterPanel(false)}
         onTransitionToEditor={handleTransitionToEditor}
-        canTransitionToEditor={Boolean(linkedProjectId)}
+        canTransitionToEditor={canOpenLinkedDraft}
       />
     </div>
   );

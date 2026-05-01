@@ -5,12 +5,12 @@
  * Domain: AI → [response caching, cost optimization]
  *
  * Data Contract:
- * - Input:  system prompt + user prompt → hash key
+ * - Input:  normalized AI request → hash key
  * - Output: cached response string | null
  *
  * Rules:
- * - TTL: 5 phút (response hết hạn sau 5 phút)
- * - Max entries: 20 (LRU eviction khi đầy)
+ * - TTL: 30 phút (response hết hạn sau 30 phút)
+ * - Max entries: 100 (LRU eviction khi đầy)
  * - Write-through: set() ngay sau khi nhận response
  */
 
@@ -21,26 +21,58 @@ interface CacheEntry {
   outputTokens: number;
 }
 
-const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
-const MAX_ENTRIES = 20;
+export interface PromptCacheKeyInput {
+  provider: string;
+  modelId: string;
+  taskType: string;
+  systemPrompt: string;
+  userPrompt: string;
+  baseUrl?: string;
+  responseFormat?: 'json_object';
+  temperature?: number;
+  topP?: number;
+}
+
+const CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
+const MAX_ENTRIES = 100;
 
 const cache = new Map<string, CacheEntry>();
 
-/** Simple hash for prompt pair */
-function hashPrompt(system: string, user: string): string {
-  const str = system + '|||' + user;
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    const char = str.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash = hash & hash; // Convert to 32bit int
-  }
-  return 'pc_' + Math.abs(hash).toString(36);
+function normalizeCacheKey(input: PromptCacheKeyInput): string {
+  return JSON.stringify({
+    provider: input.provider,
+    modelId: input.modelId,
+    taskType: input.taskType,
+    baseUrl: input.baseUrl || '',
+    responseFormat: input.responseFormat || '',
+    temperature: input.temperature ?? null,
+    topP: input.topP ?? null,
+    systemPrompt: input.systemPrompt,
+    userPrompt: input.userPrompt,
+  });
 }
 
-/** Check cache for a prompt pair */
-export function getCachedResponse(system: string, user: string): CacheEntry | null {
-  const key = hashPrompt(system, user);
+/** Stable 53-bit hash for the normalized request payload */
+function hashPrompt(input: PromptCacheKeyInput): string {
+  const str = normalizeCacheKey(input);
+  let h1 = 0xdeadbeef ^ str.length;
+  let h2 = 0x41c6ce57 ^ str.length;
+
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    h1 = Math.imul(h1 ^ char, 2654435761);
+    h2 = Math.imul(h2 ^ char, 1597334677);
+  }
+
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+
+  return `pc_${(4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36)}`;
+}
+
+/** Check cache for a normalized request */
+export function getCachedResponse(input: PromptCacheKeyInput): CacheEntry | null {
+  const key = hashPrompt(input);
   const entry = cache.get(key);
 
   if (!entry) return null;
@@ -59,13 +91,12 @@ export function getCachedResponse(system: string, user: string): CacheEntry | nu
 
 /** Store response in cache */
 export function setCachedResponse(
-  system: string,
-  user: string,
+  input: PromptCacheKeyInput,
   response: string,
   inputTokens: number,
   outputTokens: number,
 ): void {
-  const key = hashPrompt(system, user);
+  const key = hashPrompt(input);
 
   // Evict oldest if full
   if (cache.size >= MAX_ENTRIES) {

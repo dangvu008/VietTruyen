@@ -15,6 +15,7 @@ import {
   LazyChaptersPage,
   LazyExportPage,
   LazyOutlinePage,
+  LazyStoryMapPage,
   LazyWriterPage,
   LazyWorldPage,
 } from './page_registry';
@@ -113,6 +114,14 @@ export function renderProjectPage({
           onRemoveChapter={projectActions.removeChapter}
           onOpenAi={showAi}
           onNavigateToWriter={() => onNavigate('writer')}
+        />
+      );
+
+    case 'storymap':
+      return (
+        <LazyStoryMapPage
+          project={activeProject}
+          onNavigate={onNavigate}
         />
       );
 

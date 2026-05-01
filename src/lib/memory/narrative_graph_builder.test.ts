@@ -51,7 +51,20 @@ function makeProject(): Project {
         facts: [],
       },
     ],
-    outline: [],
+    outline: [
+      {
+        id: 'beat-1',
+        title: 'Khởi đầu hành trình',
+        summary: 'Tiêu Viêm gặp Dược Lão và chuẩn bị rời đi.',
+        focus: 'Tiêu Viêm',
+      },
+      {
+        id: 'beat-2',
+        title: 'Rời khỏi gia tộc',
+        summary: 'Dược Lão nhắc lại lời hẹn.',
+        focus: 'Dược Lão',
+      },
+    ],
     chapters: [
       {
         id: 'ch_1',
@@ -211,8 +224,14 @@ describe('narrative_graph_builder', () => {
 
     const char1NodeId = buildNarrativeNodeId(project.id, 'character', 'char_1');
     const char2NodeId = buildNarrativeNodeId(project.id, 'character', 'char_2');
+    const beatNodeId = buildNarrativeNodeId(project.id, 'beat', 'beat:0');
+    const sceneNodeId = buildNarrativeNodeId(project.id, 'scene', 'ch_1:scene:0');
+    const retconNodeId = buildNarrativeNodeId(project.id, 'retcon_event', 'edit-1');
 
     expect(graph.nodes.some((node) => node.id === char1NodeId)).toBe(true);
+    expect(graph.nodes.some((node) => node.id === beatNodeId)).toBe(true);
+    expect(graph.nodes.some((node) => node.id === sceneNodeId)).toBe(true);
+    expect(graph.nodes.some((node) => node.id === retconNodeId)).toBe(true);
     expect(
       graph.edges.some(
         (edge) =>
@@ -224,6 +243,10 @@ describe('narrative_graph_builder', () => {
     ).toBe(true);
     expect(graph.edges.some((edge) => edge.edgeType === 'foreshadow_link')).toBe(true);
     expect(graph.edges.some((edge) => edge.edgeType === 'canonical_impact')).toBe(true);
+    expect(graph.edges.some((edge) => edge.edgeType === 'scene_membership')).toBe(true);
+    expect(graph.edges.some((edge) => edge.edgeType === 'beat_alignment')).toBe(true);
+    expect(graph.edges.some((edge) => edge.edgeType === 'retcon_targets')).toBe(true);
+    expect(graph.edges.some((edge) => edge.edgeType === 'continuity_risk')).toBe(true);
     expect(graph.communities.some((community) => community.memberNodeIds.includes(char1NodeId) && community.memberNodeIds.includes(char2NodeId))).toBe(true);
   });
 });

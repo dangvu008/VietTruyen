@@ -1,6 +1,7 @@
 ---
 name: rune-scope-guard
 description: "Detects scope creep by quantifying drift percentage. Auto-triggered by L1 orchestrators when files exceed the original plan. Compares git changes against plan, classifies drift into 4 tiers: ON_TRACK, MINOR_DRIFT, SIGNIFICANT_DRIFT, OUT_OF_CONTROL."
+model: gemini-3-flash-lite
 ---
 
 
@@ -25,7 +26,10 @@ Passive scope monitor. Reads the original task plan, inspects current git diff t
 
 ## Called By (inbound)
 
-- Auto-triggered by L1 orchestrators when files changed exceed plan expectations
+- `cook` (L1): Phase 6.6 scope drift detection when files touched > planned
+- `team` (L1): after each parallel workstream completes, before merge
+- `rescue` (L1): during safeguard phase to detect unplanned changes
+- `plan` (L2): optional scope validation after plan acceptance
 
 ## Calls (outbound)
 

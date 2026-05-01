@@ -42,7 +42,30 @@ function makeProject(): Project {
       facts: [],
     },
     characters: [
-      { id: 'lam-te', name: 'Lâm Tề', role: 'Chính', arc: '', currentStage: 'Luyện Khí', traits: 'Gan lì', aliases: [], facts: [] },
+      {
+        id: 'lam-te',
+        name: 'Lâm Tề',
+        role: 'Chính',
+        arc: '',
+        currentStage: 'Luyện Khí',
+        traits: 'Gan lì',
+        aliases: [],
+        facts: [],
+        speechProfile: {
+          defaultSelfPronouns: ['ta'],
+          defaultAddressPronouns: ['ngươi'],
+          forbiddenPronouns: ['tôi', 'anh'],
+          toneNotes: 'Lời ít mà gắt, gặp địch không hạ giọng.',
+          situationalRules: [
+            {
+              situation: 'đối đầu',
+              targetCharacterName: 'Bạch Long',
+              preferredPairs: ['ta - ngươi'],
+              forbiddenPairs: ['tôi - anh'],
+            },
+          ],
+        },
+      },
       { id: 'ha-vu', name: 'Hạ Vũ', role: 'Phụ', arc: '', currentStage: 'Luyện Khí', traits: 'Điềm tĩnh', aliases: [], facts: [] },
       { id: 'diep-nhu', name: 'Diệp Như', role: 'Phụ', arc: '', currentStage: 'Trúc Cơ', traits: 'Lạnh lùng', aliases: [], facts: [] },
       { id: 'bac-long', name: 'Bạch Long', role: 'Phản diện', arc: '', currentStage: 'Kết Đan', traits: 'Tàn nhẫn', aliases: [], facts: [] },
@@ -169,6 +192,8 @@ describe('buildSurpriseContext', () => {
     expect(context.contextText).toContain('## TIMELINE NHÂN VẬT TRỌNG TÂM');
     expect(context.contextText).toContain('Lâm Tề');
     expect(context.contextText).toContain('Ch.2: current_stage=Trúc Cơ');
+    expect(context.contextText).toContain('xưng ta');
+    expect(context.contextText).toContain('đối đầu với Bạch Long: ta - ngươi');
     expect(context.contextText).not.toContain('Hạ Vũ');
     expect(context.contextText).not.toContain('Trưởng Lão Mặc');
   });

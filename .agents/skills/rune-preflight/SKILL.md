@@ -1,6 +1,7 @@
 ---
 name: rune-preflight
-description: "Pre-commit quality gate that catches \"almost right\" code. Goes beyond linting — checks logic correctness, error handling, regressions, and completeness."
+description: "Pre-commit quality gate that catches 'almost right' code. Use when about to commit — auto-fires before commit to validate logic correctness, error handling, regressions, and completeness. Goes beyond linting."
+model: gemini-3-flash
 ---
 
 
@@ -229,14 +230,20 @@ For each detected domain, run its checks on the relevant files in the diff:
 
 #### UI/Frontend Domain Checks
 
-When UI/Frontend hook is triggered, run these checks on all `.tsx`/`.jsx`/`.svelte`/`.vue` files in the diff:
+When UI/Frontend hook is triggered, run these checks on all `.tsx`/`.jsx`/`.svelte`/`.vue` files in the diff.
+
+**Preamble — load design contract**: If `.rune/design-system.md` exists, read it once. Apply the project's **Scale Minimums** block over the defaults below (e.g., a project declaring `body ≥18px` should flag 16px body text). If the file is absent, use defaults and emit a LOW advisory: "No `.rune/design-system.md` — run `rune design` to lock visual decisions."
 
 | Check | What to Scan | Severity |
 |-------|-------------|----------|
 | **Design token compliance** | Hardcoded colors (`#fff`, `rgb(`, `hsl(`) instead of CSS variables or Tailwind tokens | WARN: "Hardcoded color at {file}:{line} — use design token" |
 | **UI-SPEC drift** | If `.rune/ui-spec.md` exists, compare component decisions (card style, form layout, nav type) against spec | BLOCK: "Component at {file} uses bordered cards but UI-SPEC locks elevated cards" |
 | **Animation accessibility** | Animations/transitions without `prefers-reduced-motion` guard | WARN: "Animation at {file}:{line} missing reduced-motion check" |
-| **Touch target size** | Interactive elements with explicit small sizing (`w-5 h-5`, `p-0.5` on buttons/links) < 44×44px | WARN: "Touch target too small at {file}:{line}" |
+| **Touch target size** | Interactive elements with explicit small sizing (`w-5 h-5`, `p-0.5` on buttons/links) < 44×44px (or project override from design-system.md) | WARN: "Touch target too small at {file}:{line}" |
+| **Scale Minimum — body text** | `text-sm` / `text-xs` / explicit `font-size: 14px` on `<p>` or primary body regions (not meta/secondary) | WARN: "Body text below 16px at {file}:{line} — reads as AI boilerplate" |
+| **Scale Minimum — hero display** | `<h1>` with `text-3xl` or smaller (30px) when the heading is in a hero/landing section | WARN: "Hero heading below 48px at {file}:{line} — insufficient visual hierarchy" |
+| **Hand-rolled SVG for standard icons** | Inline `<svg viewBox=` in JSX when the surrounding comment/class names indicate standard iconography (dashboard, menu, close, chevron, arrow, search, home, user, settings, bell, trash) | WARN: "Hand-rolled SVG at {file}:{line} — use @phosphor-icons/react or huge-icons, or ship boxed placeholder" |
+| **Manual hex accent shading** | CSS/Tailwind config defining 2+ sibling `--accent-hover` / `--accent-pressed` / `--accent-active` with hex literals (no `oklch(from ...)` or design-token chain) | WARN: "Manual hex shade at {file}:{line} — derive via oklch(from var(--accent) calc(l - 0.08) c h)" |
 | **Missing states** | Components fetching data without loading/error/empty states | WARN: "Async component at {file} missing [loading|error|empty] state" |
 | **Icon accessibility** | Decorative icons without `aria-hidden="true"`, functional icons without `aria-label` | WARN: "Icon at {file}:{line} missing aria attribute" |
 | **Inline styles** | `style={{` or `style=` attribute usage instead of classes/tokens | WARN: "Inline style at {file}:{line} — use CSS class or Tailwind" |
@@ -244,6 +251,10 @@ When UI/Frontend hook is triggered, run these checks on all `.tsx`/`.jsx`/`.svel
 | **Placeholder content** | Strings like "Lorem ipsum", "TODO", "placeholder", "test text" in JSX/template | BLOCK: "Placeholder content at {file}:{line} — replace before shipping" |
 
 **Skip if**: Diff contains only test files, config files, or non-UI code (detected by absence of JSX/template syntax).
+
+**Exception for Scale Minimums**: Secondary/meta text (`<time>`, `<small>`, form hints, table captions) is allowed at 14px. The check only fires on primary body regions — paragraphs inside `<main>`, `<article>`, card body, marketing hero/features. Use common sense or an explicit `data-scale="meta"` attribute to opt out.
+
+**Exception for hand-rolled SVG**: Project logos, data visualizations (charts/graphs via d3/recharts/visx), and human-designed illustrations are never flagged. The check fires only when class/comment context names a standard icon.
 
 #### Pack Integration
 

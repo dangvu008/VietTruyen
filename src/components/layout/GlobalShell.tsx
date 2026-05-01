@@ -44,7 +44,8 @@ const GlobalShell: React.FC<GlobalShellProps> = ({
     'projects': 'Kho truyện',
     'adaptation': 'Phóng tác',
     'community': 'Cộng đồng',
-    'ai-settings': 'Cài đặt AI & Runtime'
+    'ai-settings': 'Cài đặt AI & Runtime',
+    'templates': 'Template Truyện',
   };
   const title = TAB_LABELS[activeTab] || 'VietTruyen';
   return (

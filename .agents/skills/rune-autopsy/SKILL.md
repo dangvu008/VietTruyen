@@ -1,6 +1,7 @@
 ---
 name: rune-autopsy
-description: "Full codebase health assessment. Analyzes complexity, dependencies, dead code, tech debt, and git hotspots. Produces a health score and rescue plan."
+description: "Full codebase health assessment. Use when diagnosing project health or starting a rescue workflow on legacy code. Analyzes complexity, dependencies, dead code, tech debt, and git hotspots. Produces a health score and rescue plan."
+model: gemini-3-pro
 ---
 
 

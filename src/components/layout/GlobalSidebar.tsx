@@ -7,6 +7,7 @@
 import React from 'react';
 import {
   BookOpen,
+  BookTemplate,
   Globe2,
   LayoutDashboard,
   Scissors,
@@ -33,6 +34,7 @@ const GLOBAL_NAV_ITEMS: GlobalNavItem[] = [
   { id: 'projects', label: 'Kho truyện', icon: <BookOpen size={18} /> },
   { id: 'adaptation', label: 'Phóng tác', icon: <Scissors size={18} /> },
   { id: 'community', label: 'Cộng đồng', icon: <Globe2 size={18} /> },
+  { id: 'templates', label: 'Template', icon: <BookTemplate size={18} /> },
 ];
 
 export type SettingsTabId = 'ai' | 'appearance' | 'data' | 'notifications';

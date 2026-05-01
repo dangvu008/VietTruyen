@@ -44,6 +44,7 @@ interface DiagResult {
 
 function classifyError(errorMessage: string): DiagResult {
   const msg = errorMessage.toLowerCase();
+  const localProxyUrl = import.meta.env.VITE_LOCAL_AI_PROXY_URL || 'http://localhost:3030';
 
   // [Domain:AI] STEP 1 — Classify error type
   if (
@@ -63,7 +64,8 @@ function classifyError(errorMessage: string): DiagResult {
       description: 'Không thể kết nối tới server AI. Có thể do mạng, proxy, hoặc server đang tắt.',
       steps: [
         'Kiểm tra kết nối internet',
-        'Nếu dùng Local Proxy: chạy `npm start` trong thư mục proxy (port 3030)',
+        `Nếu dùng Local Proxy: kiểm tra service ở ${localProxyUrl}`,
+        'Nếu đang dùng app desktop, 9Router sẽ được thử bật tự động lúc app khởi động',
         'Kiểm tra biến VITE_USE_LOCAL_AI_PROXY trong .env.local',
         'Thử tắt VPN nếu đang bật',
         'Kiểm tra firewall/antivirus có chặn kết nối không',

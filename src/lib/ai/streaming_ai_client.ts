@@ -17,6 +17,7 @@ import { useAiStore } from '../../store/use_ai_store';
 import { useAuthStore } from '../../store/use_auth_store';
 import { normalizeModelIdForProvider } from './model_aliases';
 import { useTokenStore } from '../../store/use_token_store';
+import { useAiActivityStore } from '../../store/use_ai_activity_store';
 import { COST_PER_1M_INPUT, COST_PER_1M_OUTPUT } from '../../types/token_tracker';
 import type { AiTaskType } from './model_router';
 import type { TokenUsageRecord } from '../../types/token_tracker';
@@ -75,26 +76,71 @@ export async function callAiStreaming(opts: StreamingCallOptions): Promise<Strea
 
   const directApiKey = _resolveDirectApiKey(opts.provider, opts.apiKey);
   const startTime = performance.now();
+  const activityStore = useAiActivityStore.getState();
+  const activityCallId = createId();
 
-  // [Domain:AI] STEP 1 — Try local proxy streaming if enabled
-  if (import.meta.env.VITE_USE_LOCAL_AI_PROXY === 'true') {
-    const localResult = await _tryLocalProxyStreaming(resolvedOpts);
-    if (localResult) {
-      _recordStreamingUsage(resolvedOpts, localResult, startTime);
-      return localResult;
+  // [Domain:AI] STEP — Broadcast activity start for live UI
+  activityStore.startCall({
+    id: activityCallId,
+    modelId: resolvedOpts.modelId,
+    modelName: opts.modelName,
+    provider: opts.provider,
+    taskType: opts.taskType,
+    isStreaming: true,
+  });
+
+  // Wrap onChunk to also update activity store with live progress
+  const originalOnChunk = resolvedOpts.onChunk;
+  const wrappedOpts: StreamingCallOptions = {
+    ...resolvedOpts,
+    onChunk: (chunk: string, accumulated: string) => {
+      originalOnChunk(chunk, accumulated);
+      // Update live streaming progress
+      activityStore.updateStreamProgress(
+        activityCallId,
+        accumulated.length,
+        Math.ceil(accumulated.length / 4), // rough token estimate
+      );
+    },
+  };
+
+  let result: StreamingResult;
+  try {
+    // [Domain:AI] STEP 1 — Try local proxy streaming if enabled
+    if (import.meta.env.VITE_USE_LOCAL_AI_PROXY === 'true') {
+      const localResult = await _tryLocalProxyStreaming(wrappedOpts);
+      if (localResult) {
+        _recordStreamingUsage(opts, localResult, startTime);
+        _endStreamActivity(activityCallId, opts, localResult, startTime);
+        return localResult;
+      }
     }
-  }
 
-  // [Domain:AI] STEP 2 — Direct provider streaming
-  if (directApiKey) {
-    const result = await _callProviderStreaming(resolvedOpts, directApiKey);
-    _recordStreamingUsage(resolvedOpts, result, startTime);
-    return result;
-  }
+    // [Domain:AI] STEP 2 — Direct provider streaming
+    if (directApiKey) {
+      result = await _callProviderStreaming(wrappedOpts, directApiKey);
+      _recordStreamingUsage(opts, result, startTime);
+      _endStreamActivity(activityCallId, opts, result, startTime);
+      return result;
+    }
 
-  throw new Error(
-    `Streaming chưa có API key cho provider "${opts.provider}". Vui lòng thêm key trong Cài đặt AI.`
-  );
+    // No key available
+    activityStore.endCall(activityCallId, {
+      inputTokens: 0, outputTokens: 0,
+      durationMs: Math.round(performance.now() - startTime),
+      estimatedCost: 0, cached: false,
+    });
+    throw new Error(
+      `Streaming chưa có API key cho provider "${opts.provider}". Vui lòng thêm key trong Cài đặt AI.`
+    );
+  } catch (error) {
+    activityStore.endCall(activityCallId, {
+      inputTokens: 0, outputTokens: 0,
+      durationMs: Math.round(performance.now() - startTime),
+      estimatedCost: 0, cached: false,
+    });
+    throw error;
+  }
 }
 
 // ─── Provider-Specific Streaming ────────────────────────
@@ -374,18 +420,26 @@ async function _tryLocalProxyStreaming(
 ): Promise<StreamingResult | null> {
   const localProxyUrl = (import.meta.env.VITE_LOCAL_AI_PROXY_URL || 'http://localhost:3030').replace(/\/+$/, '');
   const localProxyKey = import.meta.env.VITE_LOCAL_AI_PROXY_KEY || 'local-dummy-key';
-  const isClaude = opts.modelId.includes('claude');
-  const proxyProvider = isClaude ? 'claude-kiro-oauth' : 'gemini-cli-oauth';
+  const isNineRouter = /\/v1$/i.test(localProxyUrl);
+  const endpoint = isNineRouter
+    ? `${localProxyUrl}/chat/completions`
+    : `${localProxyUrl}/${opts.modelId.includes('claude') ? 'claude-kiro-oauth' : 'gemini-cli-oauth'}/v1/chat/completions`;
+  const modelId = (() => {
+    const explicitModel = import.meta.env.VITE_LOCAL_AI_PROXY_MODEL?.trim();
+    if (explicitModel) return explicitModel;
+    if (/^(cc|if|qw|glm|ds|kimi|kmc)\//i.test(opts.modelId)) return opts.modelId;
+    return 'if/kimi-k2-thinking';
+  })();
 
   try {
-    const response = await fetch(`${localProxyUrl}/${proxyProvider}/v1/chat/completions`, {
+    const response = await fetch(endpoint, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${localProxyKey}`,
       },
       body: JSON.stringify({
-        model: opts.modelId,
+        model: isNineRouter ? modelId : opts.modelId,
         temperature: opts.temperature,
         top_p: opts.topP,
         stream: true,
@@ -459,10 +513,37 @@ function _recordStreamingUsage(
     outputTokens,
     totalTokens: inputTokens + outputTokens,
     estimatedCost,
+    estimatedCostIfNotCached: estimatedCost,
     cached: false,
     durationMs,
     outputChars: result.text.length,
   };
 
   useTokenStore.getState().recordCall(record);
+}
+
+/** Broadcast streaming completion to activity store for live UI */
+function _endStreamActivity(
+  activityCallId: string,
+  opts: StreamingCallOptions,
+  result: StreamingResult,
+  startTime: number,
+): void {
+  const durationMs = Math.round(performance.now() - startTime);
+  const inputTokens = result.usage?.inputTokens || 0;
+  const outputTokens = result.usage?.outputTokens || Math.ceil(result.text.length / 4);
+
+  const inputCostRate = COST_PER_1M_INPUT[opts.modelId] || 0.10;
+  const outputCostRate = COST_PER_1M_OUTPUT[opts.modelId] || 0.40;
+  const estimatedCost =
+    (inputTokens / 1_000_000) * inputCostRate +
+    (outputTokens / 1_000_000) * outputCostRate;
+
+  useAiActivityStore.getState().endCall(activityCallId, {
+    inputTokens,
+    outputTokens,
+    durationMs,
+    estimatedCost,
+    cached: false,
+  });
 }

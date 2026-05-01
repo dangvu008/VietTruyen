@@ -1,0 +1,126 @@
+- generic [ref=e2]:
+  - generic [ref=e56]:
+    - complementary [ref=e57]:
+      - generic [ref=e59] [cursor=pointer]:
+        - generic [ref=e60]: V
+        - generic [ref=e61]:
+          - heading "VietTruyen" [level=1] [ref=e62]
+          - paragraph [ref=e63]: The Luminal Sanctuary
+      - navigation [ref=e64]:
+        - button "Điều phối" [ref=e66] [cursor=pointer]:
+          - img [ref=e68]
+          - generic [ref=e73]: Điều phối
+        - button "Kho truyện" [ref=e74] [cursor=pointer]:
+          - img [ref=e76]
+          - generic [ref=e79]: Kho truyện
+        - button "Phóng tác" [ref=e80] [cursor=pointer]:
+          - img [ref=e82]
+          - generic [ref=e88]: Phóng tác
+        - button "Cộng đồng" [ref=e89] [cursor=pointer]:
+          - img [ref=e91]
+          - generic [ref=e96]: Cộng đồng
+        - button "AI & Runtime" [ref=e98] [cursor=pointer]:
+          - img [ref=e99]
+          - generic [ref=e102]: AI & Runtime
+      - button "Về trang chủ" [ref=e104] [cursor=pointer]:
+        - img [ref=e105]
+        - generic [ref=e108]: Về trang chủ
+    - generic [ref=e109]:
+      - generic [ref=e111]:
+        - generic [ref=e115]: VietTruyen
+        - generic [ref=e117]:
+          - button "Trợ lý AI" [ref=e118] [cursor=pointer]:
+            - img [ref=e119]
+            - text: Trợ lý AI
+          - button "Thông báo" [ref=e121] [cursor=pointer]:
+            - img [ref=e122]
+          - button "🇻🇳 Tiếng Việt" [ref=e126] [cursor=pointer]:
+            - img [ref=e127]
+            - generic [ref=e130]: 🇻🇳 Tiếng Việt
+          - generic [ref=e131]: Chế độ khách
+      - main [ref=e132]:
+        - generic [ref=e403]:
+          - generic [ref=e404]:
+            - generic [ref=e405]:
+              - img [ref=e406]
+              - text: Sáng tác mới
+            - generic [ref=e408]:
+              - generic [ref=e409]: 💡 Ý tưởng
+              - button "🤖 Tự động" [ref=e411] [cursor=pointer]:
+                - generic [ref=e412]: 🤖
+                - generic [ref=e413]: Tự động
+                - img [ref=e414]
+              - button "Mở danh sách chương" [ref=e416] [cursor=pointer]:
+                - img [ref=e417]
+          - generic [ref=e420]:
+            - generic [ref=e421]:
+              - generic [ref=e422]: Sẵn sàng cho bước Ý tưởng
+              - generic [ref=e423]: Chưa bắt đầu phiên thảo luận sáng tác.
+              - generic [ref=e424]:
+                - generic [ref=e425]: Chưa chạy · Ý tưởng
+                - generic [ref=e426]: "Nháp lưu: chưa có"
+                - generic [ref=e427]: 0 chương để duyệt
+            - button "Duyệt nháp" [ref=e429] [cursor=pointer]:
+              - img [ref=e430]
+              - text: Duyệt nháp
+          - button "Dự toán token trước khi tạo truyện Nhập ý tưởng để dự toán sát hơn với truyện bạn muốn tạo. Thiết lập còn lại 10K Toàn bộ phần còn lại 983K" [ref=e435] [cursor=pointer]:
+            - generic [ref=e436]:
+              - img [ref=e438]
+              - generic [ref=e443]:
+                - generic [ref=e444]: Dự toán token trước khi tạo truyện
+                - generic [ref=e445]: Nhập ý tưởng để dự toán sát hơn với truyện bạn muốn tạo.
+            - generic [ref=e446]:
+              - generic [ref=e447]:
+                - generic [ref=e448]: Thiết lập còn lại
+                - generic [ref=e449]: 10K
+              - generic [ref=e450]:
+                - generic [ref=e451]: Toàn bộ phần còn lại
+                - generic [ref=e452]: 983K
+              - img [ref=e453]
+          - generic [ref=e456]:
+            - generic [ref=e457]: ✨
+            - heading "Bắt đầu câu chuyện của bạn" [level=2] [ref=e458]
+            - paragraph [ref=e459]:
+              - text: Mô tả ý tưởng truyện — dài ngắn đều được.
+              - text: AI sẽ giúp bạn phát triển thành tác phẩm hoàn chỉnh.
+            - generic [ref=e460]: "💡 Thử nhanh:"
+            - generic [ref=e461]:
+              - button "⚔️ Truyện tu tiên kết hợp sci-fi" [ref=e462] [cursor=pointer]
+              - button "🏰 Tiểu thuyết cung đấu thời Lê sơ" [ref=e463] [cursor=pointer]
+              - button "🔎 Trinh thám có yếu tố siêu nhiên" [ref=e464] [cursor=pointer]
+              - button "🎮 Đô thị tu tiên hiện đại, hệ thống game" [ref=e465] [cursor=pointer]
+              - button "🚀 Xuyên không về quá khứ cứu gia tộc" [ref=e466] [cursor=pointer]
+              - button "🧟 Thế giới hậu tận thế, survival" [ref=e467] [cursor=pointer]
+          - generic [ref=e468]:
+            - textbox "Mô tả ý tưởng truyện của bạn..." [ref=e469]
+            - button [disabled] [ref=e470]:
+              - img [ref=e471]
+          - generic [ref=e474]:
+            - generic [ref=e475]:
+              - generic [ref=e476]:
+                - img [ref=e477]
+                - text: Chương đã viết
+              - button "Đóng" [ref=e481] [cursor=pointer]:
+                - img [ref=e482]
+            - generic [ref=e486]:
+              - img [ref=e487]
+              - paragraph [ref=e490]: Chưa có chương nào
+              - paragraph [ref=e491]: Chương sẽ tự xuất hiện khi bạn chấp nhận bản nháp AI, hoặc bạn có thể thêm thủ công bên dưới.
+            - button "Thêm chương thủ công" [ref=e493] [cursor=pointer]:
+              - img [ref=e494]
+              - text: Thêm chương thủ công
+  - generic [ref=e157]:
+    - generic [ref=e158]:
+      - generic [ref=e159]:
+        - img [ref=e160]
+        - generic [ref=e163]: Thông báo
+      - button [ref=e165] [cursor=pointer]:
+        - img [ref=e166]
+    - generic [ref=e169]:
+      - button "Tất cả" [ref=e170] [cursor=pointer]
+      - button "Chưa đọc" [ref=e171] [cursor=pointer]
+      - button "Nhắc nhở" [ref=e172] [cursor=pointer]
+    - generic [ref=e174]:
+      - img [ref=e175]
+      - paragraph [ref=e180]: Chưa có thông báo nào
+  - generic "Notifications"

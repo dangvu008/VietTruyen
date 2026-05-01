@@ -90,6 +90,47 @@ const S = {
     justifyContent: 'center' as const,
     marginTop: 4,
   },
+  customForm: {
+    display: 'flex',
+    alignItems: 'stretch' as const,
+    gap: 8,
+    width: 'min(100%, 640px)',
+    marginTop: 2,
+  },
+  customInput: {
+    flex: 1,
+    minWidth: 0,
+    borderRadius: 12,
+    border: '1px solid rgba(80,69,59,0.55)',
+    background: 'rgba(14,11,9,0.45)',
+    color: '#f1e4d8',
+    fontSize: 13,
+    fontWeight: 600,
+    fontFamily: 'Manrope, system-ui, sans-serif',
+    padding: '10px 12px',
+    outline: 'none',
+  },
+  customButton: {
+    display: 'inline-flex',
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    gap: 6,
+    flexShrink: 0,
+    padding: '10px 14px',
+    borderRadius: 12,
+    border: '1px solid rgba(212,165,116,0.35)',
+    background: 'rgba(212,165,116,0.09)',
+    color: '#f2c08d',
+    fontSize: 13,
+    fontWeight: 800,
+    cursor: 'pointer',
+    transition: 'all 0.2s',
+    fontFamily: 'Manrope, system-ui, sans-serif',
+  },
+  customButtonDisabled: {
+    opacity: 0.45,
+    cursor: 'not-allowed',
+  },
   divider: {
     borderTop: '1px solid rgba(80,69,59,0.3)',
     paddingTop: 10,
@@ -111,6 +152,18 @@ export default function SuggestionChips({
   onSmartSkip,
 }: SuggestionChipsProps) {
   const [hoveredId, setHoveredId] = React.useState<string | null>(null);
+  const [customIdea, setCustomIdea] = React.useState('');
+
+  const trimmedCustomIdea = customIdea.trim();
+  const canSubmitCustomIdea = trimmedCustomIdea.length > 0 && !disabled;
+
+  const handleCustomSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!canSubmitCustomIdea) return;
+
+    onChipSelect(trimmedCustomIdea);
+    setCustomIdea('');
+  };
 
   return (
     <div style={{ ...S.wrapper, opacity: disabled ? 0.5 : 1, pointerEvents: disabled ? 'none' : 'auto' }}>
@@ -139,6 +192,34 @@ export default function SuggestionChips({
           </div>
         </div>
       ))}
+
+      <form style={S.customForm} onSubmit={handleCustomSubmit}>
+        <input
+          style={S.customInput}
+          value={customIdea}
+          onChange={(event) => setCustomIdea(event.target.value)}
+          placeholder="Nhập ý riêng của bạn..."
+          disabled={disabled}
+          aria-label="Ý riêng của bạn"
+        />
+        <button
+          type="submit"
+          style={{
+            ...S.customButton,
+            ...(canSubmitCustomIdea ? {} : S.customButtonDisabled),
+          }}
+          disabled={!canSubmitCustomIdea}
+          onMouseEnter={(e) => {
+            if (!canSubmitCustomIdea) return;
+            (e.currentTarget as HTMLButtonElement).style.background = 'rgba(212,165,116,0.16)';
+          }}
+          onMouseLeave={(e) => {
+            (e.currentTarget as HTMLButtonElement).style.background = 'rgba(212,165,116,0.09)';
+          }}
+        >
+          Thêm ý
+        </button>
+      </form>
 
       {/* AI decide button */}
       {aiDecideLabel && onAiDecide && (

@@ -41,6 +41,7 @@ const TAB_IDS: TabId[] = [
   'writing-wizard',
   'review',
   'chapters',
+  'storymap',
   'memory',
   'foreshadowing',
   'export',

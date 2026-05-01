@@ -27,6 +27,16 @@ export type CreationWorkflowStatus =
   | 'error'
   | 'interrupted';
 
+export interface BatchComposeProgress {
+  current: number;
+  total: number;
+  isRunning: boolean;
+  /** Number of chapters written successfully */
+  successCount: number;
+  /** Number of chapters that failed */
+  failCount: number;
+}
+
 export interface CreationWorkflowProgress {
   step: CreationWorkflowStep;
   status: CreationWorkflowStatus;
@@ -37,6 +47,7 @@ export interface CreationWorkflowProgress {
   error: string | null;
   linkedProjectId: string | null;
   lastGeneratedChapterTitle: string | null;
+  batchCompose: BatchComposeProgress | null;
 }
 
 // ─── Suggestion Chips ───────────────────────────────────────
@@ -85,6 +96,7 @@ export interface CreationMessage {
   content: string;
   timestamp: string;
   type: CreationMessageType;
+  tokenUsage?: CreationMessageTokenUsage;
 
   /** Suggestion chips attached to AI messages (Phase 2) */
   suggestions?: SuggestionGroup[];
@@ -106,10 +118,22 @@ export interface CreationMessage {
   };
 }
 
+export interface CreationMessageTokenUsage {
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  estimatedCost?: number;
+  cached?: boolean;
+  modelName?: string;
+  durationMs?: number;
+  callCount?: number;
+}
+
 // ─── Discussion Topic (Phase 2 config) ──────────────────────
 
 export type DiscussTopicId =
   | 'magic_system'
+  | 'story_engine'
   | 'conflict'
   | 'protagonist'
   | 'tone_antagonist'
@@ -163,6 +187,8 @@ export interface CreationChatState {
   draftSavedAt: string | null;
   /** Progress marker for AI generation + handoff state */
   progress: CreationWorkflowProgress;
+  /** Whether batch compose (auto-write all chapters) is active */
+  isBatchComposing: boolean;
   /** General loading/error state */
   isAiWorking: boolean;
   error: string | null;

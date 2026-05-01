@@ -1,6 +1,7 @@
 ---
 name: rune-safeguard
-description: "Build safety nets before refactoring. Creates characterization tests, boundary markers, config freezes, and rollback points."
+description: "Build safety nets before refactoring. Use when running surgeon or any risky refactor that needs a rollback point. Creates characterization tests, boundary markers, config freezes, and rollback points."
+model: gemini-3-flash
 ---
 
 

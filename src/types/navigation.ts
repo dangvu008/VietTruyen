@@ -12,7 +12,8 @@ export type GlobalTabId =
   | 'adaptation'
   | 'community'
   | 'ai-settings'
-  | 'creation-chat';
+  | 'creation-chat'
+  | 'templates';
 
 /** Tabs thuộc Project Workspace — chỉ visible khi có activeProject */
 export type ProjectTabId =
@@ -22,6 +23,7 @@ export type ProjectTabId =
   | 'outline'
   | 'writer'
   | 'chapters'
+  | 'storymap'
   | 'review'
   | 'export';
 
@@ -46,6 +48,7 @@ export const GLOBAL_TABS = new Set<GlobalTabId>([
   'community',
   'ai-settings',
   'creation-chat',
+  'templates',
 ]);
 
 export const PROJECT_TABS = new Set<ProjectTabId>([
@@ -55,6 +58,7 @@ export const PROJECT_TABS = new Set<ProjectTabId>([
   'outline',
   'writer',
   'chapters',
+  'storymap',
   'review',
   'export',
 ]);

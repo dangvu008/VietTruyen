@@ -16,12 +16,19 @@ import { useAiStore } from '../../store/use_ai_store';
 import { useAuthStore } from '../../store/use_auth_store';
 import type { ProxyResponse } from './ai_client';
 import { getCachedResponse, setCachedResponse } from './prompt_cache';
+import type { PromptCacheKeyInput } from './prompt_cache';
 import { useTokenStore } from '../../store/use_token_store';
-import { COST_PER_1M_INPUT, COST_PER_1M_OUTPUT } from '../../types/token_tracker';
+import { useAiActivityStore } from '../../store/use_ai_activity_store';
 import type { AiTaskType } from './model_router';
 import { getModelForTask } from './model_router';
 import type { TokenUsageRecord, PipelineStepLabel } from '../../types/token_tracker';
 import { createId } from '../../core/id';
+import {
+  estimateTokens,
+  resolveModelCostRates,
+  truncateMiddleToTokenLimit,
+} from './token_estimator';
+import { enforceTaskInputBudget } from './task_budget';
 
 interface TrackedCallOptions {
   provider: string;
@@ -38,6 +45,7 @@ interface TrackedCallOptions {
   /** Pipeline correlation */
   pipelineSessionId?: string;
   pipelineStep?: PipelineStepLabel;
+  onUsage?: (record: TokenUsageRecord) => void;
 }
 
 /**
@@ -47,13 +55,37 @@ interface TrackedCallOptions {
 export async function callAiModelTracked(opts: TrackedCallOptions): Promise<string> {
   const {
     provider, modelId, modelName, baseUrl,
-    systemPrompt, userPrompt, taskType, temperature, topP, responseFormat, skipCache,
+    taskType, temperature, topP, responseFormat, skipCache,
     pipelineSessionId, pipelineStep,
   } = opts;
+  const store = useAiStore.getState();
+  const promptBudget = _applyPromptBudget(
+    opts.systemPrompt,
+    opts.userPrompt,
+    store.contextSize,
+    store.autoSummarize,
+  );
+  const { systemPrompt, userPrompt } = promptBudget;
+  enforceTaskInputBudget({
+    taskType,
+    systemPrompt,
+    userPrompt,
+  });
+  const cacheKeyInput: PromptCacheKeyInput = {
+    provider,
+    modelId,
+    taskType,
+    baseUrl,
+    responseFormat,
+    temperature,
+    topP,
+    systemPrompt,
+    userPrompt,
+  };
 
   // 1. Check prompt cache
   if (!skipCache) {
-    const cached = getCachedResponse(systemPrompt, userPrompt);
+    const cached = getCachedResponse(cacheKeyInput);
     if (cached) {
       const record = buildRecord({
         taskType, modelId, modelName, provider,
@@ -66,14 +98,16 @@ export async function callAiModelTracked(opts: TrackedCallOptions): Promise<stri
         pipelineStep,
       });
       useTokenStore.getState().recordCall(record);
+      opts.onUsage?.(record);
       return cached.response;
     }
   }
 
   // 2. Call AI via proxy
   const startTime = performance.now();
-  const store = useAiStore.getState();
   const directKeyMap = _getDirectKeyMap(store.apiKeys);
+  const activityStore = useAiActivityStore.getState();
+  const activityCallId = createId();
 
   let resolvedProvider = provider;
   let resolvedModelId = modelId;
@@ -98,6 +132,16 @@ export async function callAiModelTracked(opts: TrackedCallOptions): Promise<stri
     }
   }
 
+  // [Domain:AI] STEP — Broadcast activity start for UI
+  activityStore.startCall({
+    id: activityCallId,
+    modelId: resolvedModelId,
+    modelName: resolvedModelName,
+    provider: resolvedProvider,
+    taskType,
+    isStreaming: false,
+  });
+
   let proxyResponse: ProxyResponse;
   try {
     proxyResponse = await callAiProxy({
@@ -113,6 +157,12 @@ export async function callAiModelTracked(opts: TrackedCallOptions): Promise<stri
     });
   } catch (error) {
     if (!_shouldRetryWithAlternateProvider(error)) {
+      // [Domain:AI] STEP — Broadcast activity end on error
+      activityStore.endCall(activityCallId, {
+        inputTokens: 0, outputTokens: 0,
+        durationMs: Math.round(performance.now() - startTime),
+        estimatedCost: 0, cached: false,
+      });
       throw error;
     }
 
@@ -126,6 +176,11 @@ export async function callAiModelTracked(opts: TrackedCallOptions): Promise<stri
     } else {
       const fallbackProvider = _pickDirectKeyFallbackProvider(directKeyMap, resolvedProvider);
       if (!fallbackProvider) {
+        activityStore.endCall(activityCallId, {
+          inputTokens: 0, outputTokens: 0,
+          durationMs: Math.round(performance.now() - startTime),
+          estimatedCost: 0, cached: false,
+        });
         throw error;
       }
       resolvedProvider = fallbackProvider;
@@ -150,7 +205,7 @@ export async function callAiModelTracked(opts: TrackedCallOptions): Promise<stri
 
   // 3. Cache response (use server token counts)
   if (!skipCache) {
-    setCachedResponse(systemPrompt, userPrompt, text, usage.inputTokens, usage.outputTokens);
+    setCachedResponse(cacheKeyInput, text, usage.inputTokens, usage.outputTokens);
   }
 
   // 4. Record usage (server-side tokens are exact)
@@ -169,6 +224,17 @@ export async function callAiModelTracked(opts: TrackedCallOptions): Promise<stri
   });
   useTokenStore.getState().recordCall(record);
 
+  // [Domain:AI] STEP — Broadcast activity end for UI
+  activityStore.endCall(activityCallId, {
+    inputTokens: usage.inputTokens,
+    outputTokens: usage.outputTokens,
+    durationMs,
+    estimatedCost: record.estimatedCost,
+    cached: false,
+  });
+
+  opts.onUsage?.(record);
+
   return text;
 }
 
@@ -180,6 +246,32 @@ function _resolveBaseUrl(
   if (explicitBaseUrl) return explicitBaseUrl;
   const customProvider = store.customProviders.find((item) => item.id === provider);
   return customProvider?.baseUrl;
+}
+
+function _applyPromptBudget(
+  systemPrompt: string,
+  userPrompt: string,
+  contextSize: number,
+  autoSummarize: boolean,
+): { systemPrompt: string; userPrompt: string } {
+  if (!autoSummarize) {
+    return { systemPrompt, userPrompt };
+  }
+
+  const budget = Math.max(4000, Math.min(128000, contextSize || 16000));
+  const systemTokens = estimateTokens(systemPrompt);
+  const userTokens = estimateTokens(userPrompt);
+  const reserveTokens = 512;
+
+  if (systemTokens + userTokens <= budget) {
+    return { systemPrompt, userPrompt };
+  }
+
+  const maxUserTokens = Math.max(1000, budget - systemTokens - reserveTokens);
+  return {
+    systemPrompt,
+    userPrompt: truncateMiddleToTokenLimit(userPrompt, maxUserTokens),
+  };
 }
 
 function _getDirectKeyMap(storeApiKeys: Record<string, string>): Record<string, string> {
@@ -201,6 +293,10 @@ function _getDirectKeyMap(storeApiKeys: Record<string, string>): Record<string, 
   for (const [provider, value] of Object.entries(storeApiKeys)) {
     const key = value?.trim();
     if (key) directKeyMap[provider] = key;
+  }
+
+  if (import.meta.env.VITE_PREFER_OPENROUTER === 'true' && directKeyMap.openrouter) {
+    return { openrouter: directKeyMap.openrouter };
   }
 
   return directKeyMap;
@@ -289,11 +385,10 @@ function buildRecord(params: {
 }): TokenUsageRecord {
   const { taskType, modelId, modelName, provider, inputTokens, outputTokens, outputChars, durationMs, cached, pipelineSessionId, pipelineStep } = params;
 
-  const inputCostRate = COST_PER_1M_INPUT[modelId] || 0.10;
-  const outputCostRate = COST_PER_1M_OUTPUT[modelId] || 0.40;
-  const estimatedCost = cached
-    ? 0
-    : (inputTokens / 1_000_000) * inputCostRate + (outputTokens / 1_000_000) * outputCostRate;
+  const { inputRate: inputCostRate, outputRate: outputCostRate } = resolveModelCostRates(modelId);
+  const estimatedCostIfNotCached =
+    (inputTokens / 1_000_000) * inputCostRate + (outputTokens / 1_000_000) * outputCostRate;
+  const estimatedCost = cached ? 0 : estimatedCostIfNotCached;
 
   return {
     id: createId(),
@@ -306,6 +401,7 @@ function buildRecord(params: {
     outputTokens,
     totalTokens: inputTokens + outputTokens,
     estimatedCost,
+    estimatedCostIfNotCached,
     cached,
     durationMs,
     outputChars,

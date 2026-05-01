@@ -5,30 +5,11 @@
  * Domain: Checkers -> [Orchestration]
  */
 
-import type { CombinedReviewReport, CheckerReport } from './checker_types';
-import type { GenreProfile } from '../../types/genre_profile';
-import type { CharacterProfile } from './ooc_checker';
-import type { StrandTracker } from '../../types/strand_weave';
+import type { CombinedReviewReport, CheckerReport, CheckerContext } from './checker_types';
+import { checkerRegistry } from './checker_registry';
+import { initDefaultCheckers } from './default_checkers';
 
-import { buildHighPointCheckerPrompt, parseHighPointReport } from './high_point_checker';
-import { buildOocCheckerPrompt, parseOocReport } from './ooc_checker';
-import { buildPacingCheckerPrompt, parsePacingReport } from './pacing_checker';
-import { buildReaderPullCheckerPrompt, parseReaderPullReport } from './reader_pull_checker';
-import { buildConsistencyCheckerPrompt, parseConsistencyReport } from './consistency_checker';
-import { buildContinuityCheckerPrompt, parseContinuityReport } from './continuity_checker';
-import { buildGoldenThreeCheckerPrompt, parseGoldenThreeReport } from './golden_three_checker';
-
-export interface CheckerContext {
-  chapterId: string;
-  chapterNumber: number;
-  chapterText: string;
-  genreProfile?: GenreProfile;
-  characters: CharacterProfile[];
-  strandTracker: StrandTracker;
-  systemStateContext: string;
-  previousSummary: string;
-  activeThreads: string[];
-}
+// CheckerContext moved to checker_types.ts
 
 /**
  * Runs all 7 checkers in parallel (6 original + Golden Three).
@@ -39,57 +20,39 @@ export async function runAllCheckers(
   context: CheckerContext,
   callAi: (prompt: { system: string; user: string }) => Promise<string>
 ): Promise<CombinedReviewReport> {
-  const {
-    chapterId,
-    chapterNumber,
-    chapterText,
-    genreProfile,
-    characters,
-    strandTracker,
-    systemStateContext,
-    previousSummary,
-    activeThreads,
-  } = context;
+  const { chapterId, chapterNumber } = context;
 
-  // Build prompts for all 7 checkers
-  const highPointPrompt = buildHighPointCheckerPrompt(chapterText, chapterNumber, genreProfile);
-  const oocPrompt = buildOocCheckerPrompt(chapterText, chapterNumber, characters);
-  const pacingPrompt = buildPacingCheckerPrompt(chapterText, chapterNumber, strandTracker);
-  const readerPullPrompt = buildReaderPullCheckerPrompt(chapterText, chapterNumber, genreProfile);
-  const consistencyPrompt = buildConsistencyCheckerPrompt(chapterText, chapterNumber, systemStateContext);
-  const continuityPrompt = buildContinuityCheckerPrompt(chapterText, chapterNumber, previousSummary, activeThreads);
-  const goldenThreePrompt = buildGoldenThreeCheckerPrompt(chapterText, chapterNumber, genreProfile);
+  // Ensure default checkers are registered
+  initDefaultCheckers();
+
+  const checkers = checkerRegistry.getCheckers();
 
   // Execute AI calls in parallel
-  const results = await Promise.allSettled([
-    callAi(highPointPrompt).then(parseHighPointReport),
-    callAi(oocPrompt).then(parseOocReport),
-    callAi(pacingPrompt).then(parsePacingReport),
-    callAi(readerPullPrompt).then(parseReaderPullReport),
-    callAi(consistencyPrompt).then(parseConsistencyReport),
-    callAi(continuityPrompt).then(parseContinuityReport),
-    callAi(goldenThreePrompt).then(parseGoldenThreeReport),
-  ]);
+  const results = await Promise.allSettled(
+    checkers.map(checker => 
+      callAi(checker.buildPrompt(context)).then(checker.parseReport)
+    )
+  );
 
   const reports: CheckerReport[] = [];
   
   // Extract successful reports and handle failures gracefully
-  const agents = ['high_point', 'ooc', 'pacing', 'reader_pull', 'consistency', 'continuity', 'golden_three'];
   results.forEach((res, index) => {
+    const agentName = checkers[index].name;
     if (res.status === 'fulfilled') {
       reports.push(res.value);
     } else {
-      console.warn(`[runAllCheckers] Agent ${agents[index]} failed:`, res.reason);
+      console.warn(`[runAllCheckers] Agent ${agentName} failed:`, res.reason);
       // Construct a fallback failed report
       reports.push({
-        agent: agents[index],
+        agent: agentName,
         chapter: chapterNumber,
         overall_score: 0,
         pass: false,
         issues: [{
-          id: `sys-err-${agents[index]}`,
+          id: `sys-err-${agentName}`,
           severity: 'critical',
-          description: `Lỗi hệ thống khi gọi AI checker ${agents[index]}: ${String(res.reason)}`,
+          description: `Lỗi hệ thống khi gọi AI checker ${agentName}: ${String(res.reason)}`,
           suggestion: 'Vui lòng thử lại sau.'
         }],
         metrics: {},

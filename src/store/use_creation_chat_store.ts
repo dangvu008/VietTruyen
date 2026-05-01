@@ -9,8 +9,10 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import { createId } from '../core/id';
 import type {
   AcceptedChapter,
+  BatchComposeProgress,
   CreationChatState,
   CreationMessage,
+  CreationMessageTokenUsage,
   CreationPhase,
   CreationPlotPreview,
   CreationWorkflowStep,
@@ -26,11 +28,12 @@ interface WorkflowProgressPatch {
 interface CreationChatActions {
   addMessage: (msg: Omit<CreationMessage, 'id' | 'timestamp'>) => void;
   addUserText: (text: string) => void;
-  addAiText: (text: string) => void;
+  addAiText: (text: string, tokenUsage?: CreationMessageTokenUsage) => void;
   addAiSuggestions: (
     text: string,
     suggestions: SuggestionGroup[],
     aiDecideLabel?: string,
+    tokenUsage?: CreationMessageTokenUsage,
   ) => void;
   addSystemMessage: (text: string) => void;
   addLoadingMessage: () => string;
@@ -40,16 +43,21 @@ interface CreationChatActions {
   setCurrentTopicIndex: (index: number) => void;
   setAnswer: (topicId: string, value: string) => void;
   setPlotPreview: (preview: CreationPlotPreview | null) => void;
-  addPlotPreview: (data: CreationPlotPreview, introText?: string) => void;
+  addPlotPreview: (
+    data: CreationPlotPreview,
+    introText?: string,
+    tokenUsage?: CreationMessageTokenUsage,
+  ) => void;
   confirmPlotPreview: () => void;
   setFramework: (result: BrainstormResult) => void;
   confirmFramework: () => void;
-  addFrameworkPreview: (data: BrainstormResult) => void;
+  addFrameworkPreview: (data: BrainstormResult, tokenUsage?: CreationMessageTokenUsage) => void;
   setCurrentChapterIndex: (index: number) => void;
   addChapterDraft: (draft: {
     chapterIndex: number;
     title: string;
     content: string;
+    tokenUsage?: CreationMessageTokenUsage;
   }) => void;
   addAcceptedChapter: (chapter: Omit<AcceptedChapter, 'id' | 'createdAt' | 'updatedAt'>) => void;
   updateAcceptedChapter: (id: string, patch: Partial<AcceptedChapter>) => void;
@@ -70,6 +78,8 @@ interface CreationChatActions {
   interruptWorkflowStep: (detail?: string) => void;
   linkProject: (projectId: string) => void;
   setAiWorking: (working: boolean) => void;
+  setIsBatchComposing: (composing: boolean) => void;
+  setBatchComposeProgress: (progress: BatchComposeProgress | null) => void;
   setError: (error: string | null) => void;
   reset: () => void;
 }
@@ -114,12 +124,18 @@ const createInitialState = (): CreationChatState => ({
     error: null,
     linkedProjectId: null,
     lastGeneratedChapterTitle: null,
+    batchCompose: null,
   },
+  isBatchComposing: false,
   isAiWorking: false,
   error: null,
 });
 
 const touch = () => nowIso();
+
+function stripTransientMessages(messages: CreationMessage[]): CreationMessage[] {
+  return messages.filter((message) => message.type !== 'loading');
+}
 
 function buildPersistedMessage(
   state: CreationChatState,
@@ -154,16 +170,17 @@ export const useCreationChatStore = create<
           }),
         ),
 
-      addAiText: (text) =>
+      addAiText: (text, tokenUsage) =>
         set((state) =>
           buildPersistedMessage(state, {
             role: 'ai',
             content: text,
             type: 'text',
+            tokenUsage,
           }),
         ),
 
-      addAiSuggestions: (text, suggestions, aiDecideLabel) =>
+      addAiSuggestions: (text, suggestions, aiDecideLabel, tokenUsage) =>
         set((state) =>
           buildPersistedMessage(state, {
             role: 'ai',
@@ -171,6 +188,7 @@ export const useCreationChatStore = create<
             type: 'suggestions',
             suggestions,
             aiDecideLabel: aiDecideLabel || '🤖 AI tự quyết định',
+            tokenUsage,
           }),
         ),
 
@@ -258,7 +276,11 @@ export const useCreationChatStore = create<
           draftSavedAt: touch(),
         }),
 
-      addPlotPreview: (data, introText = 'Đây là bản review cốt truyện trước khi AI dựng khung đầy đủ:') =>
+      addPlotPreview: (
+        data,
+        introText = 'Đây là bản review cốt truyện trước khi AI dựng khung đầy đủ:',
+        tokenUsage,
+      ) =>
         set((state) => ({
           phase: 'review_plot',
           plotPreview: data,
@@ -271,6 +293,7 @@ export const useCreationChatStore = create<
               content: introText,
               type: 'plot_preview',
               plotPreviewData: data,
+              tokenUsage,
               timestamp: touch(),
             },
           ],
@@ -305,7 +328,7 @@ export const useCreationChatStore = create<
           draftSavedAt: touch(),
         })),
 
-      addFrameworkPreview: (data) =>
+      addFrameworkPreview: (data, tokenUsage) =>
         set((state) => ({
           framework: data,
           messages: [
@@ -316,6 +339,7 @@ export const useCreationChatStore = create<
               content: 'Đã tạo xong khung lớn cho truyện:',
               type: 'framework_preview',
               frameworkData: data,
+              tokenUsage,
               timestamp: touch(),
             },
           ],
@@ -341,6 +365,7 @@ export const useCreationChatStore = create<
                 ...draft,
                 charCount: draft.content.length,
               },
+              tokenUsage: draft.tokenUsage,
               timestamp: touch(),
             },
           ],
@@ -484,6 +509,22 @@ export const useCreationChatStore = create<
           draftSavedAt: touch(),
         }),
 
+      setIsBatchComposing: (composing) =>
+        set({
+          isBatchComposing: composing,
+          draftSavedAt: touch(),
+        }),
+
+      setBatchComposeProgress: (batchCompose) =>
+        set((state) => ({
+          progress: {
+            ...state.progress,
+            batchCompose,
+            updatedAt: touch(),
+          },
+          draftSavedAt: touch(),
+        })),
+
       setError: (error) =>
         set((state) => ({
           error,
@@ -507,7 +548,17 @@ export const useCreationChatStore = create<
       onRehydrateStorage: () => (state, error) => {
         if (error || !state) return;
 
+        const staleLoadingIds = state.messages
+          .filter((message) => message.type === 'loading')
+          .map((message) => message.id);
+
+        staleLoadingIds.forEach((id) => state.removeMessage(id));
         state.setAiWorking(false);
+        state.setIsBatchComposing(false);
+        // [Domain:CreationChat] Clear stale batch compose progress on reload
+        if (state.progress.batchCompose?.isRunning) {
+          state.setBatchComposeProgress(null);
+        }
         if (state.progress.status === 'running') {
           state.interruptWorkflowStep(
             `Phiên trước bị gián đoạn khi đang ${state.progress.detail.toLowerCase()}. Bạn có thể tiếp tục từ bước này.`,
@@ -518,7 +569,7 @@ export const useCreationChatStore = create<
         sessionId: state.sessionId,
         sessionStartedAt: state.sessionStartedAt,
         phase: state.phase,
-        messages: state.messages,
+        messages: stripTransientMessages(state.messages),
         currentTopicIndex: state.currentTopicIndex,
         answers: state.answers,
         plotPreview: state.plotPreview,
@@ -531,6 +582,7 @@ export const useCreationChatStore = create<
         draftSavedAt: state.draftSavedAt,
         progress: state.progress,
         isAiWorking: false,
+        isBatchComposing: false,
         error: state.error,
       }),
     },

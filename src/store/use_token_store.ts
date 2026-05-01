@@ -10,6 +10,7 @@
  */
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
+import { resolveModelCostRates } from '../lib/ai/token_estimator';
 import type {
   TokenUsageRecord,
   TokenStats,
@@ -49,6 +50,15 @@ function emptyStepBreakdown(): PipelineSession['stepBreakdown'] {
     result[step] = { tokens: 0, cost: 0, calls: 0, durationMs: 0 };
   }
   return result as PipelineSession['stepBreakdown'];
+}
+
+function resolveUncachedEquivalentCost(record: TokenUsageRecord): number {
+  if (typeof record.estimatedCostIfNotCached === 'number') {
+    return record.estimatedCostIfNotCached;
+  }
+
+  const { inputRate, outputRate } = resolveModelCostRates(record.modelId);
+  return (record.inputTokens / 1_000_000) * inputRate + (record.outputTokens / 1_000_000) * outputRate;
 }
 
 
@@ -137,7 +147,7 @@ export const useTokenStore = create<TokenState>()(
           if (r.cached) {
             cachedCalls++;
             tokensSaved += r.totalTokens;
-            costSaved += r.estimatedCost;
+            costSaved += resolveUncachedEquivalentCost(r);
           }
 
           // By task type

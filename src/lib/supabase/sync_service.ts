@@ -91,10 +91,14 @@ export async function uploadProject(project: Project, userId: string): Promise<{
     await supabase.from('outline_beats').insert(beats);
   }
 
-  // 5. Sync chapters
-  await supabase.from('chapters').delete().eq('project_id', project.id);
+  // 5. Sync chapters — UPSERT only (never DELETE-all before INSERT).
+  // uploadProject is called from syncProjectMetadataToProvider which may
+  // receive a snapshot whose chapters have been strip-serialised (content='').
+  // A DELETE-then-INSERT would wipe Supabase content in that case.
+  // Strategy: UPSERT rows that exist in the snapshot; remove orphans only when
+  // we have a non-empty keep-set to avoid accidentally clearing all chapters.
   if (project.chapters.length > 0) {
-    const chapters = project.chapters.map((c, i) => ({
+    const chaptersToUpsert = project.chapters.map((c, i) => ({
       id: c.id,
       project_id: project.id,
       title: c.title,
@@ -105,8 +109,26 @@ export async function uploadProject(project: Project, userId: string): Promise<{
       created_at: c.createdAt,
       updated_at: c.updatedAt,
     }));
-    await supabase.from('chapters').insert(chapters);
+
+    const { error: upsertError } = await (supabase
+      .from('chapters') as ReturnType<typeof supabase.from>)
+      .upsert(chaptersToUpsert, { onConflict: 'id' });
+
+    if (upsertError) {
+      console.warn('[uploadProject] Chapter upsert failed (non-fatal):', upsertError.message);
+    } else {
+      // Only remove orphan chapters when we have a confirmed keep-set
+      const keepIds = project.chapters.map((c) => c.id);
+      await supabase
+        .from('chapters')
+        .delete()
+        .eq('project_id', project.id)
+        .not('id', 'in', `(${keepIds.join(',')})`);
+    }
   }
+  // If project.chapters is empty we deliberately do NOT delete anything —
+  // an empty array here most likely means "chapters were not loaded into this
+  // snapshot" (stripped by partialize), NOT "the user deleted all chapters".
 
   // 6. Sync foreshadowings
   await supabase.from('foreshadowings').delete().eq('project_id', project.id);

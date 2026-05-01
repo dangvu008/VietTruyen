@@ -15,6 +15,7 @@ import type {
 import { quickTruncate } from './token_estimator';
 import { buildStyleGuideSection } from './style_learner';
 import { getChaptersChronological } from './surprise_engine';
+import { injectTemplateToWriterPrompt } from './template_injector';
 import {
   buildTemporalProjectView,
   getClusterAwareNarrativeState,
@@ -29,7 +30,11 @@ import { classifyAndBudget, type SceneContextBudget, type SceneTypeResult } from
 import { buildProjectIdentityBlock } from './project_identity_block';
 import { retrieveHscContext } from '../memory/hierarchical_summary_cache';
 import { retrieveForWriting } from '../memory/hybrid_memory_query';
+import { renderPackSection } from '../memory/retrieval_pack_builder';
 import { routeMemoryForScene, type MemoryRouteResult } from './scene_memory_router';
+import { buildSceneMindState, renderSceneMindSection } from './scene_mind_builder';
+import { buildSceneCard, renderSceneCardSection } from './scene_card_planner';
+import { buildVoiceConstraints, renderVoiceConstraintsSection } from './voice_constraint_builder';
 
 interface WritingContext {
   contextText: string;
@@ -111,6 +116,15 @@ export async function buildWritingContext(
   const hybridNarrative = await buildRoutedHybridSection(project, targetChapterIndex, memoryRoute, budget.characterChars);
   if (hybridNarrative) sections.push(hybridNarrative);
 
+  const sceneMindState = buildSceneMindState(project, targetChapterIndex, sceneType, memoryRoute);
+  sections.push(renderSceneMindSection(sceneMindState, project));
+
+  const sceneCard = buildSceneCard(project, targetChapterIndex, sceneType, memoryRoute, sceneMindState);
+  sections.push(renderSceneCardSection(sceneCard));
+
+  const voiceConstraints = buildVoiceConstraints(project, sceneType, sceneMindState);
+  sections.push(renderVoiceConstraintsSection(voiceConstraints));
+
   // Board 4: Scene & Power Constraints (route-aware + budget-aware)
   const bible = buildBibleSnapshot(project, budget.bibleChars);
   if (bible) sections.push(bible);
@@ -131,6 +145,12 @@ export async function buildWritingContext(
     const styleGuide = buildStyleGuideSection(styleRules);
     if (styleGuide) sections.push(styleGuide);
   }
+
+  // Board 6.5: Genre Template Guidance
+  const genre = project.genre || '';
+  const tags = project.subGenre || [];
+  const templateGuidance = injectTemplateToWriterPrompt(genre, tags, targetChapterIndex);
+  if (templateGuidance) sections.push(`## GENRE TEMPLATE GUIDANCE\n${templateGuidance}`);
 
   // Board 7: Continuity & Foreshadowing (route-aware)
   if (memoryRoute.includeForeshadowing) {
@@ -229,6 +249,12 @@ export async function buildSurpriseContext(
     if (styleGuide) sections.push(styleGuide);
   }
 
+  // [Domain:StoryTemplate] Inject genre template guidance for writer
+  const genre = project.genre || '';
+  const tags = project.subGenre || [];
+  const templateGuidance = injectTemplateToWriterPrompt(genre, tags, targetChapterIndex);
+  if (templateGuidance) sections.push(`## GENRE TEMPLATE GUIDANCE\n${templateGuidance}`);
+
   const writingContract = buildOutputContract(tensionLevel);
   if (writingContract) sections.push(writingContract);
 
@@ -281,16 +307,51 @@ function buildCharactersBrief(characters: Character[], maxChars?: number): strin
   const budget = maxChars ?? 2000;
   // [Domain:ContextSelection] Scale character trait detail based on scene budget
   const traitLimit = Math.max(30, Math.round(80 * Math.min(1, budget / 2000)));
+  const speechLimit = Math.max(50, Math.round(120 * Math.min(1, budget / 2000)));
 
   const lines = characters.map((character) => {
     const parts = [`- ${character.name} (${character.role})`];
     if (character.traits) parts.push(`: ${quickTruncate(character.traits, traitLimit)}`);
     if (character.currentStage) parts.push(` [${character.currentStage}]`);
     if (character.aliases?.length) parts.push(` aka ${character.aliases.join(', ')}`);
+    const speechSummary = buildSpeechProfileSummary(character, speechLimit);
+    if (speechSummary) parts.push(` | ${speechSummary}`);
     return parts.join('');
   });
 
   return `## NHÂN VẬT\n${lines.join('\n')}`;
+}
+
+function buildSpeechProfileSummary(character: Character, maxChars = 120): string {
+  const profile = character.speechProfile;
+  if (!profile) return '';
+
+  const parts: string[] = [];
+  if (profile.defaultSelfPronouns.length > 0) {
+    parts.push(`xưng ${profile.defaultSelfPronouns.join('/')}`);
+  }
+  if (profile.defaultAddressPronouns.length > 0) {
+    parts.push(`gọi người khác ${profile.defaultAddressPronouns.join('/')}`);
+  }
+  if (profile.forbiddenPronouns?.length) {
+    parts.push(`tránh ${profile.forbiddenPronouns.join('/')}`);
+  }
+  if (profile.situationalRules?.length) {
+    const topRule = profile.situationalRules[0];
+    const ruleTarget = topRule.targetCharacterName ? ` với ${topRule.targetCharacterName}` : '';
+    const rulePairs = topRule.preferredPairs?.join(', ') || [
+      ...(topRule.selfPronouns || []),
+      ...(topRule.addressPronouns || []),
+    ].join(' / ');
+    if (rulePairs) {
+      parts.push(`${topRule.situation}${ruleTarget}: ${rulePairs}`);
+    }
+  }
+  if (profile.toneNotes) {
+    parts.push(profile.toneNotes);
+  }
+
+  return quickTruncate(parts.filter(Boolean).join('; '), maxChars);
 }
 
 async function buildClusterAwareNarrativeBrief(
@@ -362,22 +423,27 @@ async function buildHybridRetrievalSection(
   const budget = maxChars ?? 2000;
   const lines: string[] = [];
 
-  if (result.hardCanon.length > 0) {
-    lines.push('## CANON ƯU TIÊN');
-    result.hardCanon.slice(0, 4).forEach((item) => lines.push(item));
-  }
+  const canonSection = renderPackSection('## CANON ƯU TIÊN', result.canonPack, { limit: 4 });
+  if (canonSection) lines.push(canonSection);
 
-  if (result.graphContext.length > 0) {
-    lines.push('## ĐIỂM NEO ĐỒ THỊ');
-    result.graphContext.slice(0, 4).forEach((item) => lines.push(item));
-  }
+  const graphSection = renderPackSection('## ĐIỂM NEO ĐỒ THỊ', result.graphPack, {
+    limit: 4,
+    includeTitles: true,
+  });
+  if (graphSection) lines.push(graphSection);
 
-  if (result.semanticContext.length > 0) {
-    lines.push('## TRÍCH ĐOẠN NGỮ NGHĨA LIÊN QUAN');
-    result.semanticContext
-      .slice(0, 3)
-      .forEach((item) => lines.push(quickTruncate(item, Math.max(120, Math.round(budget / 2)))));
-  }
+  const semanticSection = renderPackSection('## TRÍCH ĐOẠN NGỮ NGHĨA LIÊN QUAN', result.semanticPack, {
+    limit: 3,
+    bodyMaxChars: Math.max(120, Math.round(budget / 2)),
+  });
+  if (semanticSection) lines.push(semanticSection);
+
+  const riskSection = renderPackSection('## RỦI RO CONTINUITY', result.riskPack, {
+    limit: 2,
+    bodyMaxChars: 220,
+    includeTitles: true,
+  });
+  if (riskSection) lines.push(riskSection);
 
   return lines.join('\n');
 }
@@ -403,22 +469,31 @@ async function buildRoutedHybridSection(
   const budget = maxChars ?? 2000;
   const lines: string[] = [];
 
-  if (result.hardCanon.length > 0) {
-    lines.push('## CANON ƯU TIÊN');
-    result.hardCanon.slice(0, 4).forEach((item) => lines.push(item));
-  }
+  const canonSection = renderPackSection('## CANON ƯU TIÊN', result.canonPack, { limit: 4 });
+  if (canonSection) lines.push(canonSection);
 
   // [Domain:ContextSelection] Only include graph context when router enables it
-  if (route.includeGraphCommunities && result.graphContext.length > 0) {
-    lines.push('## ĐIỂM NEO ĐỒ THỊ');
-    result.graphContext.slice(0, 4).forEach((item) => lines.push(item));
+  if (route.includeGraphCommunities) {
+    const graphSection = renderPackSection('## ĐIỂM NEO ĐỒ THỊ', result.graphPack, {
+      limit: 4,
+      includeTitles: true,
+    });
+    if (graphSection) lines.push(graphSection);
   }
 
-  if (result.semanticContext.length > 0) {
-    lines.push('## TRÍCH ĐOẠN NGỮ NGHĨA LIÊN QUAN');
-    result.semanticContext
-      .slice(0, 3)
-      .forEach((item) => lines.push(quickTruncate(item, Math.max(120, Math.round(budget / 2)))));
+  const semanticSection = renderPackSection('## TRÍCH ĐOẠN NGỮ NGHĨA LIÊN QUAN', result.semanticPack, {
+    limit: 3,
+    bodyMaxChars: Math.max(120, Math.round(budget / 2)),
+  });
+  if (semanticSection) lines.push(semanticSection);
+
+  if (result.riskPack.length > 0) {
+    const riskSection = renderPackSection('## RỦI RO CONTINUITY', result.riskPack, {
+      limit: route.includeForeshadowing ? 2 : 1,
+      bodyMaxChars: 220,
+      includeTitles: true,
+    });
+    if (riskSection) lines.push(riskSection);
   }
 
   // [Domain:ContextSelection] Append routing reasoning as debug trace
@@ -497,6 +572,8 @@ async function buildEntityTimelineSection(project: Project, targetChapterIndex: 
         const parts = [`- ${character.name} (${character.role || 'chưa rõ vai trò'})`];
         if (character.currentStage) parts.push(` [${quickTruncate(character.currentStage, 40)}]`);
         if (character.traits) parts.push(`: ${quickTruncate(character.traits, 80)}`);
+        const speechSummary = buildSpeechProfileSummary(character, 120);
+        if (speechSummary) parts.push(` | ${speechSummary}`);
         return parts.join('');
       }
 
@@ -508,10 +585,12 @@ async function buildEntityTimelineSection(project: Project, targetChapterIndex: 
       const role = currentSnapshot?.attributes.role || character.role;
       const traits = currentSnapshot?.attributes.traits || character.traits;
       const milestones = buildSnapshotMilestones(snapshots, chapterNumber);
+      const speechSummary = buildSpeechProfileSummary(character, 120);
 
       const parts = [`- ${character.name} (${role || 'chưa rõ vai trò'})`];
       if (currentStage) parts.push(` [${quickTruncate(currentStage, 40)}]`);
       if (traits) parts.push(`: ${quickTruncate(traits, 80)}`);
+      if (speechSummary) parts.push(` | ${speechSummary}`);
       if (milestones.length > 0) parts.push(` | Mốc: ${milestones.join(' | ')}`);
       return parts.join('');
     })

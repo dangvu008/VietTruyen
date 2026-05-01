@@ -16,6 +16,7 @@ import {
   LazyDashboardPage,
   LazyProjectsPage,
   LazyCreationChatPage,
+  LazyTemplateManagerPage,
 } from './page_registry';
 import { useCreationChatStore } from '../store/use_creation_chat_store';
 
@@ -91,6 +92,9 @@ export function renderGlobalPage({
 
     case 'ai-settings':
       return <LazyAiSettingsPage activeTab={settingsTab} />;
+
+    case 'templates':
+      return <LazyTemplateManagerPage />;
 
     default:
       return (

@@ -9,6 +9,26 @@ export interface StoryFact {
   value: string;
 }
 
+export interface CharacterSpeechRule {
+  situation: string;
+  targetCharacterId?: string;
+  targetCharacterName?: string;
+  relation?: string;
+  selfPronouns?: string[];
+  addressPronouns?: string[];
+  preferredPairs?: string[];
+  forbiddenPairs?: string[];
+  note?: string;
+}
+
+export interface CharacterSpeechProfile {
+  defaultSelfPronouns: string[];
+  defaultAddressPronouns: string[];
+  forbiddenPronouns?: string[];
+  toneNotes?: string;
+  situationalRules?: CharacterSpeechRule[];
+}
+
 export interface Character {
   id: string;
   name: string;
@@ -18,6 +38,7 @@ export interface Character {
   traits: string;
   aliases?: string[];
   facts?: StoryFact[];
+  speechProfile?: CharacterSpeechProfile;
 }
 
 export interface WorldRules {
@@ -56,6 +77,17 @@ export interface Arc {
   updatedAt: string;
 }
 
+/**
+ * Tracks the lifecycle of AI generation for a chapter.
+ * - 'idle'       — No generation in progress or ever attempted
+ * - 'generating' — AI is actively writing (stream in progress)
+ * - 'done'       — Generation completed and content persisted
+ * - 'failed'     — Generation errored out or was interrupted without saving
+ *
+ * Used for: UI indicators, crash recovery detection, stale job cleanup.
+ */
+export type ChapterGenerationStatus = 'idle' | 'generating' | 'done' | 'failed';
+
 export interface Chapter {
   id: string;
   title: string;
@@ -63,6 +95,10 @@ export interface Chapter {
   content: string;
   sequenceNumber?: number;
   status: 'draft' | 'revised' | 'final' | 'published';
+  /** AI generation lifecycle status — optional for backward compatibility */
+  generationStatus?: ChapterGenerationStatus;
+  /** ISO timestamp when generation started (for timeout/stale detection) */
+  generationStartedAt?: string;
   createdAt: string;
   updatedAt: string;
   aiMeta?: ChapterAiMeta;
@@ -175,6 +211,15 @@ export type AiProvider = string; // Allows dynamic providers, built-ins: 'gemini
 export type WorkflowEngineType = 'api' | 'claude_plugin';
 
 export type AiModelTier = 'fast' | 'balanced' | 'quality';
+export type AiModelCapability =
+  | 'cheap'
+  | 'long_context'
+  | 'creative_writing'
+  | 'vietnamese'
+  | 'reasoning'
+  | 'editing'
+  | 'summarization'
+  | 'local';
 
 export interface AiModel {
   id: string;
@@ -185,4 +230,8 @@ export interface AiModel {
   baseUrl?: string;
   isCustom: boolean;
   tier: AiModelTier;
+  inputCostPer1M?: number;
+  outputCostPer1M?: number;
+  contextWindow?: number;
+  capabilities?: AiModelCapability[];
 }

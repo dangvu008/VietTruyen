@@ -2,10 +2,17 @@ import { create } from 'zustand';
 import { executeWorkflowIntent } from '../lib/workflow/writer_orchestrator';
 import type { SupportedWorkflowIntent, WorkflowSession } from '../types/workflow';
 
+export interface StreamingIntentOptions {
+  /** Realtime chunk callback — enables streaming mode for the write step */
+  onChunk?: (chunk: string, accumulated: string) => void;
+  /** AbortSignal to cancel generation mid-stream */
+  signal?: AbortSignal;
+}
+
 interface WorkflowSessionState {
   sessions: Record<string, WorkflowSession>;
   activeSessionId: string | null;
-  startIntent: (intent: SupportedWorkflowIntent) => Promise<WorkflowSession>;
+  startIntent: (intent: SupportedWorkflowIntent, opts?: StreamingIntentOptions) => Promise<WorkflowSession>;
   setActiveSession: (sessionId: string | null) => void;
   clearActiveSession: () => void;
   removeSession: (sessionId: string) => void;
@@ -16,7 +23,7 @@ export const useWorkflowSessionStore = create<WorkflowSessionState>((set, get) =
   sessions: {},
   activeSessionId: null,
 
-  startIntent: async (intent) => {
+  startIntent: async (intent, opts) => {
     const session = await executeWorkflowIntent(intent, {
       onUpdate: (nextSession) => {
         set((state) => ({
@@ -27,6 +34,8 @@ export const useWorkflowSessionStore = create<WorkflowSessionState>((set, get) =
           activeSessionId: nextSession.id,
         }));
       },
+      onChunk: opts?.onChunk,
+      signal: opts?.signal,
     });
 
     return session;

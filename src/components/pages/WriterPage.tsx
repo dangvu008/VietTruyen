@@ -14,7 +14,7 @@ import type { EditorMode } from '../story-editor/editor_types';
 interface WriterPageProps {
   project: Project;
   onUpdateProject: (id: string, patch: Partial<Project>) => void;
-  onAddChapter: (id: string, chapter: any) => void;
+  onAddChapter: (id: string, chapter: Chapter) => Promise<void> | void;
   initialMode?: EditorMode;
   onOpenAi?: () => void;
   onNavigate?: (tab: string) => void;

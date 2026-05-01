@@ -1,6 +1,7 @@
 ---
 name: rune-cook
 description: "Feature implementation orchestrator. ALWAYS use this skill for ANY code change — implement, build, add feature, create, fix bug, or any task that modifies source code. This is the default route for 70% of all requests. Runs full TDD cycle: understand → plan → test → implement → quality → verify → commit."
+model: gemini-3-flash
 ---
 
 
@@ -309,9 +310,10 @@ Contract violations are NON-NEGOTIABLE. If `.rune/contract.md` exists and a plan
 2. **Feature workspace** (opt-in) — for non-trivial features (3+ phases), suggest creating `.rune/features/<feature-name>/` with `spec.md`, `plan.md`, `decisions.md`, `status.md`. Skip for simple bug fixes, fast mode.
 3. Create implementation plan: exact files to create/modify, change order, dependencies, active decision constraints
 4. If multiple valid approaches exist → invoke `the rune-brainstorm skill` for trade-off analysis
-5. Present plan to user for approval
-6. If feature workspace was created, write approved plan to `.rune/features/<name>/plan.md`
-7. Mark Phase 2 as `completed`
+5. **Frontend detection** — if task touches `.tsx/.jsx/.vue/.svelte/.css`, component files, or mentions "UI/page/screen/design/layout/landing": invoke `the rune-design skill` BEFORE plan approval. Pass hint `mode: "tweaks-default"` — design proposes ONE opinionated default per `.rune/design-system.md` (Step 2.7), not a 5-option menu. User replies with tweaks ("more professional", "darker") rather than picking from a list. If `.rune/design-system.md` is missing, design creates it first.
+6. Present plan to user for approval
+7. If feature workspace was created, write approved plan to `.rune/features/<name>/plan.md`
+8. Mark Phase 2 as `completed`
 
 **Gate**: User MUST approve the plan before proceeding. Do NOT skip this.
 
@@ -362,12 +364,12 @@ If the coder model needs info from other phases, it's in the Cross-Phase Context
 
 1. Mark Phase 3 as `in_progress`
 2. **Eval definitions** (Full/Critical rigor only): Before writing tests, define capability evals (pass@k) and regression evals (pass^k) in `.rune/evals/<feature>.md`. Capability evals test "can the system do this new thing?" — regression evals test "did we break existing behavior?" Skip for Fast/Standard rigor levels.
-3. Write test files based on the plan — cover primary use case + edge cases; tests MUST be runnable
+3. Write ONE test for the next behavior — vertical slicing required, see `the rune-test skill` `references/vertical-tdd.md`. Bulk-writing tests = horizontal violation, blocks Phase 4
 4. **Python async pre-check** (if async-first Python flagged in Phase 1): verify `pytest-asyncio` is installed and `asyncio_mode = "auto"` is in `pyproject.toml` — if missing, warn user before writing async tests
-5. Run tests to verify they FAIL — expected: RED because implementation doesn't exist yet
-6. Mark Phase 3 as `completed`
+5. Run the test to verify it FAILS — expected: RED because implementation doesn't exist yet
+6. Mark Phase 3 as `completed` (one cycle); Phase 4 implements that one cycle, then loop returns here for the next test
 
-**Gate**: Tests MUST exist and MUST fail. If tests pass without implementation → tests are wrong, rewrite them.
+**Gate**: Test MUST exist and MUST fail. If test passes without implementation → test is wrong, rewrite. If 2+ tests staged before any GREEN → `tdd.horizontal.violation` signal, unwind to one test.
 
 ## Phase 4: IMPLEMENT (TDD Green)
 
@@ -385,6 +387,7 @@ If the coder model needs info from other phases, it's in the Cross-Phase Context
 4. Run tests after each significant change — if fail → debug and fix
    - **Python async** (if async-first flagged): no blocking calls in async functions — `time.sleep` → `asyncio.sleep`, `requests` → `httpx.AsyncClient`, use `asyncio.gather()` for parallel I/O
 5. If stuck → invoke `the rune-debug skill` (max 3 debug↔fix loops). Fixes outside plan scope require user approval (R4).
+   - **Oracle reattach check** — between tasks, glob `.rune/oracle-pending/*.json`. For any record with `status=pending`, invoke `session-bridge --reattach <sessionId>`. If `complete` → consume the response (route to debug/fix per `sourceSkill`). If `pending` → continue with next independent task. If `failed` → continue without second opinion.
 6. **Re-plan check** — evaluate before Phase 5: max debug loops hit? out-of-scope files changed? new dep changes approach? user scope change? If any fire → invoke `the rune-plan skill` with delta context, get user approval before resuming.
 7. **Approach Pivot Gate** — if re-plan ALSO fails:
 
@@ -753,7 +756,7 @@ Mentally track tool call fingerprints. 3 identical calls → WARN. 5 identical c
 | 1 | `logic-guardian` | L2 | Conditional: when `.rune/logic-manifest.json` exists — protect complex business logic before any edits |
 | 2 | `plan` | L2 | Create implementation plan |
 | 2 | `brainstorm` | L2 | Trade-off analysis / rescue mode |
-| 2 | `design` | L2 | UI/design phase for frontend features |
+| 2 | `design` | L2 | UI/design phase for frontend features — invoke with `mode: "tweaks-default"` (one opinionated default + accept natural-language tweaks, not a 5-option menu) |
 | 2.5 | `adversary` | L2 | Red-team challenge on approved plan |
 | 3 | `test` | L2 | Write failing tests (RED phase) |
 | 4 | `fix` | L2 | Implement code changes (GREEN phase) |

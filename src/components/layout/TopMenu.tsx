@@ -47,6 +47,7 @@ export type TabId =
   | 'writing-wizard'
   | 'review'
   | 'chapters'
+  | 'storymap'
   | 'memory'
   | 'foreshadowing'
   | 'export'
@@ -72,6 +73,7 @@ const TAB_KEY_MAP: Record<TabId, string> = {
   'writing-wizard': 'writingWizard',
   review: 'review',
   chapters: 'chapters',
+  storymap: 'storymap',
   memory: 'memory',
   foreshadowing: 'foreshadowing',
   export: 'export',

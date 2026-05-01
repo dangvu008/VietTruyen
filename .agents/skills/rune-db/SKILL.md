@@ -1,6 +1,7 @@
 ---
 name: rune-db
 description: "Database workflow specialist. Generates migration files with rollback scripts, detects breaking schema changes, and validates query parameterization."
+model: gemini-3-flash
 ---
 
 

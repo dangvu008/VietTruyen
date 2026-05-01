@@ -325,4 +325,53 @@ describe('executeFullWritePipeline', () => {
     expect(result.content).toBe('draft-two');
     expect(result.reviewReport?.combined_score).toBe(82);
   });
+
+  it('skips review, polish, data extraction, and memory sync in fast quality mode', async () => {
+    const progressEvents: Array<{ step: number; status: string; label: string }> = [];
+
+    const result = await executeFullWritePipeline({
+      project: makeProject(),
+      targetChapterIndex: 0,
+      mode: 'create',
+      tensionLevel: 'nudge',
+      qualityMode: 'fast',
+      onProgress: (progress) => progressEvents.push(progress),
+    });
+
+    expect(writeChapterFromBranch).toHaveBeenCalledTimes(1);
+    expect(runAllCheckers).not.toHaveBeenCalled();
+    expect(analyzeChapterStyle).not.toHaveBeenCalled();
+    expect(executePostWritePipeline).not.toHaveBeenCalled();
+    expect(syncProjectMemoryBridge).not.toHaveBeenCalled();
+    expect(result.reviewReport).toBeNull();
+    expect(result.styleAnalysis).toBeNull();
+    expect(result.dataResult).toBeNull();
+    expect(result.stepTimings).not.toHaveProperty('data_agent');
+    expect(result.stepTimings).not.toHaveProperty('memory_sync');
+    expect(progressEvents).toEqual(expect.arrayContaining([
+      expect.objectContaining({ step: 3, status: 'skipped' }),
+      expect.objectContaining({ step: 4, status: 'skipped' }),
+      expect.objectContaining({ step: 5, status: 'skipped' }),
+      expect.objectContaining({ step: 6, status: 'skipped' }),
+    ]));
+  });
+
+  it('skips checker review but keeps polish and memory maintenance in balanced quality mode', async () => {
+    const result = await executeFullWritePipeline({
+      project: makeProject(),
+      targetChapterIndex: 0,
+      mode: 'create',
+      tensionLevel: 'nudge',
+      qualityMode: 'balanced',
+    });
+
+    expect(writeChapterFromBranch).toHaveBeenCalledTimes(1);
+    expect(runAllCheckers).not.toHaveBeenCalled();
+    expect(analyzeChapterStyle).toHaveBeenCalledTimes(1);
+    expect(executePostWritePipeline).toHaveBeenCalledTimes(1);
+    expect(syncProjectMemoryBridge).toHaveBeenCalledTimes(1);
+    expect(result.reviewReport).toBeNull();
+    expect(result.styleAnalysis?.overallScore).toBe(8);
+    expect(result.dataResult?.summary.chapter_id).toBe('pipeline-draft-0');
+  });
 });

@@ -1,18 +1,29 @@
 {
   "version": 2,
-  "generated": "2026-04-18T09:55:17.028Z",
-  "skillCount": 62,
+  "generated": "2026-05-01T00:07:07.837Z",
+  "skillCount": 63,
   "skills": {
     "adversary": {
       "layer": "L2",
       "model": "opus",
       "group": "quality",
-      "description": "Pre-implementation red-team analysis. Challenges plans before code is written — finds edge cases, security holes, scalability bottlenecks, error propagation risks, and integration conflicts. Catches f",
+      "description": "Pre-implementation red-team analysis. Use when a plan is high-risk, critical path, or expensive to reverse. Challenges plans before code is written — finds edge cases, security holes, scalability bott",
       "connections": [
         "sentinel",
         "perf",
         "scout"
-      ]
+      ],
+      "signals": {
+        "emit": [
+          "oracle.dispatched",
+          "oracle.response",
+          "oracle.failed"
+        ],
+        "listen": [
+          "agent.stuck",
+          "context.preview"
+        ]
+      }
     },
     "asset-creator": {
       "layer": "L3",
@@ -37,14 +48,16 @@
         "emit": [
           "audit.complete"
         ],
-        "listen": []
+        "listen": [
+          "context.preview"
+        ]
       }
     },
     "autopsy": {
       "layer": "L2",
       "model": "opus",
       "group": "rescue",
-      "description": "Full codebase health assessment. Analyzes complexity, dependencies, dead code, tech debt, and git hotspots. Produces a health score and rescue plan.",
+      "description": "Full codebase health assessment. Use when diagnosing project health or starting a rescue workflow on legacy code. Analyzes complexity, dependencies, dead code, tech debt, and git hotspots. Produces a ",
       "connections": [
         "scout",
         "journal",
@@ -55,11 +68,17 @@
       "layer": "L2",
       "model": "opus",
       "group": "creation",
-      "description": "Business Analyst agent. Deeply understands user requirements before any planning or coding begins. Asks probing questions, identifies hidden requirements, maps stakeholders, defines scope boundaries, ",
+      "description": "Business Analyst agent. Use when starting a new feature requiring requirements elicitation BEFORE plan or cook. Asks probing questions, identifies hidden requirements, maps stakeholders, defines scope",
       "connections": [
         "plan",
         "scout"
-      ]
+      ],
+      "signals": {
+        "emit": [
+          "outofscope.match"
+        ],
+        "listen": []
+      }
     },
     "brainstorm": {
       "layer": "L2",
@@ -92,14 +111,14 @@
       "layer": "L3",
       "model": "haiku",
       "group": "validation",
-      "description": "Validates agent claims against evidence trail. Catches 'done' without proof, 'tests pass' without output, 'fixed' without verification. Called by cook and team at workflow end.",
+      "description": "Validates agent claims against evidence trail. Use when verifying an agent has actually done what it claims — auto-fires at workflow end. Catches 'done' without proof, 'tests pass' without output, 'fi",
       "connections": []
     },
     "constraint-check": {
       "layer": "L3",
       "model": "haiku",
       "group": "validation",
-      "description": "Meta-validator for HARD-GATEs. Verifies that skills' mandatory constraints were followed during a workflow. Called by cook, team, and audit to audit discipline compliance.",
+      "description": "Meta-validator for HARD-GATEs. Use when auditing whether a skill's mandatory constraints were actually followed during a workflow (not just claimed). Called by cook, team, and audit for discipline com",
       "connections": []
     },
     "context-engine": {
@@ -109,13 +128,19 @@
       "description": "Context window management. Auto-triggered when context is filling up. Triggers smart compaction and preserves critical information across compaction boundaries. Called by L1 orchestrators at context t",
       "connections": [
         "session-bridge"
-      ]
+      ],
+      "signals": {
+        "emit": [
+          "context.preview"
+        ],
+        "listen": []
+      }
     },
     "context-pack": {
       "layer": "L3",
       "model": "haiku",
       "group": "state",
-      "description": "Creates structured handoff briefings between agents. Packages task context, constraints, and progress into a compact packet that subagents can consume without re-reading the full conversation. Prevent",
+      "description": "Creates structured handoff briefings between agents. Use when delegating complex work to subagents that would otherwise lose context. Packages task context, constraints, and progress into a compact pa",
       "connections": []
     },
     "cook": {
@@ -138,6 +163,7 @@
         "ba",
         "plan",
         "brainstorm",
+        "design",
         "adversary",
         "test",
         "debug",
@@ -193,10 +219,12 @@
       ],
       "signals": {
         "emit": [
-          "bug.diagnosed"
+          "bug.diagnosed",
+          "agent.stuck"
         ],
         "listen": [
-          "tests.failed"
+          "tests.failed",
+          "oracle.response"
         ]
       }
     },
@@ -239,13 +267,15 @@
       "model": "sonnet",
       "group": "creation",
       "description": "Design system reasoning. Maps product domain to style, palette, typography, and platform-specific patterns. Generates .rune/design-system.md as the shared design contract for all UI-generating skills.",
-      "connections": []
+      "connections": [
+        "review"
+      ]
     },
     "doc-processor": {
       "layer": "L3",
       "model": "sonnet",
       "group": "utility",
-      "description": "Generate and parse office documents — PDF, DOCX, XLSX, PPTX, CSV. Pure format utility for creating reports, exporting data, and processing uploaded documents.",
+      "description": "Generate and parse office documents — PDF, DOCX, XLSX, PPTX, CSV. Use when creating reports, exporting tabular data, or processing uploaded office files. NOT for project documentation (use docs).",
       "connections": []
     },
     "docs-seeker": {
@@ -259,7 +289,7 @@
       "layer": "L2",
       "model": "sonnet",
       "group": "delivery",
-      "description": "Auto-generate and maintain project documentation. Creates README, API docs, architecture docs, changelogs, and keeps them in sync with code changes. The \"docs are never outdated\" skill.",
+      "description": "Auto-generate and maintain project documentation. Creates README, API docs, architecture docs, changelogs, and keeps them in sync with code changes. The \\\"docs are never outdated\\\" skill.",
       "connections": [
         "scout",
         "git"
@@ -287,13 +317,15 @@
       ],
       "signals": {
         "emit": [
-          "code.changed"
+          "code.changed",
+          "agent.stuck"
         ],
         "listen": [
           "bug.diagnosed",
           "review.issues",
           "preflight.blocked",
-          "security.blocked"
+          "security.blocked",
+          "oracle.response"
         ]
       }
     },
@@ -308,7 +340,7 @@
       "layer": "L2",
       "model": "sonnet",
       "group": "creation",
-      "description": "Clone, port, or convert features from any GitHub repo into your project. Understand before copy, challenge before implement. 4 modes: port (rewrite), compare (analysis), copy (transplant), improve (co",
+      "description": "Clone, port, or convert features from any GitHub repo into your project. Use when stealing patterns from external repos or porting proven code. Understand before copy, challenge before implement. 4 mo",
       "connections": [
         "scout",
         "fix",
@@ -328,11 +360,32 @@
       "layer": "L3",
       "model": "haiku",
       "group": "validation",
-      "description": "Verify AI-generated imports, API calls, and packages actually exist. Catches phantom functions, non-existent packages, and slopsquatting attacks.",
+      "description": "Verify AI-generated imports, API calls, and packages actually exist. Use when finishing AI-generated code that introduces new imports or external API calls — auto-fires after fix/cook to catch phantom",
       "connections": [
         "research",
         "docs-seeker"
       ]
+    },
+    "improve-architecture": {
+      "layer": "L2",
+      "model": "opus",
+      "group": "quality",
+      "description": "Find architectural friction in a codebase and propose deepening opportunities. Use when user wants to improve architecture, find refactor candidates, consolidate shallow modules, or make a codebase mo",
+      "connections": [
+        "improve-architecture",
+        "brainstorm",
+        "surgeon",
+        "journal"
+      ],
+      "signals": {
+        "emit": [
+          "architecture.shallow.flagged",
+          "architecture.deletion.passed"
+        ],
+        "listen": [
+          "codebase.scanned"
+        ]
+      }
     },
     "incident": {
       "layer": "L2",
@@ -353,14 +406,14 @@
       "layer": "L3",
       "model": "haiku",
       "group": "validation",
-      "description": "Verify integrity of persisted state, skill outputs, and context bus data. Detects prompt injection, memory poisoning, identity spoofing, and adversarial payloads in .rune/ files and agent outputs. Cal",
+      "description": "Verify integrity of persisted state, skill outputs, and context bus data. Use when validating .rune/ files or sub-agent outputs against prompt injection, memory poisoning, identity spoofing, or advers",
       "connections": []
     },
     "journal": {
       "layer": "L3",
       "model": "haiku",
       "group": "state",
-      "description": "Persistent state tracking and Architecture Decision Records across sessions. Manages progress state, module health, dependency graphs, and ADRs for any workflow.",
+      "description": "Persistent state tracking and Architecture Decision Records across sessions. Use when recording a decision, ADR, or progress that must survive session boundaries. Manages progress state, module health",
       "connections": [],
       "signals": {
         "emit": [],
@@ -393,8 +446,14 @@
       "layer": "L2",
       "model": "sonnet",
       "group": "quality",
-      "description": "Protects complex business logic from accidental deletion or overwrite. Maintains a logic manifest, enforces pre-edit gates, and validates post-edit diffs.",
-      "connections": []
+      "description": "Protects complex business logic from accidental deletion or overwrite. Use when editing payment, trading, state-machine, or other load-bearing business logic where a single deleted line can cause sile",
+      "connections": [],
+      "signals": {
+        "emit": [],
+        "listen": [
+          "invariants.loaded"
+        ]
+      }
     },
     "marketing": {
       "layer": "L2",
@@ -409,13 +468,19 @@
         "video-creator",
         "slides",
         "browser-pilot"
-      ]
+      ],
+      "signals": {
+        "emit": [
+          "media.request"
+        ],
+        "listen": []
+      }
     },
     "mcp-builder": {
       "layer": "L2",
       "model": "sonnet",
       "group": "creation",
-      "description": "Build Model Context Protocol servers from specifications. Generates tool definitions, resource handlers, and test suites for MCP servers in TypeScript or Python (FastMCP).",
+      "description": "Build Model Context Protocol servers from specifications. Use when creating an MCP server for a tool, resource, or service that AI agents should access. Generates tool definitions, resource handlers, ",
       "connections": [
         "verification"
       ]
@@ -431,13 +496,14 @@
       "layer": "L2",
       "model": "sonnet",
       "group": "quality",
-      "description": "Auto-generate project context for AI sessions. Scans codebase, creates CLAUDE.md and .rune/ setup so every future session starts with full context.",
+      "description": "Auto-generate project context for AI sessions. Use when starting on a new repo for the first time, or when CLAUDE.md / .rune/ context is missing or stale. Scans codebase and creates the setup so every",
       "connections": [
         "scout"
       ],
       "signals": {
         "emit": [
-          "project.onboarded"
+          "project.onboarded",
+          "invariants.seeded"
         ],
         "listen": []
       }
@@ -477,7 +543,7 @@
       "layer": "L2",
       "model": "sonnet",
       "group": "quality",
-      "description": "Pre-commit quality gate that catches \"almost right\" code. Goes beyond linting — checks logic correctness, error handling, regressions, and completeness.",
+      "description": "Pre-commit quality gate that catches 'almost right' code. Use when about to commit — auto-fires before commit to validate logic correctness, error handling, regressions, and completeness. Goes beyond ",
       "connections": [
         "scout",
         "sentinel",
@@ -536,7 +602,13 @@
       "model": "sonnet",
       "group": "quality",
       "description": "Use when receiving code review feedback, PR comments, or external suggestions before implementing any changes. Prevents blind implementation, enforces verification-first discipline.",
-      "connections": []
+      "connections": [],
+      "signals": {
+        "emit": [],
+        "listen": [
+          "outofscope.match"
+        ]
+      }
     },
     "review": {
       "layer": "L2",
@@ -549,6 +621,7 @@
         "sentinel",
         "scout",
         "adversary",
+        "design",
         "review"
       ],
       "signals": {
@@ -558,7 +631,8 @@
         ],
         "listen": [
           "code.changed",
-          "docs.updated"
+          "docs.updated",
+          "context.preview"
         ]
       }
     },
@@ -566,7 +640,7 @@
       "layer": "L2",
       "model": "sonnet",
       "group": "rescue",
-      "description": "Build safety nets before refactoring. Creates characterization tests, boundary markers, config freezes, and rollback points.",
+      "description": "Build safety nets before refactoring. Use when running surgeon or any risky refactor that needs a rollback point. Creates characterization tests, boundary markers, config freezes, and rollback points.",
       "connections": [
         "scout",
         "verification",
@@ -584,7 +658,7 @@
       "layer": "L1",
       "model": "sonnet",
       "group": "orchestrator",
-      "description": "Autonomous project bootstrapper. Generates complete project from a description — structure, code, tests, docs, config. Orchestrates ba → plan → design → fix → test → docs → git in one pipeline. The \"0",
+      "description": "Autonomous project bootstrapper. Generates complete project from a description — structure, code, tests, docs, config. Orchestrates ba → plan → design → fix → test → docs → git in one pipeline. The \\\"",
       "connections": [
         "ba",
         "research",
@@ -616,14 +690,16 @@
         "emit": [
           "codebase.scanned"
         ],
-        "listen": []
+        "listen": [
+          "agent.stuck"
+        ]
       }
     },
     "sentinel-env": {
       "layer": "L3",
       "model": "haiku",
       "group": "validation",
-      "description": "Environment-aware pre-flight check. Validates OS, runtime versions, installed tools, port availability, env vars, and disk space BEFORE coding starts. Prevents \"works on my machine\" failures. Like sen",
+      "description": "Environment-aware pre-flight check. Use when starting work in a new environment, switching machines, or when 'works on my machine' bugs surface. Validates OS, runtime versions, installed tools, port a",
       "connections": []
     },
     "sentinel": {
@@ -660,10 +736,14 @@
         "integrity-check"
       ],
       "signals": {
-        "emit": [],
+        "emit": [
+          "invariants.loaded",
+          "oracle.failed"
+        ],
         "listen": [
           "phase.complete",
-          "checkpoint.request"
+          "checkpoint.request",
+          "oracle.dispatched"
         ]
       }
     },
@@ -736,7 +816,7 @@
       "layer": "L2",
       "model": "sonnet",
       "group": "rescue",
-      "description": "Incremental refactorer. Refactors ONE module per session using proven patterns — Strangler Fig, Branch by Abstraction, Expand-Migrate-Contract.",
+      "description": "Incremental refactorer. Use within a rescue workflow after safeguard has set up safety nets. Refactors ONE module per session using proven patterns — Strangler Fig, Branch by Abstraction, Expand-Migra",
       "connections": [
         "scout",
         "safeguard",
@@ -763,7 +843,9 @@
         "emit": [
           "phase.complete"
         ],
-        "listen": []
+        "listen": [
+          "context.preview"
+        ]
       }
     },
     "test": {
@@ -821,7 +903,7 @@
       "layer": "L3",
       "model": "sonnet",
       "group": "monitoring",
-      "description": "Post-deploy monitoring. Checks if deployed app is healthy — HTTP status, response times, error detection, and smoke test report.",
+      "description": "Post-deploy monitoring. Use when verifying a deployed app is healthy after deploy or launch — auto-fires from launch/deploy. Checks HTTP status, response times, error detection, and smoke test report.",
       "connections": [],
       "signals": {
         "emit": [
@@ -836,7 +918,7 @@
       "layer": "L3",
       "model": "haiku",
       "group": "utility",
-      "description": "Git worktree lifecycle management. Creates isolated workspaces for parallel development, manages branches, handles cleanup. Called by team and cook for parallel isolation.",
+      "description": "Git worktree lifecycle management. Use when team needs parallel isolated workspaces for multi-stream development, or when an experiment must not touch the main working tree. Creates isolated workspace",
       "connections": []
     }
   },
@@ -891,6 +973,7 @@
       "ba",
       "plan",
       "brainstorm",
+      "design",
       "adversary",
       "test",
       "debug",
@@ -923,7 +1006,9 @@
       "browser-pilot",
       "watchdog"
     ],
-    "design": [],
+    "design": [
+      "review"
+    ],
     "doc-processor": [],
     "docs-seeker": [],
     "docs": [
@@ -949,6 +1034,12 @@
     "hallucination-guard": [
       "research",
       "docs-seeker"
+    ],
+    "improve-architecture": [
+      "improve-architecture",
+      "brainstorm",
+      "surgeon",
+      "journal"
     ],
     "incident": [
       "journal"
@@ -1015,6 +1106,7 @@
       "sentinel",
       "scout",
       "adversary",
+      "design",
       "review"
     ],
     "safeguard": [
@@ -1122,6 +1214,51 @@
     "worktree": []
   },
   "signals": {
+    "oracle.dispatched": {
+      "emitters": [
+        "adversary"
+      ],
+      "listeners": [
+        "session-bridge"
+      ]
+    },
+    "oracle.response": {
+      "emitters": [
+        "adversary"
+      ],
+      "listeners": [
+        "debug",
+        "fix"
+      ]
+    },
+    "oracle.failed": {
+      "emitters": [
+        "adversary",
+        "session-bridge"
+      ],
+      "listeners": []
+    },
+    "agent.stuck": {
+      "emitters": [
+        "debug",
+        "fix"
+      ],
+      "listeners": [
+        "adversary",
+        "scout"
+      ]
+    },
+    "context.preview": {
+      "emitters": [
+        "context-engine"
+      ],
+      "listeners": [
+        "adversary",
+        "audit",
+        "review",
+        "team"
+      ]
+    },
     "audit.complete": {
       "emitters": [
         "audit"
@@ -1129,6 +1266,14 @@
       "listeners": [
         "deploy",
         "launch"
+      ]
+    },
+    "outofscope.match": {
+      "emitters": [
+        "ba"
+      ],
+      "listeners": [
+        "review-intake"
       ]
     },
     "ideas.ready": {
@@ -1146,6 +1291,7 @@
       "listeners": [
         "brainstorm",
         "graft",
+        "improve-architecture",
         "plan"
       ]
     },
@@ -1301,6 +1447,18 @@
         "journal"
       ]
     },
+    "architecture.shallow.flagged": {
+      "emitters": [
+        "improve-architecture"
+      ],
+      "listeners": []
+    },
+    "architecture.deletion.passed": {
+      "emitters": [
+        "improve-architecture"
+      ],
+      "listeners": []
+    },
     "incident.detected": {
       "emitters": [
         "watchdog"
@@ -1309,6 +1467,20 @@
         "incident"
       ]
     },
+    "invariants.loaded": {
+      "emitters": [
+        "session-bridge"
+      ],
+      "listeners": [
+        "logic-guardian"
+      ]
+    },
+    "media.request": {
+      "emitters": [
+        "marketing"
+      ],
+      "listeners": []
+    },
     "project.onboarded": {
       "emitters": [
         "onboard"
@@ -1316,6 +1488,12 @@
       "listeners": [
         "plan"
       ]
+    },
+    "invariants.seeded": {
+      "emitters": [
+        "onboard"
+      ],
+      "listeners": []
     }
   },
   "intents": {
@@ -1599,7 +1777,8 @@
       "layer": "L2",
       "model": "sonnet",
       "chain": [
-        "design"
+        "design",
+        "review"
       ]
     },
     "perf": {

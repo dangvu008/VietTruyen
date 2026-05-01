@@ -18,6 +18,7 @@ import {
   getProjectSnapshot,
 } from '../../store/use_project_store';
 import { useWorkflowSessionStore } from '../../store/use_workflow_session_store';
+import { useTokenStore } from '../../store/use_token_store';
 import { callAiModelTracked } from './tracked_ai_client';
 import { getModelForTask } from './model_router';
 import {
@@ -26,16 +27,16 @@ import {
   buildPlotPreviewPrompt,
   buildPlotPreviewRevisionPrompt,
   buildCreationFrameworkPrompt,
-  CHAPTER_OPENING_CHIPS,
 } from './creation_prompts';
-import { DISCUSS_TOPICS } from './creation_discuss_config';
+import { getDiscussTopicsForIdea } from './creation_discuss_config';
 import { generateMasterOutline } from './outline_planner';
 import { createId } from '../../core/id';
 import { buildCreationProjectSeed } from '../creation/project_seed';
-import type { CreationPlotPreview } from '../../types/creation_chat';
+import type { CreationMessageTokenUsage, CreationPlotPreview } from '../../types/creation_chat';
 import type { BrainstormResult } from '../../types/narrative_memory';
 import type { Chapter, Project } from '../../types/story';
 import type { SupportedWorkflowIntent, WorkflowSession } from '../../types/workflow';
+import type { TokenUsageRecord } from '../../types/token_tracker';
 
 // ─── Helpers ────────────────────────────────────────────────
 
@@ -70,6 +71,48 @@ function extractJsonObject(text: string): string {
   }
 
   return cleaned;
+}
+
+function toMessageTokenUsage(record: TokenUsageRecord): CreationMessageTokenUsage {
+  return {
+    inputTokens: record.inputTokens,
+    outputTokens: record.outputTokens,
+    totalTokens: record.totalTokens,
+    estimatedCost: record.estimatedCost,
+    cached: record.cached,
+    modelName: record.modelName,
+    durationMs: record.durationMs,
+    callCount: 1,
+  };
+}
+
+function sumMessageTokenUsage(records: TokenUsageRecord[]): CreationMessageTokenUsage | undefined {
+  if (records.length === 0) return undefined;
+
+  const latest = records[0];
+  return {
+    inputTokens: records.reduce((sum, record) => sum + record.inputTokens, 0),
+    outputTokens: records.reduce((sum, record) => sum + record.outputTokens, 0),
+    totalTokens: records.reduce((sum, record) => sum + record.totalTokens, 0),
+    estimatedCost: records.reduce((sum, record) => sum + record.estimatedCost, 0),
+    cached: records.every((record) => record.cached),
+    modelName: latest.modelName,
+    durationMs: records.reduce((sum, record) => sum + record.durationMs, 0),
+    callCount: records.length,
+  };
+}
+
+function createUsageCapture(): {
+  setRecord: (record: TokenUsageRecord) => void;
+  getUsage: () => CreationMessageTokenUsage | undefined;
+} {
+  let usage: CreationMessageTokenUsage | undefined;
+  return {
+    setRecord: (record) => {
+      usage = toMessageTokenUsage(record);
+    },
+    getUsage: () => usage,
+  };
 }
 
 function getFrameworkContextMessages(): Array<{ role: 'user'; content: string }> {
@@ -142,31 +185,40 @@ function buildFullPipelineIntent(params: {
       prompt,
       notes,
       styleInstruction: project.writingStyle || undefined,
+      skipReview: true,
+      skipPolish: true,
+      qualityMode: 'fast',
     },
   };
 }
 
-function ensureDraftChapterPersisted(params: {
+async function persistDraftChapter(params: {
   projectId: string;
+  project: Project;
   existingChapter?: Chapter;
   writeResult: NonNullable<WorkflowSession['artifacts']['chapterWriteResult']>;
   chapterIndex: number;
-}): void {
-  const { projectId, existingChapter, writeResult, chapterIndex } = params;
+}): Promise<{ chapter: Chapter; project: Project }> {
+  const { projectId, project, existingChapter, writeResult, chapterIndex } = params;
   const now = new Date().toISOString();
 
   if (existingChapter) {
-    useProjectStore.getState().updateChapter(projectId, existingChapter.id, {
+    const nextChapter: Chapter = {
+      ...existingChapter,
       title: writeResult.title || existingChapter.title,
       content: writeResult.content,
       summary: writeResult.ledger.summary || existingChapter.summary,
       status: 'draft',
       updatedAt: now,
+    };
+    const nextProject = mergePersistedChapter(project, nextChapter);
+    await useProjectStore.getState().replaceProjectChapters(projectId, nextProject.chapters, {
+      storageMode: 'indexeddb',
     });
-    return;
+    return { chapter: nextChapter, project: nextProject };
   }
 
-  useProjectStore.getState().addChapter(projectId, {
+  const nextChapter: Chapter = {
     id: createId(),
     title: writeResult.title || `Chương ${chapterIndex + 1}`,
     content: writeResult.content,
@@ -175,7 +227,31 @@ function ensureDraftChapterPersisted(params: {
     status: 'draft',
     createdAt: now,
     updatedAt: now,
+  };
+  const nextProject = mergePersistedChapter(project, nextChapter);
+  await useProjectStore.getState().replaceProjectChapters(projectId, nextProject.chapters, {
+    storageMode: 'indexeddb',
   });
+  return { chapter: nextChapter, project: nextProject };
+}
+
+function mergePersistedChapter(project: Project, chapter: Chapter): Project {
+  const chapterSequence = chapter.sequenceNumber ?? 0;
+  const existingIndex = project.chapters.findIndex((item) =>
+    item.id === chapter.id || (chapterSequence > 0 && item.sequenceNumber === chapterSequence),
+  );
+
+  const chapters = [...project.chapters];
+  if (existingIndex >= 0) {
+    chapters[existingIndex] = chapter;
+  } else {
+    chapters.push(chapter);
+  }
+
+  return {
+    ...project,
+    chapters,
+  };
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -203,10 +279,12 @@ export async function handleDescribeSubmit(ideaText: string): Promise<void> {
 
   try {
     // Show first discussion topic with suggestion chips
-    const firstTopic = DISCUSS_TOPICS[0];
+    const discussTopics = getDiscussTopicsForIdea(ideaText);
+    const firstTopic = discussTopics[0];
     const model = await resolveModel();
 
     const prompt = buildDiscussResponsePrompt(ideaText, 'intro', ideaText, {});
+    const usageCapture = createUsageCapture();
     const response = await callAiModelTracked({
       provider: model.provider,
       modelId: model.modelId,
@@ -218,6 +296,7 @@ export async function handleDescribeSubmit(ideaText: string): Promise<void> {
 Hãy phản hồi tích cực (3-4 câu): khen ý tưởng, phân tích tiềm năng, 
 rồi giới thiệu câu hỏi đầu tiên: "${firstTopic.questionTemplate}"`,
       taskType: 'brainstorm',
+      onUsage: usageCapture.setRecord,
     });
 
     // AI response + suggestion chips for first topic
@@ -225,6 +304,7 @@ rồi giới thiệu câu hỏi đầu tiên: "${firstTopic.questionTemplate}"`,
       response,
       firstTopic.suggestionGroups,
       firstTopic.aiDecideLabel,
+      usageCapture.getUsage(),
     );
     useCreationChatStore.setState({ currentTopicIndex: 0 });
     finishWorkflowStep('discuss', 'Đã mở vòng thảo luận đầu tiên cho cốt truyện và nhân vật.');
@@ -252,7 +332,9 @@ export async function handleDiscussAnswer(chosenText: string): Promise<void> {
     currentTopicIndex, answers, startWorkflowStep, finishWorkflowStep, failWorkflowStep,
   } = store;
 
-  const currentTopic = DISCUSS_TOPICS[currentTopicIndex];
+  const originalIdea = getOriginalIdea();
+  const discussTopics = getDiscussTopicsForIdea(originalIdea);
+  const currentTopic = discussTopics[currentTopicIndex];
   if (!currentTopic) return;
 
   addUserText(chosenText);
@@ -266,13 +348,13 @@ export async function handleDiscussAnswer(chosenText: string): Promise<void> {
 
   try {
     const model = await resolveModel();
-    const originalIdea = getOriginalIdea();
     const updatedAnswers = { ...answers, [currentTopic.id]: chosenText };
 
     // AI phản hồi lựa chọn
     const prompt = buildDiscussResponsePrompt(
       originalIdea, currentTopic.id, chosenText, updatedAnswers,
     );
+    const usageCapture = createUsageCapture();
     const response = await callAiModelTracked({
       provider: model.provider,
       modelId: model.modelId,
@@ -281,26 +363,29 @@ export async function handleDiscussAnswer(chosenText: string): Promise<void> {
       systemPrompt: prompt.system,
       userPrompt: prompt.user,
       taskType: 'brainstorm',
+      onUsage: usageCapture.setRecord,
     });
 
     // Check if there are more topics
     const nextIndex = currentTopicIndex + 1;
-    if (nextIndex < DISCUSS_TOPICS.length) {
-      const nextTopic = DISCUSS_TOPICS[nextIndex];
+    if (nextIndex < discussTopics.length) {
+      const nextTopic = discussTopics[nextIndex];
       // AI response + next topic's chips
       addAiSuggestions(
         response + `\n\n${nextTopic.questionTemplate}`,
         nextTopic.suggestionGroups,
         nextTopic.aiDecideLabel,
+        usageCapture.getUsage(),
       );
       setCurrentTopicIndex(nextIndex);
       finishWorkflowStep(
         'discuss',
-        `Đã lưu phản hồi và chuyển sang câu hỏi ${nextIndex + 1}/${DISCUSS_TOPICS.length}.`,
+        `Đã lưu phản hồi và chuyển sang câu hỏi ${nextIndex + 1}/${discussTopics.length}.`,
       );
     } else {
       addAiText(
         `${response}\n\n📝 Đã có đủ nền tảng. Mình sẽ tóm tắt lại cốt truyện để bạn review trước khi dựng toàn bộ khung truyện.`,
+        usageCapture.getUsage(),
       );
       await generatePlotPreview();
     }
@@ -327,13 +412,14 @@ export async function handleAiDecide(): Promise<void> {
     failWorkflowStep,
   } = store;
 
-  const currentTopic = DISCUSS_TOPICS[currentTopicIndex];
+  const originalIdea = getOriginalIdea();
+  const discussTopics = getDiscussTopicsForIdea(originalIdea);
+  const currentTopic = discussTopics[currentTopicIndex];
   if (!currentTopic) return;
 
   addUserText(`🤖 Để AI chọn: ${currentTopic.questionTemplate}`);
 
   const model = await resolveModel();
-  const originalIdea = getOriginalIdea();
   const availableOptions = currentTopic.suggestionGroups
     .flatMap((g) => g.chips.map((c) => c.value || c.label));
 
@@ -348,6 +434,7 @@ export async function handleAiDecide(): Promise<void> {
     const prompt = buildAiDecidePrompt(
       originalIdea, currentTopic.id, availableOptions, answers,
     );
+    const usageCapture = createUsageCapture();
     const response = await callAiModelTracked({
       provider: model.provider,
       modelId: model.modelId,
@@ -356,6 +443,7 @@ export async function handleAiDecide(): Promise<void> {
       systemPrompt: prompt.system,
       userPrompt: prompt.user,
       taskType: 'brainstorm',
+      onUsage: usageCapture.setRecord,
     });
 
     // Save AI's choice as the answer
@@ -363,21 +451,23 @@ export async function handleAiDecide(): Promise<void> {
 
     // Move to next topic
     const nextIndex = currentTopicIndex + 1;
-    if (nextIndex < DISCUSS_TOPICS.length) {
-      const nextTopic = DISCUSS_TOPICS[nextIndex];
+    if (nextIndex < discussTopics.length) {
+      const nextTopic = discussTopics[nextIndex];
       store.addAiSuggestions(
         response + `\n\n${nextTopic.questionTemplate}`,
         nextTopic.suggestionGroups,
         nextTopic.aiDecideLabel,
+        usageCapture.getUsage(),
       );
       store.setCurrentTopicIndex(nextIndex);
       finishWorkflowStep(
         'discuss',
-        `AI đã chốt chủ đề hiện tại và chuyển sang câu hỏi ${nextIndex + 1}/${DISCUSS_TOPICS.length}.`,
+        `AI đã chốt chủ đề hiện tại và chuyển sang câu hỏi ${nextIndex + 1}/${discussTopics.length}.`,
       );
     } else {
       store.addAiText(
         `${response}\n\n📝 Đã có đủ nền tảng. Mình sẽ tóm tắt lại cốt truyện để bạn review trước khi dựng toàn bộ khung truyện.`,
+        usageCapture.getUsage(),
       );
       await generatePlotPreview();
     }
@@ -431,11 +521,12 @@ async function generatePlotPreview(revisionFeedback?: string): Promise<void> {
   );
 
   try {
-    const model = await resolveModel();
+    const model = await resolveModel('plan_chapter');
     const prompt = revisionFeedback && plotPreview
       ? buildPlotPreviewRevisionPrompt(originalIdea, answers, plotPreview, revisionFeedback)
       : buildPlotPreviewPrompt(originalIdea, answers, chatHistory);
 
+    const usageCapture = createUsageCapture();
     const response = await callAiModelTracked({
       provider: model.provider,
       modelId: model.modelId,
@@ -443,9 +534,10 @@ async function generatePlotPreview(revisionFeedback?: string): Promise<void> {
       baseUrl: model.baseUrl,
       systemPrompt: prompt.system,
       userPrompt: prompt.user,
-      taskType: 'brainstorm',
+      taskType: 'plan_chapter',
       responseFormat: 'json_object',
       skipCache: true,
+      onUsage: usageCapture.setRecord,
     });
 
     const result: CreationPlotPreview = JSON.parse(extractJsonObject(response));
@@ -454,6 +546,7 @@ async function generatePlotPreview(revisionFeedback?: string): Promise<void> {
       revisionFeedback
         ? 'Mình đã cập nhật lại bản cốt truyện theo góp ý mới. Nếu ổn, hãy chốt để AI dựng khung chi tiết.'
         : 'Đây là bản review cốt truyện. Bạn có thể góp ý thêm trong chat hoặc chốt để AI dựng khung chi tiết.',
+      usageCapture.getUsage(),
     );
     store.finishWorkflowStep(
       'review_plot',
@@ -479,9 +572,10 @@ async function generateFramework(): Promise<void> {
   store.startWorkflowStep('framework', 'AI đang tạo khung cốt truyện, ý tưởng và nhân vật.');
 
   try {
-    const model = await resolveModel();
+    const model = await resolveModel('plan_chapter');
     const prompt = buildCreationFrameworkPrompt(originalIdea, answers, chatHistory, plotPreview);
 
+    const usageCapture = createUsageCapture();
     const response = await callAiModelTracked({
       provider: model.provider,
       modelId: model.modelId,
@@ -489,16 +583,17 @@ async function generateFramework(): Promise<void> {
       baseUrl: model.baseUrl,
       systemPrompt: prompt.system,
       userPrompt: prompt.user,
-      taskType: 'brainstorm',
+      taskType: 'plan_chapter',
       responseFormat: 'json_object',
       skipCache: true,
+      onUsage: usageCapture.setRecord,
     });
 
     const result: BrainstormResult = JSON.parse(extractJsonObject(response));
 
     // Transition to framework phase + add preview message
     store.setPhase('framework');
-    store.addFrameworkPreview(result);
+    store.addFrameworkPreview(result, usageCapture.getUsage());
     store.finishWorkflowStep('framework', 'Khung truyện đã sẵn sàng để người dùng xác nhận.');
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Không thể tạo khung truyện';
@@ -564,9 +659,23 @@ export async function retryFrameworkGeneration(): Promise<void> {
 }
 
 /**
- * User xác nhận framework → apply vào project + chuyển Phase 4
+ * User xác nhận framework → apply vào project + tự động viết tất cả chương
+ * Flow: create project → generate outline → batch compose ALL chapters
  */
-export async function handleFrameworkConfirm(): Promise<{ projectId: string } | null> {
+export interface BatchComposeResult {
+  total: number;
+  successCount: number;
+  failCount: number;
+  failedChapterTitles: string[];
+}
+
+export interface FrameworkConfirmResult {
+  projectId: string;
+  batchCompose: BatchComposeResult;
+  readyForEditor: boolean;
+}
+
+export async function handleFrameworkConfirm(): Promise<FrameworkConfirmResult | null> {
   const store = getStore();
   const { framework } = store;
   if (!framework) return null;
@@ -574,7 +683,6 @@ export async function handleFrameworkConfirm(): Promise<{ projectId: string } | 
   const projectId = await ensureProjectFromFramework(framework);
 
   // ── [Yêu cầu #1] Tự động tạo Tổng cương sau khi confirm framework ──
-  // Lấy project đã được cập nhật (bao gồm bible + characters + world)
   const updatedProject = await getProjectSnapshot(projectId);
   if (!updatedProject) return null;
 
@@ -597,25 +705,220 @@ export async function handleFrameworkConfirm(): Promise<{ projectId: string } | 
   // Transition to compose phase
   store.confirmFramework();
   store.setPhase('compose');
-  store.addSystemMessage('✅ Đã lưu khung truyện vào dự án. Đang mở workspace writer...');
+  store.addSystemMessage('✅ Đã lưu khung truyện vào dự án.');
   store.finishWorkflowStep('compose', 'Khung truyện đã được xác nhận, sẵn sàng viết chương.', {
     linkedProjectId: projectId,
   });
 
-  // Show chapter opening style suggestions
-  const firstOutline = framework.outline?.[0];
-  const chapterTitle = framework.chapterSkeleton?.[0]?.title || firstOutline?.title || 'Chương 1';
+  // ── [Core Fix] Tự động viết nội dung cho tất cả chương ──
+  // Thay vì chỉ tạo tiêu đề rồi bắt user bấm từng chương
+  const batchCompose = await batchComposeAllChapters(projectId);
+  const readyForEditor = batchCompose.total === 0 || batchCompose.failCount === 0;
 
-  store.addAiSuggestions(
-    `Bắt đầu viết ${chapterTitle}.\n\nBạn muốn mở đầu chương kiểu gì?`,
-    [{
-      groupLabel: 'Phong cách mở đầu:',
-      chips: CHAPTER_OPENING_CHIPS,
-    }],
-    '🤖 AI tự chọn cách mở đầu phù hợp nhất',
+  if (!readyForEditor) {
+    const failedList = batchCompose.failedChapterTitles.slice(0, 3).join(', ');
+    const suffix = batchCompose.failedChapterTitles.length > 3 ? '...' : '';
+    store.setError(
+      `AI chưa tạo đủ nội dung chương (${batchCompose.successCount}/${batchCompose.total}). ` +
+      `Các chương lỗi: ${failedList}${suffix}. Bấm Thử lại để viết tiếp các chương còn rỗng.`,
+    );
+  }
+
+  return { projectId, batchCompose, readyForEditor };
+}
+
+/**
+ * Tự động viết tuần tự nội dung cho tất cả chương rỗng trong project.
+ * Chạy ngay sau khi framework được confirm, hiển thị tiến trình real-time trong chat.
+ */
+export async function batchComposeAllChapters(projectId: string): Promise<BatchComposeResult> {
+  const store = getStore();
+  const { framework } = store;
+
+  // [Domain:CreationChat] STEP 1 — Load project snapshot to find empty chapters
+  let workingProject = await getProjectSnapshot(projectId);
+  if (!workingProject) {
+    return {
+      total: 0,
+      successCount: 0,
+      failCount: 0,
+      failedChapterTitles: [],
+    };
+  }
+
+  const emptyChapters = workingProject.chapters.filter((ch) => !ch.content?.trim());
+  if (emptyChapters.length === 0) {
+    store.addSystemMessage('📖 Tất cả chương đã có nội dung.');
+    return {
+      total: 0,
+      successCount: 0,
+      failCount: 0,
+      failedChapterTitles: [],
+    };
+  }
+
+  const total = emptyChapters.length;
+  store.setIsBatchComposing(true);
+  store.setAiWorking(true);
+  store.setBatchComposeProgress({
+    current: 0,
+    total,
+    isRunning: true,
+    successCount: 0,
+    failCount: 0,
+  });
+  store.addSystemMessage(
+    `✍️ Bắt đầu viết nội dung cho ${total} chương. AI sẽ viết từng chương tuần tự...`
   );
 
-  return { projectId };
+  let successCount = 0;
+  let failCount = 0;
+  const failedChapterTitles: string[] = [];
+
+  // [Domain:CreationChat] STEP 2 — Write each chapter sequentially
+  for (let i = 0; i < emptyChapters.length; i++) {
+    const ch = emptyChapters[i];
+    const chapterIndex = Math.max(
+      0,
+      (ch.sequenceNumber ?? workingProject.chapters.findIndex((c) => c.id === ch.id) + 1) - 1,
+    );
+
+    // Update progress
+    store.setBatchComposeProgress({
+      current: i + 1,
+      total,
+      isRunning: true,
+      successCount,
+      failCount,
+    });
+    store.setCurrentChapterIndex(chapterIndex);
+    store.startWorkflowStep(
+      'compose',
+      `AI đang viết nháp ${ch.title || `Chương ${chapterIndex + 1}`} (${i + 1}/${total})`,
+    );
+
+    try {
+      // [Domain:CreationChat] STEP 2a — Build intent and run full_write_pipeline
+      const skeletonChapter = framework?.chapterSkeleton?.[chapterIndex];
+      const outlineBeat = workingProject.outline?.[chapterIndex];
+      const chapterPrompt =
+        skeletonChapter?.summary
+        || outlineBeat?.summary
+        || ch.summary
+        || '';
+
+      const previousTokenRecordIds = new Set(
+        useTokenStore.getState().records.map((r) => r.id),
+      );
+
+      const session = await useWorkflowSessionStore.getState().startIntent(
+        buildFullPipelineIntent({
+          projectId,
+          chapterId: ch.id,
+          project: workingProject,
+          targetChapterIndex: chapterIndex,
+          prompt: chapterPrompt,
+          notes: 'Viết nội dung chi tiết cho chương này, bám sát canon, nhân vật, thế giới và outline đã chốt.',
+        }),
+      );
+
+      const writeResult = session?.artifacts?.chapterWriteResult;
+      if (!writeResult?.content?.trim()) {
+        throw new Error(session?.error?.message || 'AI không trả về nội dung chương.');
+      }
+
+      // [Domain:CreationChat] STEP 2b — Persist chapter content to project store
+      const { chapter: persistedChapter, project: persistedProject } = await persistDraftChapter({
+        projectId,
+        project: workingProject,
+        existingChapter: ch,
+        writeResult,
+        chapterIndex,
+      });
+      workingProject = persistedProject;
+
+      // [Domain:CreationChat] STEP 2c — Track in creation chat as accepted chapter + draft message
+      const chapterTokenUsage = sumMessageTokenUsage(
+        useTokenStore
+          .getState()
+          .records
+          .filter((r) => !previousTokenRecordIds.has(r.id)),
+      );
+
+      store.addChapterDraft({
+        chapterIndex,
+        title: writeResult.title || ch.title || `Chương ${chapterIndex + 1}`,
+        content: writeResult.content,
+        tokenUsage: chapterTokenUsage,
+      });
+
+      // Auto-accept the chapter
+      const existingAccepted = store.acceptedChapters.find((c) => c.chapterIndex === chapterIndex);
+      if (existingAccepted) {
+        store.updateAcceptedChapter(existingAccepted.id, {
+          title: writeResult.title,
+          content: writeResult.content,
+        });
+      } else {
+        store.addAcceptedChapter({
+          chapterIndex,
+          title: writeResult.title || ch.title || `Chương ${chapterIndex + 1}`,
+          content: writeResult.content,
+          charCount: writeResult.content.length,
+        });
+      }
+
+      successCount++;
+      store.finishWorkflowStep(
+        'compose',
+        `Đã viết xong ${writeResult.title || ch.title} (${successCount}/${total})`,
+        { lastGeneratedChapterTitle: writeResult.title || ch.title },
+      );
+    } catch (err) {
+      console.error(`[BatchCompose] Failed chapter ${ch.title}:`, err);
+      failCount++;
+      failedChapterTitles.push(ch.title || `Chương ${chapterIndex + 1}`);
+      store.addSystemMessage(
+        `⚠️ Lỗi khi viết ${ch.title || `Chương ${chapterIndex + 1}`}: ${err instanceof Error ? err.message : 'Lỗi không xác định'}`
+      );
+    }
+  }
+
+  // [Domain:CreationChat] STEP 3 — Finalize batch compose
+  store.setBatchComposeProgress({
+    current: total,
+    total,
+    isRunning: false,
+    successCount,
+    failCount,
+  });
+  store.setIsBatchComposing(false);
+  store.setAiWorking(false);
+
+  if (failCount === 0) {
+    store.addSystemMessage(
+      `🎉 Hoàn thành! Đã viết nội dung cho tất cả ${successCount} chương. Bạn có thể mở editor để chỉnh sửa.`
+    );
+    store.finishWorkflowStep('compose', `Đã viết xong tất cả ${successCount} chương!`, {
+      linkedProjectId: projectId,
+    });
+  } else {
+    store.addSystemMessage(
+      `📊 Kết quả: ${successCount}/${total} chương thành công, ${failCount} chương cần viết lại.`
+    );
+    store.finishWorkflowStep(
+      'compose',
+      `Đã viết ${successCount}/${total} chương. ${failCount} chương cần viết lại.`,
+      { linkedProjectId: projectId },
+    );
+  }
+
+  return {
+    total,
+    successCount,
+    failCount,
+    failedChapterTitles,
+  };
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -657,6 +960,9 @@ export async function handleWriteChapter(userNotes?: string): Promise<void> {
     const existingChapter = project.chapters.find(
       (chapter) => (chapter.sequenceNumber ?? 0) === currentChapterIndex + 1,
     );
+    const previousTokenRecordIds = new Set(
+      useTokenStore.getState().records.map((record) => record.id),
+    );
     const session = await useWorkflowSessionStore.getState().startIntent(
       buildFullPipelineIntent({
         projectId,
@@ -667,13 +973,20 @@ export async function handleWriteChapter(userNotes?: string): Promise<void> {
         notes: userNotes || undefined,
       }),
     );
+    const chapterTokenUsage = sumMessageTokenUsage(
+      useTokenStore
+        .getState()
+        .records
+        .filter((record) => !previousTokenRecordIds.has(record.id)),
+    );
     const writeResult = session.artifacts.chapterWriteResult;
     if (!writeResult?.content?.trim()) {
       throw new Error(session.error?.message || 'AI không tạo được bản nháp chương.');
     }
 
-    ensureDraftChapterPersisted({
+    await persistDraftChapter({
       projectId,
+      project,
       existingChapter,
       writeResult,
       chapterIndex: currentChapterIndex,
@@ -685,6 +998,7 @@ export async function handleWriteChapter(userNotes?: string): Promise<void> {
       chapterIndex: currentChapterIndex,
       title: writeResult.title,
       content: writeResult.content,
+      tokenUsage: chapterTokenUsage,
     });
     store.linkProject(projectId);
     store.finishWorkflowStep(
@@ -708,11 +1022,11 @@ export async function handleWriteChapter(userNotes?: string): Promise<void> {
 /**
  * User chấp nhận chương → lưu vào project + hỏi viết tiếp
  */
-export function handleAcceptChapter(
+export async function handleAcceptChapter(
   chapterIndex: number,
   title: string,
   content: string,
-): void {
+): Promise<void> {
   const store = getStore();
   const project =
     (getLinkedProjectId()
@@ -726,7 +1040,7 @@ export function handleAcceptChapter(
   );
 
   if (existingProjectChapter) {
-    useProjectStore.getState().updateChapter(project.id, existingProjectChapter.id, {
+    await useProjectStore.getState().updateChapter(project.id, existingProjectChapter.id, {
       title,
       content,
       status: 'draft',
@@ -743,7 +1057,7 @@ export function handleAcceptChapter(
       updatedAt: now,
     };
 
-    useProjectStore.getState().addChapter(project.id, newChapter);
+    await useProjectStore.getState().addChapter(project.id, newChapter);
   }
 
   // [Domain:CreationChat] STEP: Save to acceptedChapters for sidebar panel

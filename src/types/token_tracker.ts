@@ -28,6 +28,7 @@ export interface TokenUsageRecord {
   outputTokens: number;
   totalTokens: number;
   estimatedCost: number;   // USD
+  estimatedCostIfNotCached: number; // Chi phí lẽ ra phải trả nếu cache không hit
   cached: boolean;         // Response từ cache → cost = 0
   durationMs: number;      // Thời gian phản hồi
   outputChars: number;     // Số ký tự output (đo chất lượng)
@@ -103,20 +104,42 @@ export interface TokenOptimizationTask {
 /** Chi phí ước lượng per 1M tokens (input) theo provider, USD */
 export const COST_PER_1M_INPUT: Record<string, number> = {
   'gemini-2.0-flash': 0.10,
+  'gemini-2.5-flash-lite': 0.10,
+  'google/gemini-2.5-flash-lite': 0.10,
   'gemini-2.5-flash-preview-05-20': 0.15,
   'gemini-2.5-pro-preview-05-06': 1.25,
+  'gpt-4.1-nano': 0.10,
+  'openai/gpt-4.1-nano': 0.10,
+  'gpt-4.1-mini': 0.40,
+  'openai/gpt-4.1-mini': 0.40,
   'openai/gpt-4o-mini': 0.15,
+  'mistralai/mistral-small-creative': 0.10,
+  'gryphe/mythomax-l2-13b': 0.06,
+  'qwen/qwen3.5-flash-02-23': 0.065,
   'anthropic/claude-3.5-sonnet': 3.00,
+  'anthropic/claude-3.5-haiku': 0.80,
   'anthropic/claude-sonnet-4': 3.00,
+  'deepseek/deepseek-v4-flash': 0.14,
   'deepseek/deepseek-chat': 0.14,
 };
 
 export const COST_PER_1M_OUTPUT: Record<string, number> = {
   'gemini-2.0-flash': 0.40,
+  'gemini-2.5-flash-lite': 0.40,
+  'google/gemini-2.5-flash-lite': 0.40,
   'gemini-2.5-flash-preview-05-20': 0.60,
   'gemini-2.5-pro-preview-05-06': 5.00,
+  'gpt-4.1-nano': 0.40,
+  'openai/gpt-4.1-nano': 0.40,
+  'gpt-4.1-mini': 1.60,
+  'openai/gpt-4.1-mini': 1.60,
   'openai/gpt-4o-mini': 0.60,
+  'mistralai/mistral-small-creative': 0.30,
+  'gryphe/mythomax-l2-13b': 0.06,
+  'qwen/qwen3.5-flash-02-23': 0.26,
   'anthropic/claude-3.5-sonnet': 15.00,
+  'anthropic/claude-3.5-haiku': 4.00,
   'anthropic/claude-sonnet-4': 15.00,
+  'deepseek/deepseek-v4-flash': 0.28,
   'deepseek/deepseek-chat': 0.28,
 };

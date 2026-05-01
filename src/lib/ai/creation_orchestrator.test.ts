@@ -127,7 +127,7 @@ function buildMasterOutline(projectId: string): MasterOutline {
   };
 }
 
-function buildWorkflowSession(content: string, summary: string): WorkflowSession {
+function buildWorkflowSession(content: string, summary: string, title = 'Chương mới'): WorkflowSession {
   return {
     id: 'session-1',
     intent: {
@@ -147,7 +147,7 @@ function buildWorkflowSession(content: string, summary: string): WorkflowSession
     step: 'completed',
     artifacts: {
       chapterWriteResult: {
-        title: 'Chương mới',
+        title,
         content,
         ledger: {
           summary,
@@ -215,7 +215,7 @@ describe('creation_orchestrator', () => {
     vi.stubGlobal('IDBKeyRange', IDBKeyRange);
   });
 
-  it('creates and links a canonical project with chapter shells on framework confirm', async () => {
+  it('creates a linked project and writes all chapter bodies on framework confirm', async () => {
     const {
       useCreationChatStore,
       getProjectSnapshot,
@@ -224,6 +224,15 @@ describe('creation_orchestrator', () => {
 
     const framework = buildFramework();
     generateMasterOutlineMock.mockImplementation(async (project) => buildMasterOutline(project.id));
+    startIntentMock.mockImplementation(async (intent: WorkflowSession['intent']) => {
+      const chapterNumber = intent.payload.targetChapterIndex + 1;
+      const skeletonTitle = framework.chapterSkeleton[chapterNumber - 1]?.title;
+      return buildWorkflowSession(
+        `Nội dung chương ${chapterNumber} hoàn chỉnh.`,
+        `Tóm tắt chương ${chapterNumber}`,
+        skeletonTitle,
+      );
+    });
 
     useCreationChatStore.setState((state) => ({
       ...state,
@@ -235,20 +244,96 @@ describe('creation_orchestrator', () => {
     const result = await handleFrameworkConfirm();
 
     expect(result?.projectId).toBeTruthy();
+    expect(result?.readyForEditor).toBe(true);
+    expect(result?.batchCompose).toMatchObject({
+      total: 2,
+      successCount: 2,
+      failCount: 0,
+    });
+    expect(startIntentMock).toHaveBeenCalledTimes(2);
 
     const creationState = useCreationChatStore.getState();
     expect(creationState.progress.linkedProjectId).toBe(result?.projectId);
     expect(creationState.phase).toBe('compose');
     expect(creationState.frameworkConfirmed).toBe(true);
+    expect(creationState.acceptedChapters).toHaveLength(2);
 
     const project = await getProjectSnapshot(result!.projectId);
     expect(project?.title).toBe(framework.bible.title);
     expect(project?.outline).toHaveLength(2);
     expect(project?.masterOutline?.totalVolumes).toBe(1);
     expect(project?.chapters).toHaveLength(2);
-    expect(project?.chapters[0].content).toBe('');
+    expect(project?.chapters[0].content).toBe('Nội dung chương 1 hoàn chỉnh.');
     expect(project?.chapters[0].title).toBe('Chương 1: Máu trên tế đàn');
-    expect(project?.chapters[1].summary).toContain('dấu ấn');
+    expect(project?.chapters[1].content).toBe('Nội dung chương 2 hoàn chỉnh.');
+    expect(project?.chapters[1].summary).toBe('Tóm tắt chương 2');
+  });
+
+  it('keeps the creation flow in chat when batch chapter writing fails', async () => {
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const {
+      useCreationChatStore,
+      getProjectSnapshot,
+      handleFrameworkConfirm,
+    } = await loadModules();
+
+    const framework = buildFramework();
+    generateMasterOutlineMock.mockImplementation(async (project) => buildMasterOutline(project.id));
+    startIntentMock.mockResolvedValue({
+      id: 'failed-session',
+      intent: {
+        id: 'intent-1',
+        type: 'full_write_pipeline',
+        projectId: 'unused',
+        source: 'system',
+        createdAt: '2026-04-22T00:00:00.000Z',
+        payload: {
+          workflowEngine: 'api',
+          project: {} as never,
+          targetChapterIndex: 0,
+          mode: 'create',
+          tensionLevel: 'nudge',
+        },
+      },
+      step: 'failed',
+      artifacts: {},
+      metrics: {
+        startedAt: '2026-04-22T00:00:00.000Z',
+        finishedAt: '2026-04-22T00:00:03.000Z',
+        latencyMs: 3000,
+      },
+      error: {
+        code: 'workflow_execution_failed',
+        message: 'Model không trả về bản nháp.',
+        retryable: true,
+      },
+    } satisfies WorkflowSession);
+
+    useCreationChatStore.setState((state) => ({
+      ...state,
+      framework,
+      acceptedChapters: [],
+      phase: 'framework',
+    }));
+
+    const result = await handleFrameworkConfirm();
+
+    expect(consoleErrorSpy).toHaveBeenCalledTimes(2);
+    expect(result?.readyForEditor).toBe(false);
+    expect(result?.batchCompose).toMatchObject({
+      total: 2,
+      successCount: 0,
+      failCount: 2,
+    });
+
+    const creationState = useCreationChatStore.getState();
+    expect(creationState.error).toContain('AI chưa tạo đủ nội dung chương');
+    expect(creationState.acceptedChapters).toHaveLength(0);
+
+    const project = await getProjectSnapshot(result!.projectId);
+    expect(project?.chapters).toHaveLength(2);
+    expect(project?.chapters.every((chapter) => !chapter.content.trim())).toBe(true);
+    consoleErrorSpy.mockRestore();
   });
 
   it('writes chapter 1 through full_write_pipeline and persists it into the linked project', async () => {

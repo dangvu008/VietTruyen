@@ -94,12 +94,12 @@ export default function StepWrite() {
     }
   }, [project, currentChapterIndex, currentBeat, notes, setWriting, setWriteError, setDraftContent, setDraftTitle]);
 
-  function handleSaveChapter() {
+  async function handleSaveChapter() {
     if (!project || !draftContent.trim()) return;
 
     const now = new Date().toISOString();
     if (existingChapter) {
-      updateChapter(project.id, existingChapter.id, {
+      await updateChapter(project.id, existingChapter.id, {
         title: draftTitle || existingChapter.title,
         content: draftContent,
         status: 'draft',
@@ -115,7 +115,7 @@ export default function StepWrite() {
         createdAt: now,
         updatedAt: now,
       };
-      addChapter(project.id, newChapter);
+      await addChapter(project.id, newChapter);
     }
 
     // Move to next chapter
@@ -130,8 +130,8 @@ export default function StepWrite() {
     }
   }
 
-  function handleSaveAndReview() {
-    handleSaveChapter();
+  async function handleSaveAndReview() {
+    await handleSaveChapter();
     nextStep();
   }
 

@@ -29,18 +29,23 @@ export function parseRawTextToChapters(text: string): Chapter[] {
       const block = trimmed.slice(start, end).trim();
       const lines = block.split('\n').map((item) => item.trim()).filter(Boolean);
       const title = lines[0] || `Chương ${index + 1}`;
-      const content = lines.slice(1).join('\n').trim() || block;
+      const content = lines.slice(1).join('\n').trim();
+      if (!content) {
+        continue;
+      }
       chapters.push({
         id: createId(),
         title,
         content,
-        sequenceNumber: index + 1,
+        sequenceNumber: chapters.length + 1,
         status: 'draft',
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       });
     }
-    return chapters;
+    if (chapters.length > 0) {
+      return chapters;
+    }
   }
 
   return chunkText(trimmed).map((content, index) => ({

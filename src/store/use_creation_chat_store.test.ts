@@ -59,6 +59,20 @@ describe('use_creation_chat_store', () => {
     expect(persisted.state.progress.lastGeneratedChapterTitle).toBe('Chương 1');
   });
 
+  it('does not persist transient loading messages into localStorage', async () => {
+    const { useCreationChatStore } = await import('./use_creation_chat_store');
+
+    useCreationChatStore.getState().addUserText('Viết mở đầu chương 1.');
+    useCreationChatStore.getState().addLoadingMessage();
+
+    const raw = localStorage.getItem('viettruyen-creation-chat');
+    expect(raw).not.toBeNull();
+
+    const persisted = JSON.parse(raw as string);
+    expect(persisted.state.messages).toHaveLength(1);
+    expect(persisted.state.messages[0].type).toBe('text');
+  });
+
   it('marks an in-flight session as interrupted after rehydrate', async () => {
     localStorage.setItem(
       'viettruyen-creation-chat',
@@ -105,6 +119,68 @@ describe('use_creation_chat_store', () => {
     expect(state.progress.status).toBe('interrupted');
     expect(state.progress.detail).toContain('Phiên trước bị gián đoạn');
     expect(state.progress.linkedProjectId).toBe('project-1');
+  });
+
+  it('removes stale loading messages from older persisted sessions during rehydrate', async () => {
+    localStorage.setItem(
+      'viettruyen-creation-chat',
+      JSON.stringify({
+        state: {
+          sessionId: 'session-2',
+          sessionStartedAt: '2026-04-20T10:00:00.000Z',
+          phase: 'review_plot',
+          messages: [
+            {
+              id: 'loading-1',
+              role: 'ai',
+              content: '',
+              type: 'loading',
+              timestamp: '2026-04-20T10:05:00.000Z',
+            },
+            {
+              id: 'ai-1',
+              role: 'ai',
+              content: 'Đây là bản review cốt truyện.',
+              type: 'text',
+              timestamp: '2026-04-20T10:04:00.000Z',
+            },
+          ],
+          currentTopicIndex: 2,
+          answers: { conflict: 'Kẻ thù cũ trở lại' },
+          plotPreview: null,
+          plotPreviewConfirmed: false,
+          framework: null,
+          frameworkConfirmed: false,
+          currentChapterIndex: 0,
+          acceptedChapters: [],
+          draftInput: '',
+          draftSavedAt: '2026-04-20T10:05:00.000Z',
+          progress: {
+            step: 'review_plot',
+            status: 'running',
+            detail: 'AI đang tóm tắt cốt truyện để người viết review trước.',
+            lastCompletedStep: 'discuss',
+            lastCompletedAt: '2026-04-20T10:04:00.000Z',
+            updatedAt: '2026-04-20T10:05:00.000Z',
+            error: null,
+            linkedProjectId: null,
+            lastGeneratedChapterTitle: null,
+          },
+          isAiWorking: true,
+          error: null,
+        },
+        version: 0,
+      }),
+    );
+
+    const { useCreationChatStore } = await import('./use_creation_chat_store');
+
+    await useCreationChatStore.persist.rehydrate();
+
+    const state = useCreationChatStore.getState();
+    expect(state.messages).toHaveLength(1);
+    expect(state.messages[0].type).toBe('text');
+    expect(state.messages.find((message) => message.type === 'loading')).toBeUndefined();
   });
 
   it('persists edited plot preview content and clears confirmation state', async () => {

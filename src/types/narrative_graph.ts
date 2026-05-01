@@ -4,7 +4,12 @@ export type NarrativeNodeType =
   | 'arc'
   | 'chapter'
   | 'world'
-  | 'faction';
+  | 'faction'
+  | 'scene'
+  | 'beat'
+  | 'motif'
+  | 'source_span'
+  | 'retcon_event';
 
 export type NarrativeEdgeType =
   | 'co_presence'
@@ -12,7 +17,14 @@ export type NarrativeEdgeType =
   | 'arc_membership'
   | 'dependency'
   | 'canonical_impact'
-  | 'temporal_adjacent';
+  | 'temporal_adjacent'
+  | 'scene_membership'
+  | 'beat_alignment'
+  | 'motif_echo'
+  | 'source_derives_to'
+  | 'retcon_targets'
+  | 'continuity_risk'
+  | 'semantic_neighbor';
 
 export interface NarrativeNode {
   id: string;
@@ -21,6 +33,9 @@ export interface NarrativeNode {
   refId: string;
   label: string;
   salience: number;
+  attributes?: Record<string, string>;
+  confidence?: number;
+  origin?: 'project' | 'source_material' | 'derived' | 'ai_enriched';
   updatedAt: string;
 }
 
@@ -32,6 +47,9 @@ export interface NarrativeEdge {
   edgeType: NarrativeEdgeType;
   weight: number;
   evidenceChapterIds: string[];
+  attributes?: Record<string, string>;
+  confidence?: number;
+  origin?: 'project' | 'source_material' | 'derived' | 'ai_enriched';
   updatedAt: string;
 }
 

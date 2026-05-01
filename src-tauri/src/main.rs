@@ -4,8 +4,10 @@ mod git_commands;
 
 use serde::{Deserialize, Serialize};
 use std::io::Write;
+use std::net::{SocketAddr, TcpStream};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::time::Duration;
 
 #[derive(Debug, Deserialize)]
 struct LiteparseJsonPage {
@@ -195,8 +197,148 @@ fn global_command_name(name: &str) -> String {
     name.to_string()
 }
 
+struct RouterLaunchCandidate {
+    program: PathBuf,
+    args: Vec<String>,
+    label: String,
+}
+
+fn is_port_open(port: u16) -> bool {
+    let addr = SocketAddr::from(([127, 0, 0, 1], port));
+    TcpStream::connect_timeout(&addr, Duration::from_millis(250)).is_ok()
+}
+
+fn command_exists(program: &Path) -> bool {
+    if program.components().count() > 1 {
+        return program.exists();
+    }
+
+    std::env::var_os("PATH")
+        .map(|paths| {
+            std::env::split_paths(&paths).any(|dir| dir.join(program).exists())
+        })
+        .unwrap_or(false)
+}
+
+fn router_launch_candidates(router_dir: &Path) -> Vec<RouterLaunchCandidate> {
+    let has_production_build = router_dir.join(".next").join("BUILD_ID").exists();
+    let npm = PathBuf::from(global_command_name("npm"));
+    let bun = PathBuf::from(global_command_name("bun"));
+
+    let mut candidates = Vec::new();
+
+    if has_production_build {
+        candidates.push(RouterLaunchCandidate {
+            program: npm.clone(),
+            args: vec!["run".to_string(), "start".to_string()],
+            label: "npm run start".to_string(),
+        });
+        candidates.push(RouterLaunchCandidate {
+            program: bun.clone(),
+            args: vec!["run".to_string(), "start:bun".to_string()],
+            label: "bun run start:bun".to_string(),
+        });
+    }
+
+    candidates.push(RouterLaunchCandidate {
+        program: npm,
+        args: vec!["run".to_string(), "dev".to_string()],
+        label: "npm run dev".to_string(),
+    });
+    candidates.push(RouterLaunchCandidate {
+        program: bun,
+        args: vec!["run".to_string(), "dev:bun".to_string()],
+        label: "bun run dev:bun".to_string(),
+    });
+
+    candidates
+        .into_iter()
+        .filter(|candidate| command_exists(&candidate.program))
+        .collect()
+}
+
+fn ensure_9router_started() -> Result<(), String> {
+    const ROUTER_PORT: u16 = 20128;
+
+    if is_port_open(ROUTER_PORT) {
+        return Ok(());
+    }
+
+    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let project_root = manifest_dir
+        .parent()
+        .map(Path::to_path_buf)
+        .unwrap_or(manifest_dir.clone());
+    let router_dir = project_root.join("9router");
+
+    if !router_dir.exists() {
+        return Err("Không tìm thấy thư mục 9router trong project root.".to_string());
+    }
+
+    let candidates = router_launch_candidates(&router_dir);
+    if candidates.is_empty() {
+        return Err("Không tìm thấy runtime phù hợp để bật 9router (cần npm hoặc bun trong PATH).".to_string());
+    }
+
+    let log_path = project_root.join(".tmp").join("9router.log");
+    if let Some(parent) = log_path.parent() {
+        std::fs::create_dir_all(parent).ok();
+    }
+
+    let mut last_error = None;
+
+    for candidate in candidates {
+        let stdout = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&log_path)
+            .map_err(|error| format!("Không thể mở log 9router: {}", error))?;
+        let stderr = stdout
+            .try_clone()
+            .map_err(|error| format!("Không thể clone log 9router: {}", error))?;
+
+        match Command::new(&candidate.program)
+            .args(&candidate.args)
+            .current_dir(&router_dir)
+            .env("PORT", ROUTER_PORT.to_string())
+            .env("HOSTNAME", "127.0.0.1")
+            .env("BASE_URL", "http://127.0.0.1:20128")
+            .env("NEXT_PUBLIC_BASE_URL", "http://127.0.0.1:20128")
+            .stdout(Stdio::from(stdout))
+            .stderr(Stdio::from(stderr))
+            .spawn()
+        {
+            Ok(_) => {
+                for _ in 0..24 {
+                    std::thread::sleep(Duration::from_millis(500));
+                    if is_port_open(ROUTER_PORT) {
+                        return Ok(());
+                    }
+                }
+                last_error = Some(format!(
+                    "{} đã được spawn nhưng cổng {} chưa sẵn sàng. Xem log tại {}",
+                    candidate.label,
+                    ROUTER_PORT,
+                    log_path.display()
+                ));
+            }
+            Err(error) => {
+                last_error = Some(format!("Không thể chạy {}: {}", candidate.label, error));
+            }
+        }
+    }
+
+    Err(last_error.unwrap_or_else(|| "Không thể tự bật 9router.".to_string()))
+}
+
 fn main() {
     tauri::Builder::default()
+        .setup(|_app| {
+            if let Err(error) = ensure_9router_started() {
+                eprintln!("[startup] 9router auto-start skipped: {}", error);
+            }
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             // PDF parsing
             parse_pdf_with_liteparse,

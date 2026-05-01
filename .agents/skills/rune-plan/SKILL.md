@@ -1,6 +1,7 @@
 ---
 name: rune-plan
 description: "Create structured implementation plans from requirements. Produces master plan + phase files for enterprise-scale project management. Master plan = overview (<80 lines). Phase files = execution detail (<150 lines each). Each session handles 1 phase. Uses opus for deep reasoning."
+model: gemini-3-pro
 ---
 
 
@@ -101,6 +102,8 @@ High-level multi-feature planning — organize features into milestones.
 - `scaffold` (L1): Phase 3 architecture planning
 - `skill-forge` (L2): plan structure for new skill
 - User: `/rune plan` direct invocation
+- `debug` (L2): when root cause requires architectural changes
+- `retro` (L2): reference past plans during retrospective analysis
 
 ## Data Flow
 

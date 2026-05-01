@@ -39,6 +39,7 @@ const OPENAI_COMPAT_BASE_URLS: Record<string, string> = {
   openrouter: 'https://openrouter.ai/api/v1',
   openai: 'https://api.openai.com/v1',
   hocai: 'https://api.hocai.vn/v1',
+  ollama: 'http://localhost:11434/v1',
 };
 
 const DEFAULT_AI_REQUEST_TIMEOUT_MS = 90000;
@@ -50,6 +51,21 @@ function getLocalProxyUrl(): string {
 
 function getLocalProxyKey(): string {
   return import.meta.env.VITE_LOCAL_AI_PROXY_KEY || 'local-dummy-key';
+}
+
+function isNineRouterProxyUrl(url: string): boolean {
+  return /\/v1$/i.test(url);
+}
+
+function getLocalProxyModelId(requestedModelId: string): string {
+  const explicitModel = import.meta.env.VITE_LOCAL_AI_PROXY_MODEL?.trim();
+  if (explicitModel) return explicitModel;
+
+  if (/^(cc|if|qw|glm|ds|kimi|kmc)\//i.test(requestedModelId)) {
+    return requestedModelId;
+  }
+
+  return 'if/kimi-k2-thinking';
 }
 
 function getAiRequestTimeoutMs(): number {
@@ -225,6 +241,9 @@ function _resolveDirectApiKey(provider: string, explicitApiKey?: string): string
       return import.meta.env.VITE_CLAUDE_API_KEY?.trim() || null;
     case 'hocai':
       return import.meta.env.VITE_HOCAI_API_KEY?.trim() || null;
+    case 'ollama':
+      // Ollama local API doesn't require auth — return dummy key
+      return 'ollama';
     default:
       return null;
   }
@@ -593,21 +612,24 @@ async function _callLocalProxy(opts: {
   temperature?: number;
   topP?: number;
 }): Promise<ProxyResponse> {
-  const isClaude = opts.modelId.includes('claude');
-  const proxyProvider = isClaude ? 'claude-kiro-oauth' : 'gemini-cli-oauth';
   const localProxyUrl = getLocalProxyUrl();
   const localProxyKey = getLocalProxyKey();
+  const isNineRouter = isNineRouterProxyUrl(localProxyUrl);
+  const endpoint = isNineRouter
+    ? `${localProxyUrl}/chat/completions`
+    : `${localProxyUrl}/${opts.modelId.includes('claude') ? 'claude-kiro-oauth' : 'gemini-cli-oauth'}/v1/chat/completions`;
+  const modelId = isNineRouter ? getLocalProxyModelId(opts.modelId) : opts.modelId;
 
   let res: Response;
   try {
-    res = await fetchWithAiTimeout(`${localProxyUrl}/${proxyProvider}/v1/chat/completions`, {
+    res = await fetchWithAiTimeout(endpoint, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${localProxyKey}`,
       },
       body: JSON.stringify({
-        model: opts.modelId,
+        model: modelId,
         temperature: opts.temperature,
         top_p: opts.topP,
         messages: [
@@ -615,7 +637,7 @@ async function _callLocalProxy(opts: {
           { role: 'user', content: opts.userPrompt }
         ]
       }),
-    }, `Local AI Proxy ${proxyProvider}`);
+    }, isNineRouter ? '9Router local proxy' : 'Local AI Proxy');
   } catch (error) {
     if (isLocalProxyConnectivityError(error)) {
       throw _buildLocalProxyUnavailableError(error);

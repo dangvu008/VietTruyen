@@ -1,6 +1,7 @@
 ---
 name: rune-asset-creator
 description: "Creates code-based visual assets — SVG icons, OG image HTML templates, social banners, and icon sets. Outputs files with usage instructions."
+model: gemini-3-flash
 ---
 
 

@@ -124,6 +124,77 @@ export const DISCUSS_TOPICS: DiscussTopic[] = [
   },
 ];
 
+const STORY_ENGINE_TOPIC: DiscussTopic = {
+  id: 'story_engine',
+  questionTemplate:
+    'Điểm hấp dẫn cốt lõi nào nên kéo người đọc theo dõi từ đầu?',
+  suggestionGroups: [
+    {
+      groupLabel: 'Chọn hướng bám sát ý tưởng gốc:',
+      chips: [
+        chip('🔍', 'Bí mật cần lật mở', 'Cốt truyện xoay quanh một bí mật lớn cần được lật mở dần'),
+        chip('⚖️', 'Lựa chọn khó', 'Nhân vật chính bị đặt vào các lựa chọn khó, mỗi lựa chọn đều có giá phải trả'),
+        chip('🏛️', 'Âm mưu quyền lực', 'Các thế lực tranh quyền, thao túng và che giấu sự thật'),
+        chip('💔', 'Quan hệ rạn nứt', 'Mâu thuẫn tình cảm, gia đình hoặc đồng minh đẩy câu chuyện đi xa hơn'),
+        chip('⏳', 'Áp lực thời gian', 'Một hạn chót hoặc biến cố sắp xảy ra buộc nhân vật phải hành động'),
+        chip('🧭', 'Hành trình đổi đời', 'Nhân vật rời trạng thái cũ và từng bước đổi đời qua thử thách'),
+      ],
+    },
+  ],
+  aiDecideLabel: '🤖 AI chọn hướng bám sát ý tưởng ban đầu',
+  required: false,
+};
+
+const SPECULATIVE_POWER_KEYWORDS = [
+  'ai',
+  'am luat',
+  'ao thuat',
+  'code',
+  'cong phap',
+  'dan duoc',
+  'do thi tu tien',
+  'dot pha',
+  'game',
+  'he thong',
+  'huyen huyen',
+  'linh khi',
+  'ma phap',
+  'nang luc',
+  'phap thuat',
+  'phu',
+  'sci-fi',
+  'sieu nhien',
+  'suc manh',
+  'tu chan',
+  'tu luyen',
+  'tu tien',
+  'vo dao',
+];
+
+function normalizeIdeaText(text: string): string {
+  return text
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd');
+}
+
+function shouldAskMagicSystem(originalIdea: string): boolean {
+  const normalizedIdea = normalizeIdeaText(originalIdea);
+  return SPECULATIVE_POWER_KEYWORDS.some((keyword) => normalizedIdea.includes(keyword));
+}
+
+export function getDiscussTopicsForIdea(originalIdea: string): DiscussTopic[] {
+  if (shouldAskMagicSystem(originalIdea)) {
+    return DISCUSS_TOPICS;
+  }
+
+  return [
+    STORY_ENGINE_TOPIC,
+    ...DISCUSS_TOPICS.filter((topic) => topic.id !== 'magic_system'),
+  ];
+}
+
 // ─── Quick Start Examples (Phase 1 chips) ───────────────────
 
 export const STARTER_IDEAS: SuggestionChip[] = [
@@ -144,6 +215,7 @@ export const STARTER_IDEAS: SuggestionChip[] = [
 export function buildAnswersSummary(answers: Record<string, string>): string {
   const parts: string[] = [];
   if (answers.magic_system) parts.push(`Hệ tu luyện: ${answers.magic_system}`);
+  if (answers.story_engine) parts.push(`Động cơ câu chuyện: ${answers.story_engine}`);
   if (answers.conflict) parts.push(`Xung đột: ${answers.conflict}`);
   if (answers.protagonist) parts.push(`Nhân vật chính: ${answers.protagonist}`);
   if (answers.tone_antagonist) parts.push(`Giọng văn & phản diện: ${answers.tone_antagonist}`);

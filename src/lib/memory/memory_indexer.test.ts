@@ -91,7 +91,9 @@ describe('memory_indexer', () => {
     expect(definitions.some((item) => item.entityId === 'world_rules')).toBe(true);
     expect(dependencies.some((item) => item.attributeKey === 'vu_khi')).toBe(true);
     expect(nodes.some((item) => item.nodeType === 'character' && item.refId === 'char_1')).toBe(true);
+    expect(nodes.some((item) => item.nodeType === 'scene')).toBe(true);
     expect(edges.some((item) => item.edgeType === 'dependency')).toBe(true);
+    expect(edges.some((item) => item.edgeType === 'scene_membership')).toBe(true);
     expect(communities.length).toBeGreaterThan(0);
     expect(embeddings.some((item) => item.contentType === 'scene')).toBe(true);
   });

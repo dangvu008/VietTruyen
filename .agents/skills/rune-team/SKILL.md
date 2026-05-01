@@ -1,6 +1,7 @@
 ---
 name: rune-team
 description: "Multi-agent meta-orchestrator. Use when task spans 5+ files or 3+ modules, or when user says 'parallel', 'split this up', 'do all of these'. Decomposes large tasks into parallel workstreams, assigns to isolated cook instances, coordinates merging."
+model: gemini-3-pro
 ---
 
 
@@ -108,6 +109,7 @@ Before decomposing, classify the task into a complexity tier. Each tier defines 
 
 ## Called By (inbound)
 
+- `scaffold` (L1): decompose scaffolding into parallel workstreams
 - User: `/rune team <task>` direct invocation only
 
 ---
@@ -286,6 +288,8 @@ Mark todo[1] `completed`.
 ### Phase 3 — COORDINATE
 
 Mark todo[2] `in_progress`.
+
+**3a-pre. Oracle reattach sweep.** Before merge coordination, glob `.rune/oracle-pending/*.json`. For any worker stream that emitted `oracle.dispatched` during Phase 2, invoke `session-bridge --reattach <sessionId>`. Worker streams with `status=pending` past their `timeoutAt` are unblocked via `oracle.failed` so coordination can proceed. Workers with `status=complete` consume the response before merge.
 
 **3a. Check for file conflicts.**
 

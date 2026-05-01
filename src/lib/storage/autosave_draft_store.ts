@@ -19,6 +19,13 @@ export interface AutosaveDraft {
   content: string;
   title: string;
   savedAt: string;
+  /**
+   * If set, this draft was saved mid-generation (not a user edit).
+   * Used by recovery to show "Tạo dở dang" vs "Chưa lưu" UI.
+   */
+  generationStatus?: 'generating' | 'interrupted';
+  /** Job ID when generation was in progress — correlates with store */
+  generationJobId?: string;
 }
 
 interface AutosaveDraftMap {
@@ -89,6 +96,53 @@ export function saveDraft(
     savedAt: new Date().toISOString(),
   };
   writeAllDrafts(map);
+}
+
+/**
+ * Save a draft captured DURING AI streaming (high-frequency call).
+ * Marks the draft with generationStatus='generating' so recovery
+ * UI can show "Tạo dở dang" instead of the generic "Chưa lưu" banner.
+ */
+export function saveGeneratingDraft(
+  projectId: string,
+  chapterId: string,
+  content: string,
+  title: string,
+  jobId: string
+): void {
+  const map = readAllDrafts();
+  const key = compositeKey(projectId, chapterId);
+  map[key] = {
+    projectId,
+    chapterId,
+    content,
+    title,
+    savedAt: new Date().toISOString(),
+    generationStatus: 'generating',
+    generationJobId: jobId,
+  };
+  writeAllDrafts(map);
+}
+
+/**
+ * Mark an existing generating draft as interrupted.
+ * Called when scratch stream is stopped without completing.
+ */
+export function markDraftInterrupted(
+  projectId: string,
+  chapterId: string
+): void {
+  const map = readAllDrafts();
+  const key = compositeKey(projectId, chapterId);
+  const existing = map[key];
+  if (existing && existing.generationStatus === 'generating') {
+    map[key] = {
+      ...existing,
+      generationStatus: 'interrupted',
+      savedAt: new Date().toISOString(),
+    };
+    writeAllDrafts(map);
+  }
 }
 
 /**

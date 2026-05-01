@@ -1,6 +1,6 @@
 # Rune Skill Index
 
-> Platform: antigravity | Skills: 62 | Extensions: 14
+> Platform: antigravity | Skills: 63 | Extensions: 14
 
 ## Core Skills
 
@@ -28,6 +28,7 @@
 - rune-git/SKILL.md
 - rune-graft/SKILL.md
 - rune-hallucination-guard/SKILL.md
+- rune-improve-architecture/SKILL.md
 - rune-incident/SKILL.md
 - rune-integrity-check/SKILL.md
 - rune-journal/SKILL.md

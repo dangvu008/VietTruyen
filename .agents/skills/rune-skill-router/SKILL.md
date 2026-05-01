@@ -1,6 +1,7 @@
 ---
 name: rune-skill-router
 description: "Meta-enforcement layer that routes EVERY agent action through the correct skill. MUST check this routing table before ANY response involving code, files, or technical decisions. Default: route to rune:cook for code tasks. Prevents rationalization, enforces check-before-act discipline."
+model: gemini-3-flash-lite
 ---
 
 

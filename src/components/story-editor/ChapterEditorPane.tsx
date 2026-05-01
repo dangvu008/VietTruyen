@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import type { Chapter } from '../../types/story';
 import type { EditorAiProposal, EditorMode, EditorSelection } from './editor_types';
-import { Bold, Italic, Quote, Wand2, Search, RotateCcw, Clock3, FileText, PenLine, ChevronUp, ChevronDown, X, Sparkles } from 'lucide-react';
+import { Bold, Italic, Quote, Wand2, Search, RotateCcw, Clock3, FileText, PenLine, ChevronUp, ChevronDown, X, Sparkles, Square } from 'lucide-react';
 import { useGenerationStore } from '../../store/use_generation_store';
 
 interface Props {
@@ -14,9 +14,12 @@ interface Props {
   wordCount: number;
   readingTimeMinutes: number;
   lastSavedAt: string | null;
-  emptyStateVariant: 'ai-draft' | 'load-failure';
+  emptyStateVariant: 'ai-draft' | 'load-failure' | 'loading';
   isGeneratingFromScratch: boolean;
   isReloadingChapterContent: boolean;
+  batchProgress: { current: number; total: number; isRunning: boolean } | null;
+  emptyChapterCount: number;
+  onBatchGenerateAll: () => void;
   onTitleChange: (title: string) => void;
   onContentChange: (content: string) => void;
   onAcceptProposal: () => void;
@@ -24,6 +27,7 @@ interface Props {
   onSelectionChange: (selection: EditorSelection | null) => void;
   onSelectionAction: (action: string) => void;
   onGenerateFromScratch: () => void;
+  onStopScratch?: () => void;
   onRetryLoadContent: () => void;
   hasSelection: boolean;
   onModeChange?: (mode: EditorMode) => void;
@@ -49,6 +53,9 @@ export const ChapterEditorPane: React.FC<Props> = ({
   emptyStateVariant,
   isGeneratingFromScratch,
   isReloadingChapterContent,
+  batchProgress,
+  emptyChapterCount,
+  onBatchGenerateAll,
   onTitleChange,
   onContentChange,
   onAcceptProposal,
@@ -56,12 +63,18 @@ export const ChapterEditorPane: React.FC<Props> = ({
   onSelectionChange,
   onSelectionAction,
   onGenerateFromScratch,
+  onStopScratch,
   onRetryLoadContent,
   hasSelection,
   onModeChange,
 }) => {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const isAiStreaming = useGenerationStore((s) => s.isStreaming);
+  const scratchStreamedText = useGenerationStore((s) => s.scratchStreamedText);
+  // Word count during streaming
+  const streamingWordCount = scratchStreamedText
+    ? scratchStreamedText.trim().split(/\s+/).filter(Boolean).length
+    : 0;
 
   // --- Find & Replace State ---
   const [showSearch, setShowSearch] = useState(false);
@@ -426,12 +439,42 @@ export const ChapterEditorPane: React.FC<Props> = ({
         {/* Editor Card Area */}
         <div className="w-full max-w-[760px] bg-[#161311] rounded-[40px] px-12 pt-20 pb-16 shadow-2xl border border-white/[0.03] transition-colors duration-300">
           {/* Streaming indicator — shows when AI is actively generating */}
-          {isAiStreaming && (
+          {isAiStreaming && !isGeneratingFromScratch && (
             <div className="mb-6 flex items-center gap-3 rounded-2xl border border-accent-amber/15 bg-accent-amber/5 px-5 py-3">
               <Sparkles className="h-4 w-4 text-accent-amber animate-pulse" />
               <span className="text-[13px] font-medium text-accent-amber/90">
-                The Muse đang viết... Bạn có thể theo dõi ở panel bên phải.
+                Nàng Thơ đang viết... Bạn có thể theo dõi ở panel bên phải.
               </span>
+            </div>
+          )}
+
+          {/* Scratch streaming banner — shown when AI is writing directly into the editor */}
+          {isGeneratingFromScratch && (
+            <div className="mb-6 flex items-center justify-between gap-3 rounded-2xl border border-accent-amber/30 bg-gradient-to-r from-accent-amber/10 to-[#c49a70]/5 px-5 py-3 shadow-[0_0_20px_rgba(240,197,154,0.1)]">
+              <div className="flex items-center gap-3 min-w-0">
+                <span className="relative flex h-2 w-2 flex-shrink-0">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-accent-amber opacity-75" />
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-accent-amber" />
+                </span>
+                <div className="min-w-0">
+                  <p className="text-[13px] font-semibold text-accent-amber">
+                    AI đang viết chương...
+                  </p>
+                  {streamingWordCount > 0 && (
+                    <p className="text-[11px] text-accent-amber/60 mt-0.5">
+                      {streamingWordCount.toLocaleString()} từ
+                    </p>
+                  )}
+                </div>
+              </div>
+              <button
+                onClick={onStopScratch}
+                className="flex-shrink-0 flex items-center gap-1.5 rounded-full border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-[12px] font-bold text-red-400 transition hover:bg-red-500/20 hover:text-red-300 hover:border-red-400/50"
+                title="Dừng tạo nội dung"
+              >
+                <Square className="h-3 w-3 fill-current" />
+                Dừng
+              </button>
             </div>
           )}
           {!hasVisibleContent && (
@@ -439,21 +482,32 @@ export const ChapterEditorPane: React.FC<Props> = ({
               <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                 <div>
                   <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-accent-amber/80">
-                    {isLoadFailureState ? 'Content Load Issue' : 'Chapter Empty'}
+                    {emptyStateVariant === 'loading'
+                      ? 'Đang tải nội dung'
+                      : isLoadFailureState ? 'Lỗi tải nội dung' : 'Chương trống'}
                   </p>
                   <p className="mt-2 text-[18px] font-semibold text-[#f2e7dc]">
-                    {isLoadFailureState
+                    {emptyStateVariant === 'loading'
+                      ? 'Đang tải nội dung chương từ bộ nhớ...'
+                      : isLoadFailureState
                       ? 'Chương này đáng ra đã có nội dung, nhưng hiện đang lỗi tải.'
                       : 'Chương này mới có khung, chưa có bản thảo chi tiết.'}
                   </p>
                   <p className="mt-1 max-w-[540px] text-[13px] leading-6 text-[#b9aca0]">
-                    {isLoadFailureState
+                    {emptyStateVariant === 'loading'
+                      ? 'Hệ thống đang nạp lại nội dung từ storage. Vui lòng chờ trong giây lát.'
+                      : isLoadFailureState
                       ? 'Đây là project phóng tác/upload nên không tự động dựng lại bằng AI. Hãy thử tải lại nội dung từ storage trước.'
                       : 'Bạn có thể tự viết tay hoặc yêu cầu AI dựng lại chương từ đầu dựa trên outline, canon và ngữ cảnh đã chốt.'}
                   </p>
                 </div>
 
-                {isLoadFailureState ? (
+                {emptyStateVariant === 'loading' ? (
+                  <div className="inline-flex items-center justify-center gap-2 rounded-full bg-accent-amber/20 px-5 py-3 text-[13px] font-bold text-accent-amber">
+                    <RotateCcw className="h-4 w-4 animate-spin" />
+                    Đang tải...
+                  </div>
+                ) : isLoadFailureState ? (
                   <button
                     type="button"
                     onClick={onRetryLoadContent}
@@ -464,15 +518,30 @@ export const ChapterEditorPane: React.FC<Props> = ({
                     {isReloadingChapterContent ? 'Đang tải lại nội dung...' : 'Tải lại nội dung'}
                   </button>
                 ) : (
-                  <button
-                    type="button"
-                    onClick={onGenerateFromScratch}
-                    disabled={isGeneratingFromScratch}
-                    className="inline-flex items-center justify-center gap-2 rounded-full bg-accent-amber px-5 py-3 text-[13px] font-bold text-[#2a1c14] transition hover:bg-[#ffd7ab] disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    <Wand2 className={`h-4 w-4 ${isGeneratingFromScratch ? 'animate-pulse' : ''}`} />
-                    {isGeneratingFromScratch ? 'AI đang dựng chương...' : 'AI tạo lại từ đầu'}
-                  </button>
+                  <div className="flex flex-col gap-3">
+                    <button
+                      type="button"
+                      onClick={onGenerateFromScratch}
+                      disabled={isGeneratingFromScratch || batchProgress?.isRunning}
+                      className="inline-flex items-center justify-center gap-2 rounded-full bg-accent-amber px-5 py-3 text-[13px] font-bold text-[#2a1c14] transition hover:bg-[#ffd7ab] disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      <Wand2 className={`h-4 w-4 ${isGeneratingFromScratch ? 'animate-pulse' : ''}`} />
+                      {isGeneratingFromScratch ? 'AI đang dựng chương...' : 'AI tạo lại từ đầu'}
+                    </button>
+                    {emptyChapterCount > 1 && (
+                      <button
+                        type="button"
+                        onClick={onBatchGenerateAll}
+                        disabled={isGeneratingFromScratch || batchProgress?.isRunning}
+                        className="inline-flex items-center justify-center gap-2 rounded-full border border-accent-amber/30 bg-accent-amber/10 px-5 py-3 text-[13px] font-bold text-accent-amber transition hover:bg-accent-amber/20 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        <Sparkles className={`h-4 w-4 ${batchProgress?.isRunning ? 'animate-pulse' : ''}`} />
+                        {batchProgress?.isRunning
+                          ? `Đang viết ${batchProgress.current}/${batchProgress.total} chương...`
+                          : `Viết tất cả ${emptyChapterCount} chương trống`}
+                      </button>
+                    )}
+                  </div>
                 )}
               </div>
             </div>

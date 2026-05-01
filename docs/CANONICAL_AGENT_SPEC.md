@@ -55,6 +55,7 @@ Project tabs canonical:
 - `outline`
 - `writer`
 - `chapters`
+- `storymap`
 - `review`
 - `export`
 
@@ -139,6 +140,13 @@ Nếu cần tái sử dụng một module trong nhóm này:
 
 - Trung tâm manuscript management.
 - Summary, version, branch, collab, discussion.
+
+`storymap`
+
+- Bản đồ trực quan toàn bộ câu chuyện (read-only).
+- 3 views: Timeline (chương + arc + act structure), Nhân vật (character graph), Phục bút (foreshadowing tracker).
+- Không edit trực tiếp — click để navigate sang tab tương ứng.
+- Zero backend mới — toàn bộ dữ liệu từ Project type hiện có.
 
 `review`
 

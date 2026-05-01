@@ -26,6 +26,7 @@ import { deriveChapterUIStatus } from './editor_types';
 import type { Chapter, Project } from '../../types/story';
 import { createId } from '../../core/id';
 import { useTokenStore } from '../../store/use_token_store';
+import { resolveWriterResumeChapterId, useAppSessionStore } from '../../store/use_app_session_store';
 import { useCreationChatStore } from '../../store/use_creation_chat_store';
 import { useStoryEditorChatStore } from '../../store/use_story_editor_chat_store';
 import { useWorkflowSessionStore } from '../../store/use_workflow_session_store';
@@ -41,14 +42,17 @@ import {
   getDrafts,
   clearAllDrafts,
   saveDraftsBatch,
+  saveGeneratingDraft,
+  markDraftInterrupted,
   type AutosaveDraft,
 } from '../../lib/storage/autosave_draft_store';
+import { useGenerationStore } from '../../store/use_generation_store';
 
 interface Props {
   project: Project;
   onUpdateProject: (id: string, patch: Partial<Project>) => void;
-  onAddChapter: (id: string, chapter: Chapter) => void;
-  onUpdateChapter: (projectId: string, chapterId: string, patch: Partial<Chapter>) => void;
+  onAddChapter: (id: string, chapter: Chapter) => Promise<void> | void;
+  onUpdateChapter: (projectId: string, chapterId: string, patch: Partial<Chapter>) => Promise<void> | void;
   initialMode?: EditorMode;
   onNavigate?: (tab: string) => void;
   onOpenCreationChat?: () => void;
@@ -67,10 +71,14 @@ export default function StoryWorkspace({
     () => sortChaptersBySequence(project.chapters || []),
     [project.chapters],
   );
+  const rememberedChapterId = useAppSessionStore(
+    (state) => state.activeWriterChapterIdByProject[project.id] ?? null,
+  );
+  const rememberWriterChapter = useAppSessionStore((state) => state.rememberWriterChapter);
 
   // ── UI State ──
   const [activeChapterId, setActiveChapterId] = useState<string | null>(
-    chapters[0]?.id || null,
+    () => resolveWriterResumeChapterId(chapters, rememberedChapterId),
   );
   const [currentMode, setCurrentMode] = useState<EditorMode>(initialMode);
   const [isSaving, setIsSaving] = useState(false);
@@ -81,8 +89,9 @@ export default function StoryWorkspace({
   const [selectionMap, setSelectionMap] = useState<Record<string, EditorSelection | null>>({});
   const [proposalMap, setProposalMap] = useState<Record<string, EditorAiProposal | null>>({});
   const [assistantPrefill, setAssistantPrefill] = useState('');
-  const [isGeneratingFromScratch, setIsGeneratingFromScratch] = useState(false);
   const [isReloadingChapterContent, setIsReloadingChapterContent] = useState(false);
+  const [isHydrating, setIsHydrating] = useState(true);
+  const [batchProgress, setBatchProgress] = useState<{ current: number; total: number; isRunning: boolean } | null>(null);
 
   // ── Session Tracking ──
   const [sessionStartTime] = useState(() => Date.now());
@@ -94,6 +103,8 @@ export default function StoryWorkspace({
 
   // ── Store actions ──
   const insertChapter = useProjectStore((state) => state.insertChapter);
+  const removeChapter = useProjectStore((state) => state.removeChapter);
+  const replaceChapters = useProjectStore((state) => state.replaceProjectChapters);
 
   // ── Token Tracking (real data from store) ──
   const sessionTokens = useTokenStore((state) => {
@@ -109,8 +120,16 @@ export default function StoryWorkspace({
   const setChapterMessages = useStoryEditorChatStore((state) => state.setChapterMessages);
   const seedChapterMessages = useStoryEditorChatStore((state) => state.seedChapterMessages);
   const startWorkflowIntent = useWorkflowSessionStore((state) => state.startIntent);
+  // [Domain:StoryEditor] Scratch streaming state from generation store
+  const isScratchStreaming = useGenerationStore((s) => s.isScratchStreaming);
+  const startScratchStream = useGenerationStore((s) => s.startScratchStream);
+  const appendScratchChunk = useGenerationStore((s) => s.appendScratchChunk);
+  const stopScratchStream = useGenerationStore((s) => s.stopScratchStream);
+  const finishScratchStream = useGenerationStore((s) => s.finishScratchStream);
+  const setChunkPersistListener = useGenerationStore((s) => s.setChunkPersistListener);
   const pushNotification = useNotificationStore((state) => state.push);
   const hydrateProjectChapters = useProjectStore((state) => state.hydrateProjectChapters);
+  const replaceProjectChapters = useProjectStore((state) => state.replaceProjectChapters);
   const activeMessages = useStoryEditorChatStore((state) =>
     activeChapterId
       ? state.chapterMessagesByProject[project.id]?.[activeChapterId] || []
@@ -139,10 +158,18 @@ export default function StoryWorkspace({
       return;
     }
 
-    if (!activeChapterId || !chapters.some((chapter) => chapter.id === activeChapterId)) {
-      setActiveChapterId(chapters[0].id);
-    }
-  }, [activeChapterId, chapters]);
+    setActiveChapterId((current) => {
+      if (current && chapters.some((chapter) => chapter.id === current)) {
+        return current;
+      }
+
+      return resolveWriterResumeChapterId(chapters, rememberedChapterId);
+    });
+  }, [chapters, rememberedChapterId]);
+
+  useEffect(() => {
+    rememberWriterChapter(project.id, activeChapterId);
+  }, [activeChapterId, project.id, rememberWriterChapter]);
 
   // ── Autosave Hook ──
   const {
@@ -166,10 +193,88 @@ export default function StoryWorkspace({
     }
   }, [project.id]);
 
-  // [Domain:StoryEditor] STEP — beforeunload guard
+  // [Domain:StoryEditor] STEP — Register autosave listener for streaming chunks
+  // Fires every chunk: debounces to write localStorage every ~500ms max.
+  // Uses ref to avoid stale closure on chapter title.
+  const chunkSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const CHUNK_SAVE_DEBOUNCE_MS = 500;
+
+  useEffect(() => {
+    const listener = (chapterId: string, accumulated: string) => {
+      // [Domain:StoryEditor] STEP — Debounce: don't write localStorage on every keystroke
+      if (chunkSaveTimerRef.current) {
+        clearTimeout(chunkSaveTimerRef.current);
+      }
+      chunkSaveTimerRef.current = setTimeout(() => {
+        const store = useGenerationStore.getState();
+        const jobId = store.generationJobId;
+        if (!jobId) return;
+        const chapter = chapters.find((c) => c.id === chapterId);
+        const title = chapter?.title ?? 'Chương';
+        saveGeneratingDraft(project.id, chapterId, accumulated, title, jobId);
+      }, CHUNK_SAVE_DEBOUNCE_MS);
+    };
+
+    setChunkPersistListener(listener);
+
+    return () => {
+      // [Domain:StoryEditor] Cleanup: unregister listener and clear pending timer
+      setChunkPersistListener(null);
+      if (chunkSaveTimerRef.current) {
+        clearTimeout(chunkSaveTimerRef.current);
+      }
+    };
+  }, [chapters, project.id, setChunkPersistListener]);
+
+  // [Domain:StoryEditor] STEP — Initial hydration: load chapter content from IndexedDB/Provider
+  // Sets isHydrating=false when complete so UI can distinguish 'loading' from 'load-failure'
+  useEffect(() => {
+    let cancelled = false;
+    setIsHydrating(true);
+
+    hydrateProjectChapters(project.id)
+      .catch((err) => {
+        console.warn('[StoryWorkspace] Initial hydration failed:', err);
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsHydrating(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [hydrateProjectChapters, project.id]);
+
+  // [Domain:StoryEditor] STEP — Enhanced beforeunload guard
+  // Layer 1 protection: warn + flush when user tries to close/navigate away
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      // [Domain:StoryEditor] Collect ALL dirty chapters, not just active
+      // [Domain:StoryEditor] STEP 1 — Always warn if AI is actively generating
+      if (isScratchStreaming) {
+        e.preventDefault();
+        // [Domain:StoryEditor] STEP 2 — Flush partial streaming content immediately
+        const store = useGenerationStore.getState();
+        const chapterId = store.generatingChapterId;
+        const jobId = store.generationJobId;
+        const accumulated = store.scratchStreamedText;
+        if (chapterId && jobId && accumulated.trim()) {
+          const chapter = chapters.find((c) => c.id === chapterId);
+          saveGeneratingDraft(
+            project.id,
+            chapterId,
+            accumulated,
+            chapter?.title ?? 'Chương',
+            jobId
+          );
+          // Mark as interrupted since user is leaving mid-generation
+          markDraftInterrupted(project.id, chapterId);
+        }
+        return;
+      }
+
+      // [Domain:StoryEditor] STEP 3 — Collect ALL dirty chapters (manual edits)
       const dirtyDrafts: Array<{ chapterId: string; content: string; title: string }> = [];
       for (const chapter of chapters) {
         const contentChanged = chapter.id in localContents && localContents[chapter.id] !== chapter.content;
@@ -191,7 +296,7 @@ export default function StoryWorkspace({
 
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [chapters, localContents, localTitles, project.id]);
+  }, [chapters, isScratchStreaming, localContents, localTitles, project.id]);
 
   const resolvedContent = useMemo(() => {
     if (!activeChapterId) return '';
@@ -284,6 +389,15 @@ export default function StoryWorkspace({
     () => isImportedProject(project, chapters.length) || Boolean(project.sourceProjectId),
     [chapters.length, project],
   );
+
+  // [Domain:StoryEditor] STEP — Derive emptyStateVariant:
+  // 'loading' while hydration is in progress,
+  // 'load-failure' for imported projects after hydration completed with empty content,
+  // 'ai-draft' for original projects
+  const emptyStateVariant = useMemo<'ai-draft' | 'load-failure' | 'loading'>(() => {
+    if (isHydrating) return 'loading';
+    return isImportedStoryProject ? 'load-failure' : 'ai-draft';
+  }, [isHydrating, isImportedStoryProject]);
 
   const handleMessagesChange = useCallback(
     (messages: ChatMessage[]) => {
@@ -378,13 +492,14 @@ export default function StoryWorkspace({
     if (!activeChapterId || !activeChapter) return;
     const content = localContents[activeChapterId] ?? activeChapter.content;
     const title = localTitles[activeChapterId] ?? activeChapter.title;
+    const savedAt = new Date().toISOString();
 
     setIsSaving(true);
     try {
-      onUpdateChapter(project.id, activeChapterId, {
+      await onUpdateChapter(project.id, activeChapterId, {
         content,
         title,
-        updatedAt: new Date().toISOString(),
+        updatedAt: savedAt,
       });
       setLocalContents((prev) => {
         const next = { ...prev };
@@ -396,7 +511,7 @@ export default function StoryWorkspace({
         delete next[activeChapterId];
         return next;
       });
-      setLastSavedAt(new Date().toISOString());
+      setLastSavedAt(savedAt);
       // [Domain:StoryEditor] Clear autosave draft after successful manual save
       clearChapterDraft(activeChapterId);
     } finally {
@@ -404,16 +519,17 @@ export default function StoryWorkspace({
     }
   }, [activeChapter, activeChapterId, clearChapterDraft, localContents, localTitles, onUpdateChapter, project.id]);
 
-  const handleApprove = useCallback(() => {
+  const handleApprove = useCallback(async () => {
     if (!activeChapterId || !activeChapter) return;
     const finalContent = localContents[activeChapterId] ?? activeChapter.content ?? '';
     const finalTitle = localTitles[activeChapterId] ?? activeChapter.title;
+    const savedAt = new Date().toISOString();
 
-    onUpdateChapter(project.id, activeChapterId, {
+    await onUpdateChapter(project.id, activeChapterId, {
       content: finalContent,
       title: finalTitle,
       status: 'final',
-      updatedAt: new Date().toISOString(),
+      updatedAt: savedAt,
     });
 
     setLocalContents((prev) => {
@@ -426,7 +542,7 @@ export default function StoryWorkspace({
       delete next[activeChapterId];
       return next;
     });
-    setLastSavedAt(new Date().toISOString());
+    setLastSavedAt(savedAt);
   }, [activeChapter, activeChapterId, localContents, localTitles, onUpdateChapter, project.id]);
 
   const handleAiProposal = useCallback(
@@ -451,7 +567,7 @@ export default function StoryWorkspace({
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         };
-        onAddChapter(project.id, newChapter);
+        void onAddChapter(project.id, newChapter);
         setActiveChapterId(targetId);
       }
 
@@ -524,7 +640,7 @@ export default function StoryWorkspace({
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
-    insertChapter(project.id, newChapter, sequenceNumber);
+    void insertChapter(project.id, newChapter, sequenceNumber);
     setActiveChapterId(id);
     setCurrentMode('write');
     setAssistantPrefill(`Tôi vừa chèn một chương mới ở vị trí này. Dựa trên dữ kiện chương trước và nội dung chương sau, hãy thảo luận và đề xuất các hướng phát triển sự kiện cốt lõi để bảo đảm mạch truyện được mượt mà, không bị xa rời truyện.`);
@@ -540,70 +656,107 @@ export default function StoryWorkspace({
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
-    onAddChapter(project.id, newChapter);
+    void onAddChapter(project.id, newChapter);
     setActiveChapterId(id);
     setCurrentMode('write');
   }, [chapters.length, onAddChapter, project.id]);
 
   const handleGenerateFromScratch = useCallback(async () => {
-    if (!activeChapterId || !activeChapter || isGeneratingFromScratch) return;
+    if (!activeChapterId || !activeChapter || isScratchStreaming) return;
 
     const targetChapterIndex = Math.max(
       0,
       (activeChapter.sequenceNumber ?? chapters.findIndex((chapter) => chapter.id === activeChapterId) + 1) - 1,
     );
 
-    setIsGeneratingFromScratch(true);
-    try {
-      const session = await startWorkflowIntent({
-        id: createId(),
-        type: 'full_write_pipeline',
-        projectId: project.id,
-        chapterId: activeChapterId,
-        source: 'button',
-        createdAt: new Date().toISOString(),
-        payload: {
-          workflowEngine: 'api',
-          project,
-          targetChapterIndex,
-          mode: targetChapterIndex === 0 ? 'create' : 'continue',
-          tensionLevel: 'nudge',
-          prompt: activeChapter.summary?.trim() || undefined,
-          notes: 'Chương hiện tại đang rỗng. Hãy dựng lại từ đầu, bám sát canon, nhân vật, thế giới và outline đã chốt.',
-          styleInstruction: project.writingStyle || undefined,
-        },
-      });
+    // [Domain:StoryEditor] STEP 1 — Start scratch stream WITH chapterId for job tracking
+    const controller = startScratchStream(activeChapterId);
+    const capturedChapterId = activeChapterId;
 
+    // [Domain:StoryEditor] STEP 2 — Clear existing content and show streaming in editor immediately
+    setLocalContents((prev) => ({ ...prev, [capturedChapterId]: '' }));
+
+    try {
+      const session = await startWorkflowIntent(
+        {
+          id: createId(),
+          type: 'full_write_pipeline',
+          projectId: project.id,
+          chapterId: capturedChapterId,
+          source: 'button',
+          createdAt: new Date().toISOString(),
+          payload: {
+            workflowEngine: 'api',
+            project,
+            targetChapterIndex,
+            mode: targetChapterIndex === 0 ? 'create' : 'continue',
+            tensionLevel: 'nudge',
+            prompt: activeChapter.summary?.trim() || undefined,
+            notes: 'Chương hiện tại đang rỗng. Hãy dựng lại từ đầu, bám sát canon, nhân vật, thế giới và outline đã chốt.',
+            styleInstruction: project.writingStyle || undefined,
+            skipReview: true,
+            skipPolish: true,
+            qualityMode: 'fast',
+          },
+        },
+        {
+          // [Domain:StoryEditor] STEP 3 — Each chunk streams directly into editor content
+          onChunk: (_chunk: string, accumulated: string) => {
+            appendScratchChunk(_chunk);
+            setLocalContents((prev) => ({ ...prev, [capturedChapterId]: accumulated }));
+          },
+          signal: controller.signal,
+        },
+      );
+
+      // [Domain:StoryEditor] STEP 4 — Pipeline done; persist final content to store
       const writeResult = session.artifacts.chapterWriteResult;
-      if (!writeResult?.content?.trim()) {
+      const finalContent = writeResult?.content?.trim()
+        ? writeResult.content
+        : useGenerationStore.getState().scratchStreamedText;
+
+      if (!finalContent?.trim()) {
+        if (controller.signal.aborted) {
+          // User stopped — keep what we have in localContents (partial content)
+          finishScratchStream();
+          return;
+        }
         throw new Error(session.error?.message || 'AI không tạo được bản thảo chi tiết cho chương này.');
       }
 
       const nextUpdatedAt = new Date().toISOString();
-      onUpdateChapter(project.id, activeChapterId, {
-        title: writeResult.title || activeChapter.title,
-        content: writeResult.content,
-        summary: writeResult.ledger.summary || activeChapter.summary,
-        status: 'draft',
-        updatedAt: nextUpdatedAt,
-      });
+      const nextChapters = chapters.map((chapter) =>
+        chapter.id === capturedChapterId
+          ? {
+              ...chapter,
+              title: writeResult?.title || activeChapter.title,
+              content: finalContent,
+              summary: writeResult?.ledger?.summary || activeChapter.summary,
+              status: 'draft' as const,
+              updatedAt: nextUpdatedAt,
+            }
+          : chapter,
+      );
+      await replaceProjectChapters(project.id, nextChapters, { storageMode: 'indexeddb' });
 
+      // [Domain:StoryEditor] STEP 5 — Clear local override so editor picks up from store
       setLocalContents((prev) => {
         const next = { ...prev };
-        delete next[activeChapterId];
+        delete next[capturedChapterId];
         return next;
       });
       setLocalTitles((prev) => {
         const next = { ...prev };
-        delete next[activeChapterId];
+        delete next[capturedChapterId];
         return next;
       });
       setProposalMap((prev) => ({
         ...prev,
-        [activeChapterId]: null,
+        [capturedChapterId]: null,
       }));
       setCurrentMode('write');
       setLastSavedAt(nextUpdatedAt);
+      finishScratchStream();
 
       pushNotification({
         type: 'success',
@@ -613,22 +766,168 @@ export default function StoryWorkspace({
           : 'Đã tạo bản nháp mới cho chương đang mở.',
       });
     } catch (error) {
+      // [Domain:StoryEditor] STEP — Classify error for user-friendly message
+      console.error('[handleGenerateFromScratch] Pipeline error:', error);
+      finishScratchStream();
+
+      // If user aborted — keep partial content, no error notification
+      if (controller.signal.aborted) return;
+
+      let userMessage = 'Workflow viết chương thất bại.';
+      if (error instanceof Error) {
+        if (error.message.includes('exceeded hard input budget')) {
+          userMessage = 'Ngữ cảnh dự án quá lớn (vượt giới hạn token). Hãy thử bắt đầu từ chương 1 hoặc kiểm tra cấu hình model.';
+        } else if (error.message.includes('Không tìm thấy model AI')) {
+          userMessage = 'Chưa có model AI nào được cấu hình. Hãy vào Cài đặt → AI để thêm model.';
+        } else if (error.message.includes('sentinel contract') || error.message.includes('rỗng hoặc quá ngắn')) {
+          userMessage = 'AI không tạo được bản thảo. Có thể model chưa hỗ trợ format yêu cầu. Hãy thử đổi model khác.';
+        } else if (!error.message.includes('dừng quá trình')) {
+          userMessage = error.message;
+        } else {
+          return; // User-initiated stop — silent
+        }
+      }
       pushNotification({
         type: 'error',
         title: 'Không thể tạo lại chương',
-        message: error instanceof Error ? error.message : 'Workflow viết chương thất bại.',
+        message: userMessage,
       });
-    } finally {
-      setIsGeneratingFromScratch(false);
     }
   }, [
     activeChapter,
     activeChapterId,
+    appendScratchChunk,
     chapters,
-    isGeneratingFromScratch,
+    finishScratchStream,
+    isScratchStreaming,
+    project,
+    pushNotification,
+    replaceProjectChapters,
+    startScratchStream,
+    startWorkflowIntent,
+  ]);
+
+  // [Domain:StoryEditor] STEP — Stop scratch generation mid-stream
+  const handleStopScratch = useCallback(() => {
+    // [Domain:StoryEditor] Layer 4: Mark draft as interrupted before stopping
+    // so recovery system can detect "tạo dở dang" on next session
+    const store = useGenerationStore.getState();
+    if (store.generatingChapterId && store.generationJobId) {
+      markDraftInterrupted(project.id, store.generatingChapterId);
+    }
+    stopScratchStream();
+  }, [project.id, stopScratchStream]);
+
+  // [Domain:StoryEditor] STEP — Batch generate content for ALL empty chapters
+  const emptyChapterIds = useMemo(
+    () => chapters.filter((ch) => !ch.content?.trim()).map((ch) => ch.id),
+    [chapters],
+  );
+
+  const handleBatchGenerateAll = useCallback(async () => {
+    const emptyChapters = chapters.filter((ch) => !ch.content?.trim());
+    if (emptyChapters.length === 0 || batchProgress?.isRunning) return;
+
+    const total = emptyChapters.length;
+    setBatchProgress({ current: 0, total, isRunning: true });
+
+    let successCount = 0;
+    let failCount = 0;
+    let workingChapters = chapters;
+
+    for (let i = 0; i < emptyChapters.length; i++) {
+      const ch = emptyChapters[i];
+      setBatchProgress({ current: i + 1, total, isRunning: true });
+      setActiveChapterId(ch.id);
+
+      const chapterIndex = Math.max(
+        0,
+        (ch.sequenceNumber ?? chapters.findIndex((c) => c.id === ch.id) + 1) - 1,
+      );
+
+      try {
+        const workingProject: Project = {
+          ...project,
+          chapters: workingChapters,
+        };
+        const session = await startWorkflowIntent({
+          id: createId(),
+          type: 'full_write_pipeline',
+          projectId: project.id,
+          chapterId: ch.id,
+          source: 'batch',
+          createdAt: new Date().toISOString(),
+          payload: {
+            workflowEngine: 'api',
+            project: workingProject,
+            targetChapterIndex: chapterIndex,
+            mode: chapterIndex === 0 ? 'create' : 'continue',
+            tensionLevel: 'nudge',
+            prompt: ch.summary?.trim() || undefined,
+            notes: 'Viết nội dung chi tiết cho chương này, bám sát canon, nhân vật, thế giới và outline đã chốt.',
+            styleInstruction: project.writingStyle || undefined,
+            skipReview: true,
+            skipPolish: true,
+            qualityMode: 'fast',
+          },
+        });
+
+        const writeResult = session.artifacts.chapterWriteResult;
+        if (!writeResult?.content?.trim()) {
+          failCount++;
+          continue;
+        }
+
+        const nextUpdatedAt = new Date().toISOString();
+        workingChapters = workingChapters.map((chapter) =>
+          chapter.id === ch.id
+            ? {
+                ...chapter,
+                title: writeResult.title || ch.title,
+                content: writeResult.content,
+                summary: writeResult.ledger.summary || ch.summary,
+                status: 'draft' as const,
+                updatedAt: nextUpdatedAt,
+              }
+            : chapter,
+        );
+        await replaceProjectChapters(project.id, workingChapters, { storageMode: 'indexeddb' });
+
+        // Clear local overrides so editor picks up fresh store content
+        setLocalContents((prev) => {
+          const next = { ...prev };
+          delete next[ch.id];
+          return next;
+        });
+        setLocalTitles((prev) => {
+          const next = { ...prev };
+          delete next[ch.id];
+          return next;
+        });
+
+        successCount++;
+      } catch (error) {
+        console.error(`[BatchGenerate] Failed chapter ${ch.title}:`, error);
+        failCount++;
+      }
+    }
+
+    setBatchProgress(null);
+
+    pushNotification({
+      type: failCount === 0 ? 'success' : 'warning',
+      title: `Đã viết xong ${successCount}/${total} chương`,
+      message: failCount > 0
+        ? `${failCount} chương gặp lỗi. Bạn có thể thử lại từng chương bằng nút "AI tạo lại từ đầu".`
+        : 'Tất cả chương đã được AI viết nội dung chi tiết!',
+    });
+  }, [
+    batchProgress,
+    chapters,
     onUpdateChapter,
     project,
     pushNotification,
+    replaceProjectChapters,
     startWorkflowIntent,
   ]);
 
@@ -645,6 +944,13 @@ export default function StoryWorkspace({
       );
 
       if (refreshedChapter?.content?.trim()) {
+        // [Domain:StoryEditor] Clear stale localContents so resolvedContent
+        // picks up the freshly hydrated chapter.content from the store
+        setLocalContents((prev) => {
+          const next = { ...prev };
+          delete next[activeChapterId];
+          return next;
+        });
         pushNotification({
           type: 'success',
           title: 'Đã nạp lại nội dung chương',
@@ -701,6 +1007,58 @@ export default function StoryWorkspace({
     setRecoveryDrafts([]);
   }, [project.id]);
 
+  // [Domain:StoryEditor] STEP — Delete chapter
+  const handleDeleteChapter = useCallback(async (chapterId: string) => {
+    await removeChapter(project.id, chapterId);
+    if (activeChapterId === chapterId) {
+      const next = chapters.find((c) => c.id !== chapterId);
+      setActiveChapterId(next?.id ?? null);
+    }
+    pushNotification({ type: 'success', title: 'Đã xóa chương', message: 'Chương đã được xóa khỏi dự án.' });
+  }, [activeChapterId, chapters, project.id, pushNotification, removeChapter]);
+
+  // [Domain:StoryEditor] STEP — Duplicate chapter
+  const handleDuplicateChapter = useCallback(async (chapter: Chapter) => {
+    const { createId: mkId } = await import('../../core/id');
+    const newId = mkId();
+    const seq = (chapter.sequenceNumber ?? chapters.length) + 1;
+    const copy: Chapter = {
+      ...chapter,
+      id: newId,
+      title: chapter.title ? `${chapter.title} (Bản sao)` : `Chương ${seq}`,
+      sequenceNumber: seq,
+      status: 'draft' as const,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    await insertChapter(project.id, copy, seq);
+    setActiveChapterId(newId);
+    pushNotification({ type: 'success', title: 'Đã nhân bản chương', message: `Đã tạo bản sao: "${copy.title}"` });
+  }, [chapters, insertChapter, project.id, pushNotification]);
+
+  // [Domain:StoryEditor] STEP — Move chapter up (swap sequence numbers)
+  const handleMoveChapterUp = useCallback(async (chapterId: string) => {
+    const idx = chapters.findIndex((c) => c.id === chapterId);
+    if (idx <= 0) return;
+    const reordered = [...chapters];
+    const tmp = reordered[idx - 1];
+    reordered[idx - 1] = { ...reordered[idx], sequenceNumber: tmp.sequenceNumber };
+    reordered[idx] = { ...tmp, sequenceNumber: reordered[idx].sequenceNumber };
+    await replaceChapters(project.id, reordered, { storageMode: 'indexeddb' });
+  }, [chapters, project.id, replaceChapters]);
+
+  // [Domain:StoryEditor] STEP — Move chapter down (swap sequence numbers)
+  const handleMoveChapterDown = useCallback(async (chapterId: string) => {
+    const idx = chapters.findIndex((c) => c.id === chapterId);
+    if (idx < 0 || idx >= chapters.length - 1) return;
+    const reordered = [...chapters];
+    const seqA = reordered[idx].sequenceNumber;
+    const seqB = reordered[idx + 1].sequenceNumber;
+    reordered[idx] = { ...reordered[idx + 1], sequenceNumber: seqA };
+    reordered[idx + 1] = { ...chapters[idx], sequenceNumber: seqB };
+    await replaceChapters(project.id, reordered, { storageMode: 'indexeddb' });
+  }, [chapters, project.id, replaceChapters]);
+
   void onUpdateProject;
 
   // ── Render ──
@@ -723,6 +1081,9 @@ export default function StoryWorkspace({
         onNavigate={onNavigate}
         onOpenCreationChat={creationProgressSummary ? onOpenCreationChat : undefined}
         creationProgressSummary={creationProgressSummary}
+        emptyChapterCount={emptyChapterIds.length}
+        batchProgress={batchProgress}
+        onBatchGenerateAll={handleBatchGenerateAll}
       />
 
       {/* Main Content Area - 3 Columns */}
@@ -750,9 +1111,12 @@ export default function StoryWorkspace({
             wordCount={wordCount}
             readingTimeMinutes={readingTimeMinutes}
             lastSavedAt={lastSavedAt}
-            emptyStateVariant={isImportedStoryProject ? 'load-failure' : 'ai-draft'}
-            isGeneratingFromScratch={isGeneratingFromScratch}
+            emptyStateVariant={emptyStateVariant}
+            isGeneratingFromScratch={isScratchStreaming}
             isReloadingChapterContent={isReloadingChapterContent}
+            batchProgress={batchProgress}
+            emptyChapterCount={emptyChapterIds.length}
+            onBatchGenerateAll={handleBatchGenerateAll}
             onContentChange={handleContentChange}
             onTitleChange={handleTitleChange}
             onAcceptProposal={handleAcceptProposal}
@@ -760,6 +1124,7 @@ export default function StoryWorkspace({
             onSelectionChange={handleSelectionChange}
             onSelectionAction={handleSelectionAction}
             onGenerateFromScratch={handleGenerateFromScratch}
+            onStopScratch={handleStopScratch}
             onRetryLoadContent={handleRetryLoadChapterContent}
             hasSelection={Boolean(activeSelection?.text)}
             onModeChange={setCurrentMode}
@@ -781,12 +1146,17 @@ export default function StoryWorkspace({
             onOpenReview={() => setCurrentMode('review')}
             sessionTokens={sessionTokens}
             project={projectInfo}
+            fullProject={project}
             chapters={chapters}
             selectedChapterId={activeChapterId}
             statusMap={statusMap}
             onSelectChapter={handleSelectChapter}
             onNewChapter={handleCreateNew}
             onInsertChapter={handleInsertChapter}
+            onDeleteChapter={handleDeleteChapter}
+            onDuplicateChapter={handleDuplicateChapter}
+            onMoveChapterUp={handleMoveChapterUp}
+            onMoveChapterDown={handleMoveChapterDown}
           />
         </div>
       </div>

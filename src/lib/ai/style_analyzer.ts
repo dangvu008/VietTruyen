@@ -31,6 +31,8 @@ Nhiệm vụ: Phân tích văn phong, chính tả, ngữ pháp của đoạn vă
 Quy tắc:
 - Tập trung vào lỗi THẬT SỰ ảnh hưởng chất lượng, không bắt bẻ vặt
 - Ưu tiên: chính tả > ngữ pháp > chọn từ > mạch câu > lặp từ > giọng văn > hội thoại > nhịp truyện
+- Phát hiện lỗi lệch register/bối cảnh: cổ đại mà dùng từ hiện đại, hiện đại mà dùng cổ phong giả tạo, hoặc Hán Việt dày đặc không phù hợp.
+- Phát hiện lỗi xưng hô: trượt ngôi kể, đổi đại từ vô cớ trong cùng cảnh, sai quan hệ quyền lực, sai sắc thái khi đối đầu/thân mật.
 - Mỗi correction phải có original (nguyên văn) và corrected (đã sửa) để user so sánh
 - Giải thích ngắn gọn tại sao sửa (1-2 câu)
 - Tối đa 15 corrections mỗi lần phân tích
@@ -86,7 +88,6 @@ export async function analyzeChapterStyle(opts: AnalyzeOptions): Promise<StyleAn
     userPrompt,
     taskType: 'polish_style',
     responseFormat: 'json_object',
-    skipCache: true, // Always fresh analysis
   });
 
   return parseAnalysisResponse(response, chapterId, project.id);
@@ -137,7 +138,9 @@ Trả về JSON đúng format:
 }
 
 Lưu ý: "original" phải trích NGUYÊN VĂN từ nội dung, không paraphrase.
-Chỉ liệt kê lỗi thật sự quan trọng, tối đa 15 corrections.`;
+Chỉ liệt kê lỗi thật sự quan trọng, tối đa 15 corrections.
+Nếu genre/tone gợi ý bối cảnh cổ đại hoặc cổ phong, hãy đặc biệt soi lỗi dùng từ hiện đại kiểu "thành phố", "cao ốc", "CEO", "app".
+Đồng thời soi kỹ lỗi xưng hô như "ta" đổi sang "tôi", "thiếp/chàng" đổi sang "anh/em", hoặc kẻ thù lại nói với nhau quá thân mật không có setup.`;
 }
 
 function parseAnalysisResponse(

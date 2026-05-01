@@ -21,3 +21,5 @@ export const LazyCommunityPage = lazy(() => import('../components/pages/Communit
 export const LazyAnalyticsPage = lazy(() => import('../components/pages/AnalyticsPage'));
 export const LazyAiSettingsPage = lazy(() => import('../components/pages/AiSettingsPage'));
 export const LazyCreationChatPage = lazy(() => import('../components/pages/CreationChatPage'));
+export const LazyTemplateManagerPage = lazy(() => import('../components/pages/TemplateManagerPage'));
+export const LazyStoryMapPage = lazy(() => import('../components/pages/StoryMapPage'));

@@ -8,6 +8,7 @@
  * - State: isStreaming, streamedText, canResume, resumeContext
  * - Actions: startStream, appendChunk, stopStream, resumeStream, finishStream, reset
  * - Consumer: AIAssistantPanel, ChapterEditorPane, StoryWorkspace
+ * - New: generationJobId, activeChapterId for crash recovery + completion tracking
  */
 
 import { create } from 'zustand';
@@ -34,9 +35,9 @@ export interface ResumeContext {
 }
 
 interface GenerationState {
-  /** Whether AI is currently streaming */
+  /** Whether AI is currently streaming (chat assistant) */
   isStreaming: boolean;
-  /** Text accumulated so far during streaming */
+  /** Text accumulated so far during streaming (chat assistant) */
   streamedText: string;
   /** Whether user can resume (has stopped mid-stream) */
   canResume: boolean;
@@ -46,6 +47,29 @@ interface GenerationState {
   abortController: AbortController | null;
   /** ID of the chat message being streamed into */
   streamingMessageId: string | null;
+
+  // ── Scratch Generation Streaming ──
+  /** Whether AI is streaming content directly into the chapter editor */
+  isScratchStreaming: boolean;
+  /** Text accumulated so far for scratch generation */
+  scratchStreamedText: string;
+  /** AbortController for scratch generation */
+  scratchAbortController: AbortController | null;
+
+  // ── Generation Job Tracking (crash recovery + completion detection) ──
+  /** Unique ID for the current generation job (null when idle) */
+  generationJobId: string | null;
+  /** Chapter ID being generated (null when idle) */
+  generatingChapterId: string | null;
+  /** ISO timestamp when scratch generation started (for stale detection) */
+  generationStartedAt: string | null;
+  /**
+   * Optional callback — invoked on every chunk with accumulated text.
+   * Use this to hook autosave-during-streaming without polling.
+   */
+  onChunkPersist: ((chapterId: string, accumulated: string) => void) | null;
+  /** Register a chunk persist listener (replaces previous) */
+  setChunkPersistListener: (listener: ((chapterId: string, accumulated: string) => void) | null) => void;
 
   // ── Actions ──
 
@@ -63,6 +87,16 @@ interface GenerationState {
   finishStream: () => void;
   /** Full reset (e.g., switching chapters) */
   reset: () => void;
+
+  // ── Scratch Streaming Actions ──
+  /** Start streaming directly into the editor ("AI tao lai tu dau") — with job tracking */
+  startScratchStream: (chapterId: string) => AbortController;
+  /** Append a chunk to scratch streamed text — fires onChunkPersist if registered */
+  appendScratchChunk: (chunk: string) => void;
+  /** Stop scratch streaming mid-way */
+  stopScratchStream: () => void;
+  /** Scratch stream completed naturally */
+  finishScratchStream: () => void;
 }
 
 // ─── Store ──────────────────────────────────────────────
@@ -74,6 +108,17 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
   resumeContext: null,
   abortController: null,
   streamingMessageId: null,
+  isScratchStreaming: false,
+  scratchStreamedText: '',
+  scratchAbortController: null,
+  generationJobId: null,
+  generatingChapterId: null,
+  generationStartedAt: null,
+  onChunkPersist: null,
+
+  setChunkPersistListener: (listener) => {
+    set({ onChunkPersist: listener });
+  },
 
   startStream: (messageId, context) => {
     // [Domain:StoryEditor] STEP 1 — Abort any existing stream first
@@ -161,6 +206,60 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
       resumeContext: null,
       abortController: null,
       streamingMessageId: null,
+    });
+  },
+
+  // [Domain:StoryEditor] Scratch streaming — streams directly into chapter editor
+  startScratchStream: (chapterId: string) => {
+    const existing = get().scratchAbortController;
+    if (existing) {
+      existing.abort();
+    }
+    const controller = new AbortController();
+    // [Domain:StoryEditor] STEP — Record job start for crash recovery
+    const jobId = `gen-${chapterId}-${Date.now()}`;
+    set({
+      isScratchStreaming: true,
+      scratchStreamedText: '',
+      scratchAbortController: controller,
+      generationJobId: jobId,
+      generatingChapterId: chapterId,
+      generationStartedAt: new Date().toISOString(),
+    });
+    return controller;
+  },
+
+  appendScratchChunk: (chunk: string) => {
+    set((state) => {
+      const next = state.scratchStreamedText + chunk;
+      // [Domain:StoryEditor] STEP — Fire persist listener on every chunk
+      if (state.onChunkPersist && state.generatingChapterId) {
+        state.onChunkPersist(state.generatingChapterId, next);
+      }
+      return { scratchStreamedText: next };
+    });
+  },
+
+  stopScratchStream: () => {
+    const controller = get().scratchAbortController;
+    if (controller) {
+      controller.abort();
+    }
+    // [Domain:StoryEditor] STEP — Keep jobId/chapterId so recovery can detect interrupted job
+    set({
+      isScratchStreaming: false,
+      scratchAbortController: null,
+    });
+  },
+
+  finishScratchStream: () => {
+    // [Domain:StoryEditor] STEP — Clear all job tracking on natural completion
+    set({
+      isScratchStreaming: false,
+      scratchAbortController: null,
+      generationJobId: null,
+      generatingChapterId: null,
+      generationStartedAt: null,
     });
   },
 }));

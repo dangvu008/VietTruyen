@@ -83,6 +83,38 @@ describe('ai_client callAiProxy fallback behavior', () => {
     expect(fetchMock.mock.calls[1][1]?.headers?.Authorization).toBe('Bearer session-token');
   });
 
+  it('uses 9router openai-compatible endpoint when local proxy url ends with /v1', async () => {
+    vi.stubEnv('VITE_USE_LOCAL_AI_PROXY', 'true');
+    vi.stubEnv('VITE_LOCAL_AI_PROXY_URL', 'http://localhost:20128/v1');
+    vi.stubEnv('VITE_LOCAL_AI_PROXY_KEY', 'sk_9router');
+
+    const fetchMock = vi.fn().mockResolvedValueOnce(createResponse({
+      ok: true,
+      status: 200,
+      json: {
+        choices: [{ message: { content: '9router-ok' } }],
+        usage: {
+          prompt_tokens: 11,
+          completion_tokens: 13,
+          total_tokens: 24,
+        },
+      },
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    getSession.mockResolvedValue({
+      data: { session: null },
+    });
+
+    const result = await callAiProxy(BASE_OPTS);
+
+    expect(result.text).toBe('9router-ok');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(String(fetchMock.mock.calls[0][0])).toBe('http://localhost:20128/v1/chat/completions');
+    expect(fetchMock.mock.calls[0][1]?.headers?.Authorization).toBe('Bearer sk_9router');
+    expect(fetchMock.mock.calls[0][1]?.body).toContain('if/kimi-k2-thinking');
+  });
+
   it('fails fast for guest mode when local proxy is down and no direct key exists', async () => {
     vi.stubEnv('VITE_USE_LOCAL_AI_PROXY', 'true');
 

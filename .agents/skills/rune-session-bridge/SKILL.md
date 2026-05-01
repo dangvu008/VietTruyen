@@ -1,6 +1,7 @@
 ---
 name: rune-session-bridge
 description: "Universal context persistence across sessions. Auto-saves decisions, conventions, and progress to .rune/ files. Loads state at session start. Use when any skill makes architectural decisions or establishes patterns that must survive session boundaries."
+model: gemini-3-flash-lite
 ---
 
 
@@ -44,6 +45,9 @@ Solve the #1 developer complaint: context loss across sessions. Session-bridge a
 - `cook` (L1): auto-save decisions during feature implementation
 - `rescue` (L1): state management throughout refactoring
 - `context-engine` (L3): save state before compaction
+- `context-pack` (L3): coordinate state for sub-agent handoff
+- `neural-memory` (L3): sync key decisions back to `.rune/` files after Capture Mode
+- `adversary` (L2): (oracle-mode) detach protocol when target model is opus-class for non-blocking dispatch
 
 ## State Files Managed
 
@@ -361,6 +365,54 @@ Handle results:
 - `SUSPICIOUS` → present warning to user with specific findings. Ask: "Suspicious patterns detected in .rune/ files. Load anyway?" If user approves → proceed. If not → exit load mode.
 - `TAINTED` → **BLOCK load**. Report: ".rune/ integrity check FAILED — possible poisoning detected. Run `/rune integrity` for details."
 
+#### Step 1.7 — Load invariants (auto-discipline)
+
+Before loading the usual state files, run the invariants loader so the agent sees active discipline rules without being told to look:
+
+```
+Execute: node skills/session-bridge/scripts/load-invariants.js --root <project-root> --json
+```
+
+The loader:
+- Reads `.rune/INVARIANTS.md` (silent no-op if missing)
+- Strips the `## Archived` section (retired rules don't re-activate)
+- Parses active rules into `{ section, title, what, where, why }`
+- Returns a token-budgeted preview (≤ 500 tokens by default)
+- Flags staleness when mtime > 30 days
+
+**Emit signal**: `invariants.loaded` with payload `{ loaded, count, rules, stats, stale, overflow, path }` where:
+- `loaded` (boolean) — whether any active rules were parsed
+- `count` (number) — total active rules (convenience alias for `stats.total`)
+- `rules` (array) — full rule objects `[{ section, title, what, where: string[], why }]` — consumers cache these for glob matching
+- `stats` — `{ danger, critical, state, cross, total, archivedSkipped }`
+- `stale` (boolean) — mtime > 30 days
+- `overflow` (number) — rules present but not shown in preview (budget overflow)
+- `path` (string) — absolute path to `.rune/INVARIANTS.md`
+
+Downstream listeners (`logic-guardian`, Pro `autopilot`) consume `rules[]` directly — no second file read needed.
+
+**Present to agent** (injected verbatim into the Load Mode summary):
+
+```
+📎 Active Invariants (.rune/INVARIANTS.md)
+⚠  skills/skill-router/** — L0 router, never bypass
+🔒  compiler/parser.js — IR schema is the adapter contract
+🔁  compiler/hooks/dispatch.js — phase order is pre → run → post
+🔗  .claude-plugin/marketplace.json — mirrors plugin.json
+…+2 more rules in .rune/INVARIANTS.md
+```
+
+**Staleness warning** (emit ONCE per session, not per tool call):
+
+```
+⚠ Invariants file is stale (> 30 days since last onboard). Consider `rune onboard --refresh`.
+```
+
+**Failure modes**:
+- Missing file → silent no-op (no preview, no error). Don't nag fresh repos.
+- Malformed file → `loaded: false, rules: []`. Log a single-line warning, continue.
+- File fails `integrity-check` in Step 1.5 → this step is skipped entirely (load already blocked).
+
 #### Step 2 — Load files
 
 Use read the file on all four state files in parallel:
@@ -481,6 +533,7 @@ At Load Mode Step 1, after checking `.rune/*.md` existence, also check for `.run
 ## Session Bridge — Loaded
 - **Last session**: [date and summary]
 - **Checkpoint**: [detected — resume point] | [none]
+- **Invariants**: [N loaded from .rune/INVARIANTS.md] | [none] | [stale — run rune onboard --refresh]
 - **Decisions on file**: [count]
 - **Conventions on file**: [count]
 - **Learnings on file**: [count] (top 5 surfaced if 10+)
@@ -495,11 +548,86 @@ At Load Mode Step 1, after checking `.rune/*.md` existence, also check for `.run
 - **Remaining tasks**: [count]
 ```
 
+## Detach Mode (v0.8.0)
+
+Triggered by `oracle.dispatched` from `adversary` oracle-mode. Decouples the primary agent from a slow heavy-model call so the agent can continue adjacent work while the second model reasons.
+
+**Why**: Opus-class reasoning takes 1-10 minutes wall time. Synchronous waits kill primary-agent throughput, especially in `team` parallel workstreams.
+
+### Step D1 — Receive dispatch
+
+When `oracle.dispatched` arrives, payload contains:
+- `sessionId` — caller-provided unique id
+- `triggerSignal` — `agent.stuck` or manual
+- `sourceSkill` — `debug` | `fix` | manual
+- `targetModel` — concrete model name (e.g. `gpt-5-pro`, `gemini-3-pro`, `claude-opus-4-7`)
+- `bundleHash` — sha256 of the bundled context (idempotency key)
+
+### Step D2 — Idempotency check
+
+Look up `.rune/oracle-pending/<sessionId>.json` AND any pending file with matching `bundleHash`. If a pending record with status=`pending` and the same `bundleHash` exists, **return the existing sessionId** — do NOT dispatch a duplicate.
+
+### Step D3 — Write pending record
+
+Create `.rune/oracle-pending/<sessionId>.json`:
+
+```json
+{
+  "sessionId": "oracle-1714234500-abc123",
+  "dispatchedAt": "2026-04-27T12:34:56Z",
+  "triggerSignal": "agent.stuck",
+  "sourceSkill": "debug",
+  "targetModel": "claude-opus-4-7",
+  "bundleHash": "sha256:9f3a...",
+  "status": "pending",
+  "timeoutAt": "2026-04-27T12:44:56Z",
+  "responseId": null,
+  "responseExcerpt": null
+}
+```
+
+`timeoutAt` defaults to `dispatchedAt + 10min`.
+
+### Step D4 — Return control to caller
+
+Caller (`adversary`) receives the sessionId and returns to the primary orchestrator. Primary agent (`cook`/`team`) continues adjacent phases.
+
+### Step D5 — Reattach (called by primary agent between phases)
+
+Invocation: `session-bridge --reattach <sessionId>` (or via `oracle.dispatched` listen → poll).
+
+Behavior:
+1. Read `.rune/oracle-pending/<sessionId>.json`
+2. If `status=complete` → return `responseExcerpt` to caller, mark record as consumed
+3. If `status=pending` AND `now >= timeoutAt` → set `status=failed`, emit `oracle.failed` reason=`timeout`
+4. If `status=pending` AND `now < timeoutAt` → return `not_ready` to caller, primary agent works on next independent task
+
+### Step D6 — Cleanup
+
+On every session start, scan `.rune/oracle-pending/` for records older than 24h. Delete them — they are orphaned.
+
+### Pending Record Schema
+
+| Field | Type | Required |
+|-------|------|----------|
+| sessionId | string (matches `^oracle-\d+-[a-z0-9]+$`) | yes |
+| dispatchedAt | ISO 8601 timestamp | yes |
+| triggerSignal | string | yes |
+| sourceSkill | enum: `debug` \| `fix` \| `manual` | yes |
+| targetModel | string | yes |
+| bundleHash | string (matches `^sha256:[a-f0-9]{8,64}$`) | yes |
+| status | enum: `pending` \| `complete` \| `failed` | yes |
+| timeoutAt | ISO 8601 timestamp | yes |
+| responseId | string \| null | yes (null until status=complete) |
+| responseExcerpt | string ≤500 chars \| null | yes |
+
 ## Constraints
 
 1. MUST save decisions, conventions, and progress — not just a status line
 2. MUST verify saved context can be loaded in a fresh session — test the round-trip
 3. MUST NOT overwrite existing bridge data without merging
+4. (Detach) MUST be idempotent — same sessionId or bundleHash returns existing record, never dispatches twice
+5. (Detach) MUST clean up orphaned pending records (age >24h) on session start
 
 ## Sharp Edges
 
@@ -515,6 +643,9 @@ Known failure modes for this skill. Check these before declaring done.
 | Learnings JSONL grows unbounded | MEDIUM | Auto-compact at 100 entries — keep only latest-winner per key+type |
 | Checkpoint stale after code changes | MEDIUM | Checkpoint includes git state — if branch/commit differ at resume, warn user that checkpoint may be outdated |
 | Multiple checkpoints overwrite each other | LOW | By design — only one active checkpoint. Resolved ones archived with date suffix |
+| (Detach) Pending file orphaned forever — process crashed mid-dispatch | MEDIUM | Step D6 cleanup runs every session start; records >24h auto-deleted |
+| (Detach) Two adversary calls dispatch same bundle simultaneously | MEDIUM | Step D2 idempotency: bundleHash-keyed lookup returns existing sessionId |
+| (Detach) Reattach polls indefinitely without timeout | HIGH | Step D5 enforces `timeoutAt` — exceeded → emit `oracle.failed` reason=`timeout`, free the primary agent |
 
 ## Done When (Save Mode)
 
@@ -544,6 +675,14 @@ Known failure modes for this skill. Check these before declaring done.
 - Resume command written (specific enough for a fresh session to act on)
 - checkpoint.md written to .rune/
 - Checkpoint Saved report emitted
+
+## Done When (Detach Mode)
+
+- Pending record written to `.rune/oracle-pending/<sessionId>.json` with valid schema
+- Idempotency verified: duplicate bundleHash returned existing sessionId, no duplicate dispatch
+- Reattach API returns `complete` / `pending` / `failed` based on record status + timeout
+- Orphan cleanup runs at session start (records >24h deleted)
+- `oracle.failed` emitted with `reason=timeout` if timeoutAt exceeded
 
 ## Cost Profile
 

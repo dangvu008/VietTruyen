@@ -1,6 +1,7 @@
 ---
 name: rune-perf
 description: "Performance regression gate. Detects N+1 queries, sync-in-async, missing indexes, memory leaks, and bundle bloat before they reach production."
+model: gemini-3-flash
 ---
 
 
@@ -43,6 +44,7 @@ Performance regression gate. Analyzes code changes for patterns that cause measu
 - `audit` (L2): performance dimension delegation
 - `review` (L2): performance patterns detected in diff
 - `deploy` (L2): pre-deploy perf regression check
+- `adversary` (L2): scalability stress test when bottleneck patterns detected in plan
 
 ## References
 

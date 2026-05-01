@@ -1,6 +1,7 @@
 ---
 name: rune-doc-processor
-description: "Generate and parse office documents — PDF, DOCX, XLSX, PPTX, CSV. Pure format utility for creating reports, exporting data, and processing uploaded documents."
+description: "Generate and parse office documents — PDF, DOCX, XLSX, PPTX, CSV. Use when creating reports, exporting tabular data, or processing uploaded office files. NOT for project documentation (use docs)."
+model: gemini-3-flash
 ---
 
 

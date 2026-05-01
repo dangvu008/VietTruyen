@@ -1,6 +1,7 @@
 ---
 name: rune-dependency-doctor
 description: "Dependency health management. Detects package manager, checks outdated packages and vulnerabilities, and produces a prioritized update plan."
+model: gemini-3-flash-lite
 ---
 
 

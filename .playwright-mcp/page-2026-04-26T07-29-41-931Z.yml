@@ -1,0 +1,186 @@
+- generic [ref=e2]:
+  - generic [ref=e52]:
+    - complementary [ref=e53]:
+      - generic [ref=e55] [cursor=pointer]:
+        - generic [ref=e56]: V
+        - generic [ref=e57]:
+          - heading "VietTruyen" [level=1] [ref=e58]
+          - paragraph [ref=e59]: The Luminal Sanctuary
+      - navigation [ref=e60]:
+        - button "Điều phối" [ref=e62] [cursor=pointer]:
+          - img [ref=e64]
+          - generic [ref=e69]: Điều phối
+        - button "Kho truyện" [ref=e70] [cursor=pointer]:
+          - img [ref=e72]
+          - generic [ref=e75]: Kho truyện
+        - button "Phóng tác" [ref=e76] [cursor=pointer]:
+          - img [ref=e78]
+          - generic [ref=e84]: Phóng tác
+        - button "Cộng đồng" [ref=e85] [cursor=pointer]:
+          - img [ref=e87]
+          - generic [ref=e92]: Cộng đồng
+        - button "AI & Runtime" [ref=e94] [cursor=pointer]:
+          - img [ref=e95]
+          - generic [ref=e98]: AI & Runtime
+      - button "Về trang chủ" [ref=e100] [cursor=pointer]:
+        - img [ref=e101]
+        - generic [ref=e104]: Về trang chủ
+    - generic [ref=e105]:
+      - generic [ref=e107]:
+        - generic [ref=e111]: Điều phối
+        - generic [ref=e113]:
+          - button "Trợ lý AI" [ref=e114] [cursor=pointer]:
+            - img [ref=e115]
+            - text: Trợ lý AI
+          - button "Thông báo" [ref=e117] [cursor=pointer]:
+            - img [ref=e118]
+          - button "🇻🇳 Tiếng Việt" [ref=e122] [cursor=pointer]:
+            - img [ref=e123]
+            - generic [ref=e126]: 🇻🇳 Tiếng Việt
+          - generic [ref=e127]: Chế độ khách
+      - main [ref=e128]:
+        - generic [ref=e130]:
+          - generic [ref=e132]:
+            - heading "Chào mừng trở lại, Tác giả 👋" [level=1] [ref=e133]
+            - paragraph [ref=e134]: Hôm nay là Thứ Tư, ngày 22 tháng 5 năm 2024
+          - generic [ref=e135]:
+            - generic [ref=e136]:
+              - generic [ref=e138]:
+                - paragraph [ref=e139]:
+                  - text: “Sống đã rồi hãy viết, hãy hòa mình vào cái
+                  - text: quanh.”
+                - paragraph [ref=e140]: — Nam Cao
+              - generic [ref=e145]:
+                - generic [ref=e146]:
+                  - generic [ref=e147]:
+                    - img [ref=e149]
+                    - generic [ref=e152]: +2 Tháng Này
+                  - generic [ref=e153]:
+                    - paragraph [ref=e154]: Tổng Truyện
+                    - paragraph [ref=e155]: "1"
+                - generic [ref=e156]:
+                  - generic [ref=e157]:
+                    - img [ref=e159]
+                    - generic [ref=e162]: "Mục Tiêu: 200"
+                  - generic [ref=e163]:
+                    - paragraph [ref=e164]: Chương Đã Viết
+                    - paragraph [ref=e165]: "156"
+                - generic [ref=e166]:
+                  - generic [ref=e167]:
+                    - img [ref=e169]
+                    - generic [ref=e172]: Tăng 12%
+                  - generic [ref=e173]:
+                    - paragraph [ref=e174]: Lượt Đọc
+                    - paragraph [ref=e175]: 45.2K
+                - generic [ref=e176]:
+                  - generic [ref=e177]:
+                    - img [ref=e179]
+                    - generic [ref=e181]: Top 5% Tác Giả
+                  - generic [ref=e182]:
+                    - paragraph [ref=e183]: Đánh Giá TB
+                    - paragraph [ref=e184]:
+                      - generic [ref=e185]: "4.7"
+                      - generic [ref=e186]: /5
+              - generic [ref=e187]:
+                - generic [ref=e188]:
+                  - heading "Truyện Đang Viết" [level=2] [ref=e191]
+                  - generic [ref=e192]:
+                    - button "Thêm tác phẩm mới" [ref=e193] [cursor=pointer]:
+                      - img [ref=e194]
+                      - text: Thêm tác phẩm mới
+                    - button "Xem tất cả thư viện" [ref=e195] [cursor=pointer]
+                - generic [ref=e197]:
+                  - img "Cover" [ref=e199]
+                  - generic [ref=e201]:
+                    - generic [ref=e202]:
+                      - generic [ref=e203]: Bản Thảo
+                      - generic [ref=e204]: Cập nhật 1 phút trước
+                    - heading "VietTruyen Project" [level=3] [ref=e205]
+                    - paragraph [ref=e206]: Chưa có tóm tắt. Bạn hãy bắt đầu dựng premise và phát triển cốt truyện nhé.
+                    - generic [ref=e208]:
+                      - generic [ref=e209]: Tổng số chữ đã viết
+                      - generic [ref=e210]: 0 từ
+                    - generic [ref=e211]:
+                      - button "Tiếp tục viết" [ref=e212] [cursor=pointer]:
+                        - img [ref=e213]
+                        - text: Tiếp tục viết
+                      - button [ref=e218] [cursor=pointer]:
+                        - img [ref=e219]
+            - generic [ref=e223]:
+              - generic [ref=e224]:
+                - generic [ref=e225]:
+                  - heading "Thống Kê Viết" [level=3] [ref=e226]
+                  - generic [ref=e227]: 7 Ngày Qua
+                - generic [ref=e228]:
+                  - generic [ref=e231]: T2
+                  - generic [ref=e234]: T3
+                  - generic [ref=e238]: T4
+                  - generic [ref=e241]: T5
+                  - generic [ref=e244]: T6
+                  - generic [ref=e247]: T7
+                  - generic [ref=e250]: TCN
+                  - button [ref=e251] [cursor=pointer]:
+                    - img [ref=e252]
+                - generic [ref=e253]:
+                  - generic [ref=e254]:
+                    - generic [ref=e255]: Tổng từ trong tuần
+                    - generic [ref=e256]: 16,100 từ
+                  - generic [ref=e257]:
+                    - generic [ref=e258]:
+                      - generic [ref=e259]:
+                        - img [ref=e261]
+                        - generic [ref=e263]:
+                          - paragraph [ref=e264]: Token AI
+                          - paragraph [ref=e265]: "0"
+                      - generic [ref=e266]: Chưa phát sinh
+                    - generic [ref=e267]:
+                      - generic [ref=e268]: TB / lần
+                      - generic [ref=e269]: 0 token
+                    - generic [ref=e270]:
+                      - generic [ref=e271]: Chi phí ước tính
+                      - generic [ref=e272]: $0
+              - generic [ref=e273]:
+                - heading "Hoạt Động Gần Đây" [level=3] [ref=e274]
+                - generic [ref=e275]:
+                  - generic [ref=e276]:
+                    - img [ref=e279]
+                    - generic [ref=e285]:
+                      - paragraph [ref=e286]: Chương 45 đã xuất bản
+                      - paragraph [ref=e287]: "Truyện: Vũ Điệu Của Những Vì Sao"
+                      - generic [ref=e288]: 2 Giờ Trước
+                  - generic [ref=e289]:
+                    - img [ref=e292]
+                    - generic [ref=e294]:
+                      - paragraph [ref=e295]: Nhận bình luận mới
+                      - paragraph [ref=e296]: "\"Cốt truyện quá lôi cuốn, hóng chương mới quá tác ơi!\""
+                      - generic [ref=e297]: 5 Giờ Trước
+                  - generic [ref=e298]:
+                    - img [ref=e300]
+                    - generic [ref=e302]:
+                      - paragraph [ref=e303]: AI Hoàn thành bản thảo
+                      - paragraph [ref=e304]: Gợi ý phát triển chương 46 đã sẵn sàng
+                      - generic [ref=e305]: Hôm Qua
+                - button "Xem toàn bộ nhật ký" [ref=e306] [cursor=pointer]
+              - generic [ref=e307]:
+                - img [ref=e308]
+                - generic [ref=e310]:
+                  - heading "VietTruyen Gold" [level=3] [ref=e311]
+                  - paragraph [ref=e312]: Mở khóa tính năng phân tích độc giả chuyên sâu và AI trợ lý cao cấp.
+                  - button "Nâng cấp ngay" [ref=e313] [cursor=pointer]:
+                    - text: Nâng cấp ngay
+                    - img [ref=e314]
+  - generic [ref=e316]:
+    - generic [ref=e317]:
+      - generic [ref=e318]:
+        - img [ref=e319]
+        - generic [ref=e322]: Thông báo
+      - button [ref=e324] [cursor=pointer]:
+        - img [ref=e325]
+    - generic [ref=e328]:
+      - button "Tất cả" [ref=e329] [cursor=pointer]
+      - button "Chưa đọc" [ref=e330] [cursor=pointer]
+      - button "Nhắc nhở" [ref=e331] [cursor=pointer]
+    - generic [ref=e333]:
+      - img [ref=e334]
+      - paragraph [ref=e339]: Chưa có thông báo nào
+  - generic "Notifications"

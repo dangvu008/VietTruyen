@@ -1,6 +1,7 @@
 ---
 name: rune-sast
 description: "Static analysis tool runner. Wraps ESLint, Semgrep, Bandit, Clippy, and language-specific analyzers with unified severity output. Use when deeper code analysis needed beyond pattern matching."
+model: gemini-3-flash-lite
 ---
 
 

@@ -1,6 +1,7 @@
 ---
 name: rune-debug
 description: "Root cause analysis for bugs and unexpected behavior. Traces errors through code, uses structured reasoning, and hands off to fix when cause is found. Core of the debug↔fix mesh."
+model: gemini-3-flash
 ---
 
 
@@ -26,7 +27,9 @@ Root cause analysis ONLY. Debug investigates — it does NOT fix. It traces erro
 <HARD-GATE>
 Do NOT fix the code. Debug investigates only. Any code change is out of scope.
 If root cause cannot be identified after 3 hypothesis cycles:
-- Escalate to `the rune-problem-solver skill` for structured 5-Whys or Fishbone analysis
+- Emit `agent.stuck` signal — `scout` zoom-out mode surfaces broader module map (structural pivot); `adversary` oracle-mode dispatches a stateless second-model pass (semantic pivot); both fire in parallel
+- If `oracle.response` arrives with confidence=high and cites file:line, treat as new hypothesis H_oracle and test directly (skip 3-cycle gate — it's externally validated)
+- Otherwise, escalate to `the rune-problem-solver skill` for structured 5-Whys or Fishbone analysis
 - Or escalate to `the rune-sequential-thinking skill` for multi-variable analysis
 - Report escalation in the Debug Report with all evidence gathered so far
 </HARD-GATE>
@@ -50,6 +53,7 @@ If root cause cannot be identified after 3 hypothesis cycles:
 - `browser-pilot` (L3): capture browser console errors, network failures, visual bugs
 - `sequential-thinking` (L3): multi-variable root cause analysis
 - `neural-memory` (L3): after root cause found — capture error pattern for future recognition
+- `adversary` (L2): on `agent.stuck` — oracle-mode dispatches stateless second-model pass to break confirmation-bias loop (parallel with scout zoom-out)
 
 ## Called By (inbound)
 

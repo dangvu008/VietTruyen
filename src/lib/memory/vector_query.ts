@@ -12,6 +12,7 @@ import {
   reuseExistingEmbedding,
   type EmbeddingProviderAdapter,
 } from './embedding_adapter';
+import { getActiveEmbeddingDimension } from './embedding_initializer';
 import { mirrorProjectMemoryEmbeddings } from '../supabase/memory_embedding_service';
 
 function hashString(input: string): string {
@@ -258,9 +259,10 @@ export async function upsertMemoryEmbeddings(
   const nextRecords: MemoryEmbeddingRecord[] = [];
 
   const sourcesNeedingEmbeddings: EmbeddingSource[] = [];
+  const expectedDimension = getActiveEmbeddingDimension();
   for (const source of nextSources) {
     const existing = existingById.get(source.id);
-    const reused = reuseExistingEmbedding(existing, source.sourceTextHash);
+    const reused = reuseExistingEmbedding(existing, source.sourceTextHash, expectedDimension);
     if (reused) {
       nextRecords.push(finalizeRecord(source, reused));
       continue;
@@ -311,15 +313,15 @@ export async function searchMemoryEmbeddings(
 
   const hits = filteredRecords
     .map((record) => {
-      const semanticScore = cosineSimilarity(queryEmbedding, record.embedding);
+      const vectorScore = cosineSimilarity(queryEmbedding, record.embedding);
       const proximityScore =
         opts?.chapterIndex == null
           ? 0
           : record.chapterIndex <= 0
             ? 0.2
             : 1 / (1 + Math.abs(opts.chapterIndex - record.chapterIndex));
-      const finalScore = semanticScore * 0.8 + proximityScore * 0.2;
-      return { record, score: finalScore };
+      const finalScore = vectorScore * 0.8 + proximityScore * 0.2;
+      return { record, score: finalScore, vectorScore, proximityScore };
     })
     .filter((hit) => hit.score > 0)
     .sort((left, right) => right.score - left.score || left.record.id.localeCompare(right.record.id));

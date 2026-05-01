@@ -9,3 +9,4 @@ dist
 
 # Agent Skills (symlinked)
 .agent-skills
+supabase/.env

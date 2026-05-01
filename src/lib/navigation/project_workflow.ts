@@ -23,6 +23,7 @@ export const PROJECT_TAB_LABELS: Record<ProjectTabId, string> = {
   outline: 'Dàn ý',
   writer: 'Viết chương',
   chapters: 'Chương',
+  storymap: 'Bản đồ truyện',
   review: 'Kiểm duyệt',
   export: 'Xuất bản',
 };
@@ -34,6 +35,7 @@ export const PROJECT_TAB_PHASES: Record<ProjectTabId, ProjectWorkflowPhase> = {
   outline: 'setup',
   writer: 'writing',
   chapters: 'writing',
+  storymap: 'writing',
   review: 'finalize',
   export: 'finalize',
 };

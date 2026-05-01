@@ -1,6 +1,7 @@
 ---
 name: rune-trend-scout
 description: "Scan market trends, competitor activity, and emerging patterns. Monitors Product Hunt, GitHub Trending, HackerNews, and social platforms."
+model: gemini-3-flash-lite
 ---
 
 

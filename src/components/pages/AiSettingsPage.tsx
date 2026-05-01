@@ -10,7 +10,8 @@ import {
 } from 'lucide-react';
 import { useAiStore } from '../../store/use_ai_store';
 import { AI_TASK_LABELS, type AiTaskType } from '../../lib/ai/model_router';
-import type { AiProvider, WorkflowEngineType } from '../../types/story';
+import { resolveModelCostRates } from '../../lib/ai/token_estimator';
+import type { AiModel, AiProvider, WorkflowEngineType } from '../../types/story';
 import TokenDashboard from '../shared/TokenDashboard';
 import TokenOptimizationTaskTracker from '../shared/TokenOptimizationTaskTracker';
 import {
@@ -25,6 +26,7 @@ const SYSTEM_PROVIDER_INFO: { id: string; label: string; color: string; hint: st
   { id: 'openrouter', label: 'OpenRouter', color: 'text-[#F59E0B]', hint: 'Universal Key - Một key dùng mọi models (openrouter.ai)' },
   { id: 'openai', label: 'OpenAI', color: 'text-green-400', hint: 'platform.openai.com' },
   { id: 'claude', label: 'Anthropic Claude', color: 'text-[#EF4444]', hint: 'console.anthropic.com' },
+  { id: 'ollama', label: 'Ollama (Local)', color: 'text-[#10B981]', hint: 'Chạy model AI local — không cần API key (localhost:11434)' },
   { id: 'custom', label: 'Custom (OpenAI-compatible)', color: 'text-gray-400', hint: 'Local/Custom Endpoint API Key' },
 ];
 
@@ -34,6 +36,7 @@ const SYSTEM_PROVIDER_OPTIONS: { value: string; label: string }[] = [
   { value: 'openrouter', label: 'OpenRouter' },
   { value: 'openai', label: 'OpenAI' },
   { value: 'claude', label: 'Anthropic Claude' },
+  { value: 'ollama', label: 'Ollama (Local)' },
   { value: 'custom', label: 'Custom (OpenAI-compatible)' },
 ];
 
@@ -183,6 +186,27 @@ const AiSettingsPage: React.FC<AiSettingsPageProps> = ({ activeTab }) => {
     color: isActive ? 'var(--vt-option-active-text)' : 'var(--vt-option-text)',
     boxShadow: isActive ? '0 0 0 1px var(--vt-option-active-ring) inset' : 'none',
   });
+
+  const formatContextWindow = (contextWindow?: number): string => {
+    if (!contextWindow) return 'context không rõ';
+    if (contextWindow >= 1_000_000) return 'context 1M';
+    if (contextWindow >= 1000) return `context ${Math.round(contextWindow / 1000)}K`;
+    return `context ${contextWindow}`;
+  };
+
+  const formatModelEconomics = (model: AiModel): string => {
+    const fallbackRates = resolveModelCostRates(model.modelId);
+    const inputRate = model.inputCostPer1M ?? fallbackRates.inputRate;
+    const outputRate = model.outputCostPer1M ?? fallbackRates.outputRate;
+    const caps = model.capabilities?.slice(0, 2).join(', ');
+
+    return [
+      model.tier,
+      `$${inputRate}/$${outputRate} mỗi 1M token`,
+      formatContextWindow(model.contextWindow),
+      caps,
+    ].filter(Boolean).join(' • ');
+  };
 
   const renderContent = () => {
     if (activeTab === 'appearance') {
@@ -474,7 +498,7 @@ const AiSettingsPage: React.FC<AiSettingsPageProps> = ({ activeTab }) => {
             <div>
               <h3 className="text-sm font-semibold uppercase tracking-wider" style={{ color: '#d4c4b7' }}>Smart Routing</h3>
               <p className="mt-2 text-sm" style={{ color: '#9c8e82' }}>
-                Tự động chọn model theo từng chức năng để tối ưu chi phí/token. Tắt đi nếu bạn muốn khóa toàn bộ app vào một model thủ công.
+                Tự động chọn model theo từng chức năng bằng điểm chi phí, context window và năng lực viết. Tắt đi nếu bạn muốn khóa toàn bộ app vào một model thủ công.
               </p>
             </div>
 
@@ -525,7 +549,7 @@ const AiSettingsPage: React.FC<AiSettingsPageProps> = ({ activeTab }) => {
                     <option value="auto">Theo hệ thống</option>
                     {store.models.map((model) => (
                       <option key={`${taskType}-${model.id}`} value={model.id}>
-                        {model.name} • {model.provider}
+                        {model.name} • {model.provider} • {formatModelEconomics(model)}
                       </option>
                     ))}
                   </select>
@@ -626,6 +650,7 @@ const AiSettingsPage: React.FC<AiSettingsPageProps> = ({ activeTab }) => {
                     <div>
                       <h4 className="font-semibold text-sm" style={{ color: isActive ? '#f2c08d' : '#e8e1dc' }}>{model.name}</h4>
                       <p className="text-xs" style={{ color: '#9c8e82' }}>{model.provider} • {model.modelId}</p>
+                      <p className="text-[11px] mt-1" style={{ color: '#7f736a' }}>{formatModelEconomics(model)}</p>
                     </div>
                   </div>
                   {isActive && <div className="text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider" style={{ background: 'rgba(242,192,141,0.1)', color: '#f2c08d' }}>Active</div>}

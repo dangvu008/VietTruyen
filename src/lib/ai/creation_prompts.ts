@@ -12,6 +12,11 @@
  */
 
 import type { CreationPlotPreview } from '../../types/creation_chat';
+import { 
+  injectTemplateToFrameworkPrompt,
+  getTemplateOutlineHint,
+  getTemplateConflictPatterns
+} from './template_injector';
 
 // ─── System Prompts ─────────────────────────────────────────
 
@@ -56,6 +61,7 @@ export function buildDiscussResponsePrompt(
 ): { system: string; user: string } {
   const contextParts: string[] = [];
   if (previousAnswers.magic_system) contextParts.push(`Hệ tu luyện: ${previousAnswers.magic_system}`);
+  if (previousAnswers.story_engine) contextParts.push(`Động cơ câu chuyện: ${previousAnswers.story_engine}`);
   if (previousAnswers.conflict) contextParts.push(`Xung đột: ${previousAnswers.conflict}`);
   if (previousAnswers.protagonist) contextParts.push(`Nhân vật chính: ${previousAnswers.protagonist}`);
   if (previousAnswers.tone_antagonist) contextParts.push(`Giọng & phản diện: ${previousAnswers.tone_antagonist}`);
@@ -189,6 +195,20 @@ export function buildCreationFrameworkPrompt(
 ${JSON.stringify(plotPreview, null, 2)}`
     : '';
 
+  // [Domain:CreationChat] STEP 3a — Inject genre template nếu có
+  const genreHint = answers.magic_system || answers.story_engine || originalIdea;
+  const genreTags = plotPreview?.hooks ?? [];
+  const templateBlock = injectTemplateToFrameworkPrompt(genreHint, genreTags);
+
+  // Thêm outline hint và conflict patterns
+  const outlineHint = getTemplateOutlineHint(genreHint, genreTags);
+  const conflictPatterns = getTemplateConflictPatterns(genreHint, genreTags);
+
+  const extraTemplateContext = [
+    outlineHint ? `\nCẤU TRÚC GỢI Ý:\n${outlineHint}` : '',
+    conflictPatterns ? `\nXUNG ĐỘT ĐẶC TRƯNG:\n${conflictPatterns}` : '',
+  ].join('');
+
   return {
     system: FRAMEWORK_SYSTEM,
     user: `Tạo KHUNG LỚN hoàn chỉnh cho truyện dựa trên:
@@ -199,7 +219,7 @@ THÔNG TIN ĐÃ THU THẬP:
 ${answersText}
 
 CHI TIẾT BỔ SUNG TỪ NGƯỜI VIẾT:
-${historyText}${plotReviewText}
+${historyText}${plotReviewText}${templateBlock}${extraTemplateContext}
 
 Trả về JSON đúng format sau. Sáng tạo thêm nếu thiếu thông tin:
 

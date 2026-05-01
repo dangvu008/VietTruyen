@@ -91,9 +91,11 @@ function makeProject(): Project {
 describe('buildWritingContext hybrid retrieval', () => {
   it('injects hard canon and semantic prose recall into the writing context', async () => {
     retrieveForWriting.mockResolvedValue({
-      hardCanon: ['- Lâm Tề đang ở cảnh giới Trúc Cơ'],
-      graphContext: ['1. Lâm Tề / Bí cảnh'],
-      semanticContext: ['- Sương mù dày đặc bao phủ lối đi vào cửa đá.'],
+      canonPack: [{ id: 'canon-1', title: 'Lâm Tề', body: '- Lâm Tề đang ở cảnh giới Trúc Cơ', score: 1, sourceType: 'canon_fact' }],
+      graphPack: [{ id: 'graph-1', title: 'Lâm Tề / Bí cảnh', body: '- Trọng tâm: Lâm Tề (character) | Bí cảnh (chapter)', score: 1, sourceType: 'community' }],
+      semanticPack: [{ id: 'semantic-1', title: 'scene', body: '- Sương mù dày đặc bao phủ lối đi vào cửa đá.', score: 1, sourceType: 'scene' }],
+      riskPack: [],
+      provenancePack: [],
       warnings: ['Continuity: giữ kín át chủ bài của Lâm Tề'],
     });
     getClusterAwareNarrativeState.mockResolvedValue({
@@ -109,6 +111,9 @@ describe('buildWritingContext hybrid retrieval', () => {
     expect(retrieveForWriting).toHaveBeenCalled();
     expect(context.contextText).toContain('## CANON ƯU TIÊN');
     expect(context.contextText).toContain('Trúc Cơ');
+    expect(context.contextText).toContain('## BẢN ĐỒ TÂM LÝ CẢNH');
+    expect(context.contextText).toContain('## KẾ HOẠCH CẢNH GHOSTWRITER');
+    expect(context.contextText).toContain('## RÀNG BUỘC GIỌNG VĂN');
     expect(context.contextText).toContain('## TRÍCH ĐOẠN NGỮ NGHĨA LIÊN QUAN');
     expect(context.contextText).toContain('Sương mù dày đặc');
   });

@@ -47,6 +47,26 @@ function normalizeContextSize(value: number): number {
   return Math.max(4000, Math.min(128000, Math.round(value / 1000) * 1000));
 }
 
+function mergeDefaultModels(models: AiModel[]): AiModel[] {
+  const defaultById = new Map(DEFAULT_AI_MODELS.map((model) => [model.id, model]));
+  const enrichedModels = models.map((model) => {
+    const defaultModel = defaultById.get(model.id);
+    if (!defaultModel) return model;
+
+    return {
+      ...defaultModel,
+      ...model,
+      inputCostPer1M: model.inputCostPer1M ?? defaultModel.inputCostPer1M,
+      outputCostPer1M: model.outputCostPer1M ?? defaultModel.outputCostPer1M,
+      contextWindow: model.contextWindow ?? defaultModel.contextWindow,
+      capabilities: model.capabilities ?? defaultModel.capabilities,
+    };
+  });
+  const existingIds = new Set(enrichedModels.map((model) => model.id));
+  const missingDefaults = DEFAULT_AI_MODELS.filter((model) => !existingIds.has(model.id));
+  return [...enrichedModels, ...missingDefaults];
+}
+
 interface AiState {
   models: AiModel[];
   customProviders: CustomProvider[];
@@ -309,11 +329,11 @@ export const useAiStore = create<AiState>()(
     }),
     {
       name: 'viettruyen-ai-settings',
-      version: 3,
+      version: 4,
       migrate: (persistedState) => {
         const typedState = (persistedState ?? {}) as PersistedAiState;
         const normalizedModels = typedState.models
-          ? normalizeAiModels(typedState.models)
+          ? mergeDefaultModels(normalizeAiModels(typedState.models))
           : [...DEFAULT_AI_MODELS];
         const preservedManualId =
           typedState.activeModelId && typedState.activeModelId !== 'auto'

@@ -79,15 +79,20 @@ export class OnlineStorageProvider implements StorageProvider {
 
     // [Domain:Storage] STEP 2 — Batch chapter count (avoids N+1)
     const projectIds = data.map((row) => row.id);
-    const { data: chapterRows } = await supabase
+    const countMap = new Map<string, number>();
+    const { data: chapterRows, error: chapterError } = await supabase
       .from('chapters')
       .select('project_id')
       .in('project_id', projectIds);
 
-    const countMap = new Map<string, number>();
-    for (const row of chapterRows || []) {
-      const pid = row.project_id as string;
-      countMap.set(pid, (countMap.get(pid) || 0) + 1);
+    if (chapterError) {
+      // [Domain:Storage] RLS recursion — skip chapter count, default 0
+      console.warn('[OnlineStorage] listProjects: chapter count query failed:', chapterError.message);
+    } else {
+      for (const row of chapterRows || []) {
+        const pid = row.project_id as string;
+        countMap.set(pid, (countMap.get(pid) || 0) + 1);
+      }
     }
 
     return data.map((row) => ({
@@ -126,8 +131,9 @@ export class OnlineStorageProvider implements StorageProvider {
           currency: worldRes.data.currency || '',
           factions: worldRes.data.factions || [],
           rules: worldRes.data.rules || '',
+          facts: worldRes.data.facts || [],
         }
-      : { geography: '', magicSystem: '', techLevel: '', currency: '', factions: [], rules: '' };
+      : { geography: '', magicSystem: '', techLevel: '', currency: '', factions: [], rules: '', facts: [] };
 
     const characters: Character[] = (charsRes.data || []).map((c) => ({
       id: c.id,
@@ -216,7 +222,16 @@ export class OnlineStorageProvider implements StorageProvider {
       .eq('project_id', projectId)
       .order('sort_order');
 
-    if (error) throw new Error(`getProjectChapters: ${error.message}`);
+    if (error) {
+      // [Domain:Storage] RLS infinite recursion → return empty to allow IndexedDB fallback
+      if (error.message.includes('infinite recursion')) {
+        console.warn(
+          `[OnlineStorage] getProjectChapters: RLS policy recursion for project ${projectId}, falling back.`,
+        );
+        return [];
+      }
+      throw new Error(`getProjectChapters: ${error.message}`);
+    }
 
     return (data || []).map(mapChapterRow);
   }
@@ -306,15 +321,19 @@ export class OnlineStorageProvider implements StorageProvider {
     if (error) throw new Error(`replaceProjectChapters upsert: ${error.message}`);
 
     // [Domain:Storage] STEP 2 — Remove orphaned chapters not in new set
+    // Guard: skip orphan cleanup if keepIds is empty to avoid accidentally
+    // deleting ALL chapters (some Postgres drivers interpret `.not('id','in','()')` as a full match).
     const keepIds = chapters.map((chapter) => chapter.id);
-    const { error: cleanupError } = await supabase
-      .from('chapters')
-      .delete()
-      .eq('project_id', projectId)
-      .not('id', 'in', `(${keepIds.join(',')})`);
+    if (keepIds.length > 0) {
+      const { error: cleanupError } = await supabase
+        .from('chapters')
+        .delete()
+        .eq('project_id', projectId)
+        .not('id', 'in', `(${keepIds.join(',')})`);
 
-    if (cleanupError) {
-      console.warn('[OnlineStorage] Orphan cleanup failed (non-fatal):', cleanupError.message);
+      if (cleanupError) {
+        console.warn('[OnlineStorage] Orphan cleanup failed (non-fatal):', cleanupError.message);
+      }
     }
   }
 

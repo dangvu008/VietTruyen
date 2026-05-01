@@ -11,14 +11,15 @@
 import type { Project } from '../../types/story';
 import type { SceneTypeResult } from './scene_type_classifier';
 import { quickTruncate, estimateTokens } from './token_estimator';
+import { getGenreDescription } from '../../data/genre_descriptions';
 
 // ─── Constants ───────────────────────────────────────────
 
 /** Max token budget for L0 identity block */
-const IDENTITY_TOKEN_BUDGET = 200;
+const IDENTITY_TOKEN_BUDGET = 250;
 
-/** Max chars ≈ 200 tokens × 3.5 chars/token for Vietnamese */
-const IDENTITY_MAX_CHARS = 700;
+/** Max chars ≈ 250 tokens × 3.5 chars/token for Vietnamese */
+const IDENTITY_MAX_CHARS = 875;
 
 // ─── Types ───────────────────────────────────────────────
 
@@ -106,7 +107,15 @@ export function buildProjectIdentityBlock(
   }
   lines.push(statusParts.join(' | '));
 
-  // Line 5: Logline (ultra-condensed, only if space)
+  // Line 5: Genre guidance (from tinix-story descriptions)
+  if (project.genre) {
+    const genreGuide = getGenreDescription(project.genre);
+    if (genreGuide) {
+      lines.push(`Hướng dẫn thể loại: ${quickTruncate(genreGuide, 120)}`);
+    }
+  }
+
+  // Line 6: Logline (ultra-condensed, only if space)
   if (project.logline) {
     lines.push(`Logline: ${quickTruncate(project.logline, 100)}`);
   }

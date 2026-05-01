@@ -1,6 +1,7 @@
 ---
 name: rune-sequential-thinking
 description: "Step-by-step complex reasoning for multi-variable problems. Breaks interconnected decisions into ordered logical steps with bias detection, reversibility classification, and second-order effect tracking."
+model: gemini-3-flash
 ---
 
 

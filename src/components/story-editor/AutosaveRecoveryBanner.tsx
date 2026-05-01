@@ -6,7 +6,7 @@
  * Deps: autosave_draft_store types
  */
 import React from 'react';
-import { RotateCcw, X, FileWarning } from 'lucide-react';
+import { RotateCcw, X, FileWarning, Wand2 } from 'lucide-react';
 import type { AutosaveDraft } from '../../lib/storage/autosave_draft_store';
 
 interface Props {
@@ -35,27 +35,49 @@ export const AutosaveRecoveryBanner: React.FC<Props> = ({
 }) => {
   if (drafts.length === 0) return null;
 
-  // [Domain:StoryEditor] STEP 1 — Find the most recent draft timestamp
+  // [Domain:StoryEditor] STEP 1 — Classify: interrupted generation vs manual unsaved edits
+  const interruptedDrafts = drafts.filter(
+    (d) => d.generationStatus === 'interrupted' || d.generationStatus === 'generating'
+  );
+  const editDrafts = drafts.filter((d) => !d.generationStatus);
+
+  const hasInterrupted = interruptedDrafts.length > 0;
+  const chapterCount = drafts.length;
+
+  // [Domain:StoryEditor] STEP 2 — Find the most recent draft timestamp
   const latestDraft = drafts.reduce((latest, draft) =>
     new Date(draft.savedAt) > new Date(latest.savedAt) ? draft : latest
   );
-  const chapterCount = drafts.length;
+
+  // [Domain:StoryEditor] STEP 3 — Compose context-aware message
+  const title = hasInterrupted
+    ? editDrafts.length > 0
+      ? `AI tạo dở dang + ${editDrafts.length} chương chưa lưu`
+      : `AI đang tạo dở dang ${interruptedDrafts.length} chương`
+    : `Phát hiện ${chapterCount} chương chưa lưu từ phiên trước`;
+
+  const subtitle = hasInterrupted
+    ? 'Phiên trước thoát khi AI đang viết. Nội dung tạo được đã được lưu tạm.'
+    : `Lần lưu tự động cuối: ${formatDraftTime(latestDraft.savedAt)}`;
 
   return (
     <div className="mx-auto max-w-[760px] mb-4 animate-in slide-in-from-top-2 duration-300">
       <div className="flex items-center gap-4 rounded-2xl border border-accent-amber/20 bg-gradient-to-r from-[#2a2018] to-[#1f1a15] px-5 py-3.5 shadow-[0_4px_20px_rgba(240,197,154,0.08)]">
-        {/* Icon */}
+        {/* Icon — wand for AI generation, warning for manual edits */}
         <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-accent-amber/10">
-          <FileWarning className="h-[18px] w-[18px] text-accent-amber" />
+          {hasInterrupted
+            ? <Wand2 className="h-[18px] w-[18px] text-accent-amber" />
+            : <FileWarning className="h-[18px] w-[18px] text-accent-amber" />
+          }
         </div>
 
         {/* Message */}
         <div className="flex-1 min-w-0">
           <p className="text-[13px] font-medium text-[#e3d8ce] leading-snug">
-            Phát hiện {chapterCount} chương chưa lưu từ phiên trước
+            {title}
           </p>
           <p className="text-[11px] text-[#8f7f73] mt-0.5">
-            Lần lưu tự động cuối: {formatDraftTime(latestDraft.savedAt)}
+            {subtitle}
           </p>
         </div>
 

@@ -18,6 +18,7 @@ export interface ProjectWorkspaceProps {
   onNavigate: (tab: ProjectTabId) => void;
   onExitProject: () => void;
   onGoHome?: () => void;
+  onNavigateSettings?: () => void;
   project: Project;
   projectTitle: string;
   projectStatus?: string;
@@ -34,6 +35,7 @@ const ProjectWorkspace: React.FC<ProjectWorkspaceProps> = ({
   onNavigate,
   onExitProject,
   onGoHome,
+  onNavigateSettings,
   project,
   projectTitle,
   projectStatus,
@@ -90,6 +92,7 @@ const ProjectWorkspace: React.FC<ProjectWorkspaceProps> = ({
         onNavigate={guardedNavigate}
         onExitProject={onExitProject}
         onGoHome={onGoHome}
+        onNavigateSettings={onNavigateSettings}
         project={project}
         recommendedTab={snapshot.recommendedTab}
         projectTitle={projectTitle}

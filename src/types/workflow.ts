@@ -15,7 +15,9 @@ export type WorkflowIntentType =
   | 'write_chapter_from_branch'
   | 'full_write_pipeline';
 
-export type WorkflowSource = 'button' | 'hotkey' | 'context_menu' | 'system';
+export type WorkflowSource = 'button' | 'hotkey' | 'context_menu' | 'system' | 'batch';
+
+export type QualityMode = 'fast' | 'balanced' | 'quality';
 
 export type WorkflowStep =
   | 'idle'
@@ -76,6 +78,8 @@ export interface FullWritePipelinePayload {
   skipReview?: boolean;
   /** Skip style polish step */
   skipPolish?: boolean;
+  /** Controls which expensive post-draft pipeline steps run */
+  qualityMode?: QualityMode;
 }
 
 export type FullWritePipelineIntent = WorkflowIntent<'full_write_pipeline', FullWritePipelinePayload>;

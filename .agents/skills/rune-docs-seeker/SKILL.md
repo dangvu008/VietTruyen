@@ -1,6 +1,7 @@
 ---
 name: rune-docs-seeker
 description: "Find documentation for APIs, libraries, and error messages. Looks up official docs, changelog entries, and migration guides."
+model: gemini-3-flash-lite
 ---
 
 
@@ -31,6 +32,7 @@ None — pure L3 utility using `WebSearch`, `WebFetch`, and Context7 MCP tools d
 - `debug` (L2): lookup API docs for unclear errors
 - `fix` (L2): check correct API usage before applying changes
 - `review` (L2): verify API usage is current and correct
+- `adversary` (L2): verify framework/API assumptions in plan are correct
 
 ## Execution
 

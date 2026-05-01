@@ -1,5 +1,5 @@
 import { createId } from '../../core/id';
-import type { Character, Project, StoryFact, WorldRules } from '../../types/story';
+import type { Character, CharacterSpeechProfile, CharacterSpeechRule, Project, StoryFact, WorldRules } from '../../types/story';
 import type { EntityDefinition, EntityType } from '../../types/narrative_memory';
 
 export const WORLD_ENTITY_ID = 'world_rules';
@@ -36,11 +36,41 @@ export function normalizeStoryFacts(facts?: StoryFact[]): StoryFact[] {
   return Array.from(unique.values());
 }
 
+function normalizeSpeechRule(rule: CharacterSpeechRule): CharacterSpeechRule {
+  return {
+    ...rule,
+    situation: rule.situation.trim(),
+    targetCharacterId: rule.targetCharacterId?.trim() || undefined,
+    targetCharacterName: rule.targetCharacterName?.trim() || undefined,
+    relation: rule.relation?.trim() || undefined,
+    selfPronouns: Array.from(new Set((rule.selfPronouns || []).map((value) => value.trim()).filter(Boolean))),
+    addressPronouns: Array.from(new Set((rule.addressPronouns || []).map((value) => value.trim()).filter(Boolean))),
+    preferredPairs: Array.from(new Set((rule.preferredPairs || []).map((value) => value.trim()).filter(Boolean))),
+    forbiddenPairs: Array.from(new Set((rule.forbiddenPairs || []).map((value) => value.trim()).filter(Boolean))),
+    note: rule.note?.trim() || undefined,
+  };
+}
+
+function normalizeSpeechProfile(profile?: CharacterSpeechProfile): CharacterSpeechProfile | undefined {
+  if (!profile) return undefined;
+
+  return {
+    defaultSelfPronouns: Array.from(new Set((profile.defaultSelfPronouns || []).map((value) => value.trim()).filter(Boolean))),
+    defaultAddressPronouns: Array.from(new Set((profile.defaultAddressPronouns || []).map((value) => value.trim()).filter(Boolean))),
+    forbiddenPronouns: Array.from(new Set((profile.forbiddenPronouns || []).map((value) => value.trim()).filter(Boolean))),
+    toneNotes: profile.toneNotes?.trim() || undefined,
+    situationalRules: (profile.situationalRules || [])
+      .map(normalizeSpeechRule)
+      .filter((rule) => rule.situation),
+  };
+}
+
 export function normalizeCharacter(character: Character): Character {
   return {
     ...character,
     aliases: Array.from(new Set([character.name, ...(character.aliases || [])].map((value) => value.trim()).filter(Boolean))),
     facts: normalizeStoryFacts(character.facts),
+    speechProfile: normalizeSpeechProfile(character.speechProfile),
   };
 }
 
@@ -61,6 +91,17 @@ export function buildCharacterAttributes(character: Character): Record<string, s
     traits: normalized.traits,
     arc: normalized.arc,
   };
+
+  if (normalized.speechProfile) {
+    attributes.speech_default_self = normalized.speechProfile.defaultSelfPronouns.join(', ');
+    attributes.speech_default_address = normalized.speechProfile.defaultAddressPronouns.join(', ');
+    if (normalized.speechProfile.forbiddenPronouns?.length) {
+      attributes.speech_forbidden = normalized.speechProfile.forbiddenPronouns.join(', ');
+    }
+    if (normalized.speechProfile.toneNotes) {
+      attributes.speech_tone = normalized.speechProfile.toneNotes;
+    }
+  }
 
   for (const fact of normalized.facts || []) {
     attributes[normalizeAttributeKey(fact.key)] = fact.value;

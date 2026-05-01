@@ -13,12 +13,63 @@
 import { supabase } from './supabase_client';
 import type { User, Session, AuthChangeEvent } from '@supabase/supabase-js';
 
+function getBrowserOrigin(): string | null {
+  if (typeof window === 'undefined' || !window.location?.origin) {
+    return null;
+  }
+
+  return window.location.origin;
+}
+
+function isHttpOrigin(value: string | null | undefined): value is string {
+  return Boolean(value && /^https?:\/\//i.test(value));
+}
+
+function getConfiguredAuthRedirectTo(): string | undefined {
+  const envRedirect = import.meta.env.VITE_AUTH_REDIRECT_URL?.trim();
+  if (isHttpOrigin(envRedirect)) {
+    return envRedirect;
+  }
+
+  const origin = getBrowserOrigin();
+  if (isHttpOrigin(origin)) {
+    return origin;
+  }
+
+  return undefined;
+}
+
+function getSafeEmailRedirectTo(): string | undefined {
+  return getConfiguredAuthRedirectTo();
+}
+
+function shouldRetrySignUpWithoutRedirect(error: Error): boolean {
+  const message = error.message.toLowerCase();
+  return (
+    message.includes('requested function was not found')
+    || message.includes('redirect_to')
+    || message.includes('redirect not allowed')
+    || message.includes('invalid redirect')
+  );
+}
+
 // ─── Sign in with Google OAuth ─────────────────────────────
 export async function signInWithGoogle(): Promise<{ error: Error | null }> {
+  const redirectTo = getConfiguredAuthRedirectTo();
+  const origin = getBrowserOrigin();
+
+  if (!redirectTo && origin) {
+    return {
+      error: new Error(
+        'Google OAuth trong desktop mode cần callback HTTP hợp lệ. Hãy cấu hình `VITE_AUTH_REDIRECT_URL` hoặc chạy app qua dev server web.'
+      ),
+    };
+  }
+
   const { error } = await supabase.auth.signInWithOAuth({
     provider: 'google',
     options: {
-      redirectTo: window.location.origin,
+      ...(redirectTo ? { redirectTo } : {}),
       queryParams: {
         access_type: 'offline',
         prompt: 'consent',
@@ -39,13 +90,27 @@ export async function signInWithEmailPassword(email: string, password: string): 
 
 // ─── Sign up with Email / Password ─────────────────────────
 export async function signUpWithEmailPassword(email: string, password: string): Promise<{ error: Error | null }> {
-  const { error } = await supabase.auth.signUp({
+  const emailRedirectTo = getSafeEmailRedirectTo();
+
+  const primaryAttempt = await supabase.auth.signUp({
     email,
     password,
-    options: {
-      emailRedirectTo: window.location.origin,
-    }
+    ...(emailRedirectTo ? {
+      options: {
+        emailRedirectTo,
+      },
+    } : {}),
   });
+
+  let error = primaryAttempt.error;
+  if (error && emailRedirectTo && shouldRetrySignUpWithoutRedirect(new Error(error.message))) {
+    const fallbackAttempt = await supabase.auth.signUp({
+      email,
+      password,
+    });
+    error = fallbackAttempt.error;
+  }
+
   return { error: error ? new Error(error.message) : null };
 }
 

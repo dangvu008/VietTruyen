@@ -20,10 +20,12 @@ import type { TensionLevel, SurpriseBranch } from '../../types/surprise';
 import type { CombinedReviewReport } from '../../core/checkers/checker_types';
 import type { StyleAnalysisResult } from '../../types/style_learning';
 import type { ChapterWriteResult } from '../../types/surprise';
+import type { QualityMode } from '../../types/workflow';
 
 import { buildTemporalWritingContext } from '../ai/context_builder';
 import { planChapterBranches, writeChapterFromBranch } from '../ai/chapter_writer_ai';
-import { runAllCheckers, type CheckerContext } from '../../core/checkers/run_all_checkers';
+import { runAllCheckers } from '../../core/checkers/run_all_checkers';
+import type { CheckerContext } from '../../core/checkers/checker_types';
 import { analyzeChapterStyle } from '../ai/style_analyzer';
 import { executePostWritePipeline, type PostWritePipelineResult } from '../memory/memory_extractor';
 import { syncProjectMemoryBridge } from '../memory/memory_sync_bridge';
@@ -78,11 +80,55 @@ export interface PipelineOptions {
   styleInstruction?: string;
   skipReview?: boolean;
   skipPolish?: boolean;
+  qualityMode?: QualityMode;
   onProgress?: (progress: PipelineStepProgress) => void;
+  /** Real-time streaming chunk callback — when set, write step uses streaming client */
+  onChunk?: (chunk: string, accumulated: string) => void;
+  /** AbortSignal to cancel generation mid-stream */
+  signal?: AbortSignal;
 }
 
 const REVIEW_RETRY_SCORE_THRESHOLD = 60;
 const MAX_REVIEW_RETRIES = 1;
+const DEFAULT_QUALITY_MODE: QualityMode = 'quality';
+
+interface QualityStepPlan {
+  runReview: boolean;
+  runPolish: boolean;
+  runDataAgent: boolean;
+  runMemorySync: boolean;
+}
+
+function buildQualityStepPlan(
+  qualityMode: QualityMode,
+  skipReview: boolean,
+  skipPolish: boolean,
+): QualityStepPlan {
+  if (qualityMode === 'fast') {
+    return {
+      runReview: false,
+      runPolish: false,
+      runDataAgent: false,
+      runMemorySync: false,
+    };
+  }
+
+  if (qualityMode === 'balanced') {
+    return {
+      runReview: false,
+      runPolish: !skipPolish,
+      runDataAgent: true,
+      runMemorySync: true,
+    };
+  }
+
+  return {
+    runReview: !skipReview,
+    runPolish: !skipPolish,
+    runDataAgent: true,
+    runMemorySync: true,
+  };
+}
 
 function resolvePipelineModel(taskType: 'write_chapter' | 'summarize' | 'extract_metadata') {
   const aiStore = useAiStore.getState();
@@ -208,13 +254,16 @@ export async function executeFullWritePipeline(opts: PipelineOptions): Promise<F
   const {
     project, targetChapterIndex, mode, tensionLevel,
     prompt, notes, sourceOverride, styleInstruction,
-    skipReview = false, skipPolish = false, onProgress,
+    skipReview = false, skipPolish = false,
+    qualityMode = DEFAULT_QUALITY_MODE,
+    onProgress, onChunk, signal,
   } = opts;
 
   const pipelineStart = Date.now();
   const stepTimings: Record<string, number> = {};
   const totalSteps = 7;
   const pipelineSessionId = createId();
+  const stepPlan = buildQualityStepPlan(qualityMode, skipReview, skipPolish);
 
   function emitProgress(step: number, label: string, status: PipelineStepProgress['status'], durationMs?: number) {
     onProgress?.({ step, totalSteps, label, status, durationMs });
@@ -261,6 +310,8 @@ export async function executeFullWritePipeline(opts: PipelineOptions): Promise<F
     sourceOverride,
     styleInstruction,
     pipelineSessionId,
+    onChunk,
+    signal,
   });
 
   stepTimings['ai_draft'] = Date.now() - step2Start;
@@ -270,7 +321,7 @@ export async function executeFullWritePipeline(opts: PipelineOptions): Promise<F
 
   let reviewReport: CombinedReviewReport | null = null;
 
-  if (!skipReview) {
+  if (stepPlan.runReview) {
     emitProgress(3, 'Kiểm tra chất lượng (6 checker agents)', 'running');
     const step3Start = Date.now();
 
@@ -340,7 +391,7 @@ export async function executeFullWritePipeline(opts: PipelineOptions): Promise<F
 
   let styleAnalysis: StyleAnalysisResult | null = null;
 
-  if (!skipPolish) {
+  if (stepPlan.runPolish) {
     emitProgress(4, 'Phân tích văn phong', 'running');
     const step4Start = Date.now();
 
@@ -363,62 +414,71 @@ export async function executeFullWritePipeline(opts: PipelineOptions): Promise<F
 
   // ── STEP 5: Data Agent (Entity Extraction + Scene Chunk) ──
 
-  emitProgress(5, 'Trích xuất thực thể & phân cảnh', 'running');
-  const step5Start = Date.now();
   let dataResult: PostWritePipelineResult | null = null;
   const draftChapter = buildDraftChapter(project, targetChapterIndex, writeResult);
   const draftProject = mergeDraftChapterIntoProject(project, draftChapter);
 
-  try {
-    const dataModel = resolvePipelineModel('summarize');
-    if (!dataModel) throw new Error('No model for post-write data extraction');
+  if (stepPlan.runDataAgent) {
+    emitProgress(5, 'Trích xuất thực thể & phân cảnh', 'running');
+    const step5Start = Date.now();
 
-    const entityDefs: import('../../types/narrative_memory').EntityDefinition[] = project.characters.map(c => ({
-      id: c.id || c.name,
-      entityId: c.id || c.name,
-      projectId: project.id,
-      canonicalName: c.name,
-      entityType: 'character' as const,
-      aliases: c.aliases || [],
-      attributes: {},
-      sourceType: 'project' as const,
-      confidence: 1.0,
-      extractorVersion: 'pipeline-v1',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    }));
+    try {
+      const dataModel = resolvePipelineModel('summarize');
+      if (!dataModel) throw new Error('No model for post-write data extraction');
 
-    dataResult = await executePostWritePipeline({
-      projectId: project.id,
-      chapter: draftChapter,
-      entityDefinitions: entityDefs,
-      contentHash: buildChapterContentHash(draftChapter),
-      provider: dataModel.provider,
-      modelId: dataModel.modelId,
-      apiKey: '',
-      model: dataModel,
-    });
-  } catch (error) {
-    console.error('[FullPipeline] Data agent failed:', error);
+      const entityDefs: import('../../types/narrative_memory').EntityDefinition[] = project.characters.map(c => ({
+        id: c.id || c.name,
+        entityId: c.id || c.name,
+        projectId: project.id,
+        canonicalName: c.name,
+        entityType: 'character' as const,
+        aliases: c.aliases || [],
+        attributes: {},
+        sourceType: 'project' as const,
+        confidence: 1.0,
+        extractorVersion: 'pipeline-v1',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      }));
+
+      dataResult = await executePostWritePipeline({
+        projectId: project.id,
+        chapter: draftChapter,
+        entityDefinitions: entityDefs,
+        contentHash: buildChapterContentHash(draftChapter),
+        provider: dataModel.provider,
+        modelId: dataModel.modelId,
+        apiKey: '',
+        model: dataModel,
+      });
+    } catch (error) {
+      console.error('[FullPipeline] Data agent failed:', error);
+    }
+
+    stepTimings['data_agent'] = Date.now() - step5Start;
+    emitProgress(5, 'Trích xuất thực thể & phân cảnh', dataResult ? 'done' : 'failed', stepTimings['data_agent']);
+  } else {
+    emitProgress(5, 'Trích xuất thực thể & phân cảnh (bỏ qua)', 'skipped');
   }
-
-  stepTimings['data_agent'] = Date.now() - step5Start;
-  emitProgress(5, 'Trích xuất thực thể & phân cảnh', dataResult ? 'done' : 'failed', stepTimings['data_agent']);
 
   // ── STEP 6: Memory Sync ───────────────────────────
 
-  emitProgress(6, 'Đồng bộ bộ nhớ tự sự', 'running');
-  const step6Start = Date.now();
+  if (stepPlan.runMemorySync) {
+    emitProgress(6, 'Đồng bộ bộ nhớ tự sự', 'running');
+    const step6Start = Date.now();
 
-  try {
-    const memoryModel = resolvePipelineModel('extract_metadata') || resolvePipelineModel('summarize');
-    await syncProjectMemoryBridge(draftProject, memoryModel ? { model: memoryModel } : undefined);
-  } catch (error) {
-    console.error('[FullPipeline] Memory sync failed:', error);
+    try {
+      const memoryModel = resolvePipelineModel('extract_metadata') || resolvePipelineModel('summarize');
+      await syncProjectMemoryBridge(draftProject, memoryModel ? { model: memoryModel } : undefined);
+    } catch (error) {
+      console.error('[FullPipeline] Memory sync failed:', error);
+    }
+
+    stepTimings['memory_sync'] = Date.now() - step6Start;
+    emitProgress(6, 'Đồng bộ bộ nhớ tự sự', 'done', stepTimings['memory_sync']);
+  } else {
+    emitProgress(6, 'Đồng bộ bộ nhớ tự sự (bỏ qua)', 'skipped');
   }
-
-  stepTimings['memory_sync'] = Date.now() - step6Start;
-  emitProgress(6, 'Đồng bộ bộ nhớ tự sự', 'done', stepTimings['memory_sync']);
 
   // ── STEP 7: Report ────────────────────────────────
 

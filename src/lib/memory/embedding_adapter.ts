@@ -4,6 +4,9 @@ export interface EmbeddingProviderAdapter {
   embed(texts: string[]): Promise<number[][]>;
 }
 
+/** Dimension of the deterministic stub adapter (legacy fallback) */
+export const DETERMINISTIC_EMBEDDING_DIMENSION = 48;
+
 const EMBEDDING_DIMENSION = 48;
 
 function normalizeText(value: string): string {
@@ -85,12 +88,24 @@ export function cosineSimilarity(left: number[], right: number[]): number {
   return dot / Math.sqrt(leftMagnitude * rightMagnitude);
 }
 
+/**
+ * [Domain:NarrativeMemory] Reuse existing embedding if content AND dimension match.
+ * When adapter upgrades from 48-dim hash to 768-dim Gemini, this correctly
+ * rejects old embeddings and forces re-embedding with the new adapter.
+ */
 export function reuseExistingEmbedding(
   existing: MemoryEmbeddingRecord | undefined,
-  nextSourceTextHash: string
+  nextSourceTextHash: string,
+  expectedDimension?: number
 ): number[] | null {
   if (!existing) return null;
   if (existing.sourceTextHash !== nextSourceTextHash) return null;
   if (!Array.isArray(existing.embedding) || existing.embedding.length === 0) return null;
+
+  // [Domain:NarrativeMemory] Dimension guard: reject stale embeddings from different adapter
+  if (expectedDimension != null && existing.embedding.length !== expectedDimension) {
+    return null;
+  }
+
   return existing.embedding;
 }

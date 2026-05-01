@@ -1,6 +1,7 @@
 ---
 name: rune-slides
 description: "Generate Marp-compatible slide decks from structured JSON schema. Converts context into presentations for tech talks, sprint demos, and tutorials."
+model: gemini-3-flash
 ---
 
 
@@ -146,6 +147,25 @@ Slide body content
 3. DO NOT require Marp installation — output is standard markdown that Marp can consume
 4. Keep slide count reasonable (5-15 for demos, 10-25 for talks)
 5. Always include speaker notes for non-trivial slides
+
+## Returns
+
+| Artifact | Format | Location |
+|----------|--------|----------|
+| Slide schema | JSON | `slides.json` (temporary) |
+| Presentation deck | Marp Markdown | `deck.md` or user-specified path |
+
+## Done When
+
+- Presentation type identified (demo/sprint/talk/tutorial/pitch)
+- JSON schema generated with correct slide types
+- build-deck.js executed (or fallback markdown generated)
+- Output file path presented to user
+- Preview/export commands provided
+
+## Cost Profile
+
+~500-1500 tokens input, ~300-800 tokens output. Sonnet for quality copy and structure.
 
 ---
 > **Rune Skill Mesh** — 62 skills, 215+ connections, 14 extension packs

@@ -1,6 +1,7 @@
 ---
 name: rune-hallucination-guard
-description: "Verify AI-generated imports, API calls, and packages actually exist. Catches phantom functions, non-existent packages, and slopsquatting attacks."
+description: "Verify AI-generated imports, API calls, and packages actually exist. Use when finishing AI-generated code that introduces new imports or external API calls — auto-fires after fix/cook to catch phantom functions, non-existent packages, and slopsquatting attacks."
+model: gemini-3-flash-lite
 ---
 
 
@@ -44,6 +45,7 @@ Post-generation validation that verifies AI-generated code references actually e
 - `db` (L2): verify SQL syntax and ORM method calls are real
 - `review-intake` (L2): verify imports in code submitted for review
 - `skill-forge` (L2): verify imports in newly generated skill code
+- `adversary` (L2): verify APIs/packages in plan actually exist
 
 ## Execution
 

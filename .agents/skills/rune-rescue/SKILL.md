@@ -1,6 +1,7 @@
 ---
 name: rune-rescue
 description: "Legacy refactoring orchestrator. Use when user says 'refactor', 'modernize', 'clean up this mess', 'rescue', or when dealing with old/messy/legacy code. Multi-session workflow — autopsy, safety net, incremental surgery, progress tracking."
+model: gemini-3-flash
 ---
 
 

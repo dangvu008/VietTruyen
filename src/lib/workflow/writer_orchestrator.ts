@@ -12,6 +12,10 @@ import { executeFullWritePipeline } from './full_write_pipeline';
 
 interface ExecuteWorkflowIntentOptions {
   onUpdate?: (session: WorkflowSession) => void;
+  /** Real-time chunk callback for streaming write step */
+  onChunk?: (chunk: string, accumulated: string) => void;
+  /** AbortSignal to cancel streaming */
+  signal?: AbortSignal;
 }
 
 function buildWorkflowError(error: unknown): WorkflowSessionError {
@@ -171,6 +175,9 @@ export async function executeWorkflowIntent(
           styleInstruction: payload.styleInstruction,
           skipReview: payload.skipReview,
           skipPolish: payload.skipPolish,
+          qualityMode: payload.qualityMode,
+          onChunk: options.onChunk,
+          signal: options.signal,
           onProgress: (progress) => {
             const wfStep = stepToWorkflowStep[progress.step] || 'planning';
             session = emitSession(

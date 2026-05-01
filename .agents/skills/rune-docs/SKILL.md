@@ -1,6 +1,7 @@
 ---
 name: rune-docs
-description: "Auto-generate and maintain project documentation. Creates README, API docs, architecture docs, changelogs, and keeps them in sync with code changes. The \"docs are never outdated\" skill."
+description: "Auto-generate and maintain project documentation. Creates README, API docs, architecture docs, changelogs, and keeps them in sync with code changes. The \\"docs are never outdated\\" skill."
+model: gemini-3-flash
 ---
 
 

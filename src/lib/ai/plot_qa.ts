@@ -1,6 +1,8 @@
 import type { AiModel, Chapter, Character, OutlineBeat, Project } from '../../types/story';
 import { callAiModelTracked } from './tracked_ai_client';
 import { estimateTokens, quickTruncate, truncateToTokenLimit } from './token_estimator';
+import { retrieveForPlotQa } from '../memory/hybrid_memory_query';
+import { extractPackBodies } from '../memory/retrieval_pack_builder';
 
 const PLOT_KEYWORDS = [
   'cot truyen',
@@ -26,13 +28,20 @@ const PLOT_KEYWORDS = [
   'nhan vat',
   'phan dien',
   'ket thuc',
+  'ket cuc',
+  'xuat hien',
   'xay ra',
   'o dau',
   'khi nao',
   'vi sao',
+  'ra sao',
+  'the nao',
+  'bao nhieu',
+  'lan dau',
+  'tu khi',
 ];
 
-const QUESTION_WORDS = ['ai', 'gi', 'nao', 'dau', 'sao', 'tai sao', 'bao gio', 'khi nao', '?'];
+const QUESTION_WORDS = ['ai', 'gi', 'nao', 'dau', 'sao', 'tai sao', 'bao gio', 'khi nao', 'ra sao', 'the nao', '?'];
 const STOP_WORDS = new Set([
   'la', 'gi', 'va', 'cua', 'cho', 'voi', 'mot', 'nhung', 'cac', 'nay', 'kia',
   'toi', 'ban', 'nguoi', 'duoc', 'khong', 'co', 'da', 'dang', 'se', 'o', 'tu',
@@ -100,6 +109,11 @@ export async function answerPlotQuestion({
   model,
   apiKey,
 }: PlotQuestionParams): Promise<PlotAnswerResult> {
+  const localMemoryAnswer = await buildLocalMemoryPlotAnswer(project, question);
+  if (localMemoryAnswer) {
+    return { answer: localMemoryAnswer, source: 'local' };
+  }
+
   const localAnswer = buildLocalPlotAnswer(project, question);
   if (localAnswer) {
     return { answer: localAnswer, source: 'local' };
@@ -140,6 +154,54 @@ YÊU CẦU:
       : answer.trim(),
     source: 'ai',
   };
+}
+
+async function buildLocalMemoryPlotAnswer(project: Project, question: string): Promise<string | null> {
+  const result = await retrieveForPlotQa(project, question).catch(() => null);
+  if (!result) return null;
+
+  const hardCanon = extractPackBodies(result.canonPack, 2)
+    .map((line) => line.replace(/^- /, '').trim())
+    .filter(Boolean);
+  const semanticContext = extractPackBodies(result.semanticPack, 2)
+    .map((line) => line.replace(/^- /, '').trim())
+    .filter(Boolean);
+  const graphContext = result.graphPack
+    .slice(0, 1)
+    .flatMap((item) => [item.title, item.body])
+    .map((line) => line.replace(/^\d+\.\s*/, '').replace(/^- /, '').trim())
+    .filter(Boolean)
+    .slice(0, 1);
+  const warnings = extractPackBodies(result.riskPack, 1)
+    .flatMap((line) => line.split('\n'))
+    .map((line) => line.replace(/^Continuity:\s*/i, '').replace(/^Ngữ cảnh:\s*/i, '').trim())
+    .filter(Boolean)
+    .slice(0, 1);
+
+  const hasStrongLocalSignal = hardCanon.length > 0 || semanticContext.length > 0;
+  if (!hasStrongLocalSignal) {
+    return null;
+  }
+
+  const parts: string[] = [];
+
+  if (hardCanon.length > 0) {
+    parts.push(`Theo dữ liệu local: ${hardCanon.join(' | ')}.`);
+  }
+
+  if (semanticContext.length > 0) {
+    parts.push(`Dấu vết liên quan nhất: ${semanticContext.join(' | ')}.`);
+  }
+
+  if (graphContext.length > 0) {
+    parts.push(`Cụm truyện liên quan: ${graphContext.join(' | ')}.`);
+  }
+
+  if (warnings.length > 0) {
+    parts.push(`Lưu ý continuity: ${warnings.join(' | ')}.`);
+  }
+
+  return parts.join(' ');
 }
 
 function buildLocalPlotAnswer(project: Project, question: string): string | null {
@@ -196,22 +258,59 @@ function buildLocalPlotAnswer(project: Project, question: string): string | null
   if (mentionedCharacters.length > 0) {
     const character = mentionedCharacters[0].character;
 
-    if (matchesAny(normalizedQuestion, ['la ai', 'vai tro', 'tinh cach', 'giai doan', 'arc', 'nhan vat'])) {
+    // [Domain:PlotQA] STEP — Detect compound question (e.g., "xuất hiện ở chương nào + kết cục ra sao")
+    const asksAppearance = matchesAny(normalizedQuestion, ['chuong nao', 'xuat hien', 'o dau', 'bao nhieu']);
+    const asksOutcome = matchesAny(normalizedQuestion, ['ket cuc', 'ket thuc', 'ra sao', 'the nao', 'hien tai']);
+    const asksIdentity = matchesAny(normalizedQuestion, ['la ai', 'vai tro', 'tinh cach', 'giai doan', 'arc', 'nhan vat']);
+
+    // Compound question: both appearance + outcome/identity
+    if (asksAppearance && (asksOutcome || asksIdentity)) {
+      const parts: string[] = [];
+      const hits = findRelevantChapters(question, project).filter((item) =>
+        item.normalizedSearch.includes(mentionedCharacters[0].normalizedName)
+      );
+      if (hits.length > 0) {
+        parts.push(`${character.name} xuất hiện rõ nhất ở: ${hits
+          .slice(0, 5)
+          .map((item) => formatChapterLabel(item))
+          .join(', ')}.`);
+      }
+      parts.push(`Vai trò: ${character.role || 'chưa rõ'}.`);
+      if (character.traits) parts.push(`Đặc điểm: ${quickTruncate(character.traits, 140)}.`);
+      if (character.currentStage) parts.push(`Trạng thái/kết cục hiện tại: ${quickTruncate(character.currentStage, 160)}.`);
+      if (parts.length > 1) return parts.join(' ');
+    }
+
+    if (asksIdentity) {
       const traits = character.traits ? `Tính chất: ${quickTruncate(character.traits, 140)}.` : '';
       const stage = character.currentStage ? `Trạng thái hiện tại: ${quickTruncate(character.currentStage, 120)}.` : '';
       return `${character.name} giữ vai trò ${character.role || 'chưa rõ'}. ${traits} ${stage}`.trim();
     }
 
-    if (matchesAny(normalizedQuestion, ['chuong nao', 'xuat hien o dau'])) {
+    if (asksAppearance) {
       const hits = findRelevantChapters(question, project).filter((item) =>
         item.normalizedSearch.includes(mentionedCharacters[0].normalizedName)
       );
       if (hits.length > 0) {
         return `${character.name} xuất hiện rõ nhất ở: ${hits
-          .slice(0, 4)
+          .slice(0, 5)
           .map((item) => formatChapterLabel(item))
           .join(', ')}.`;
       }
+    }
+
+    if (asksOutcome) {
+      const parts: string[] = [`${character.name}:`];
+      if (character.currentStage) parts.push(`Trạng thái/kết cục: ${quickTruncate(character.currentStage, 180)}.`);
+      if (character.traits) parts.push(`Đặc điểm: ${quickTruncate(character.traits, 120)}.`);
+      const hits = findRelevantChapters(question, project).filter((item) =>
+        item.normalizedSearch.includes(mentionedCharacters[0].normalizedName)
+      );
+      if (hits.length > 0) {
+        const latestHit = hits[0];
+        parts.push(`Diễn biến gần nhất ở ${formatChapterLabel(latestHit)}: ${latestHit.snippet}`);
+      }
+      if (parts.length > 1) return parts.join(' ');
     }
 
     if (matchesAny(normalizedQuestion, ['hien tai', 'gan nhat', 'moi nhat'])) {

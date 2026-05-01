@@ -2,8 +2,24 @@
  * File: checker_types.ts
  * Purpose: Base interfaces and types for all 6 Checker Agents
  * Layer: Core/Domain
- * Domain: Checkers -> [high_point, ooc, pacing, reader_pull, consistency, continuity]
+ * Domain: Checkers -> [high_point, ooc, pacing, reader_pull, consistency, continuity, golden_three]
  */
+
+import type { GenreProfile } from '../../types/genre_profile';
+import type { CharacterProfile } from './ooc_checker';
+import type { StrandTracker } from '../../types/strand_weave';
+
+export interface CheckerContext {
+  chapterId: string;
+  chapterNumber: number;
+  chapterText: string;
+  genreProfile?: GenreProfile;
+  characters: CharacterProfile[];
+  strandTracker: StrandTracker;
+  systemStateContext: string;
+  previousSummary: string;
+  activeThreads: string[];
+}
 
 export type CheckerSeverity = 'low' | 'medium' | 'high' | 'critical';
 

@@ -131,7 +131,6 @@ Trả về JSON:
     userPrompt,
     taskType: 'plan_chapter',
     responseFormat: 'json_object',
-    skipCache: true,
   });
 
   const parsed = JSON.parse(cleanJson(response));
@@ -216,7 +215,6 @@ Tạo đủ ${chapterCount} chương, từ chương ${chStart} đến ${chEnd}.`
     userPrompt,
     taskType: 'plan_chapter',
     responseFormat: 'json_object',
-    skipCache: true,
   });
 
   const parsed = JSON.parse(cleanJson(response));
@@ -306,7 +304,6 @@ Trả về JSON:
     userPrompt,
     taskType: 'plan_chapter',
     responseFormat: 'json_object',
-    skipCache: true,
   });
 
   const parsed = JSON.parse(cleanJson(response));

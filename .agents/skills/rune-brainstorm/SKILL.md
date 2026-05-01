@@ -1,6 +1,7 @@
 ---
 name: rune-brainstorm
 description: "Creative ideation and solution exploration. Generates multiple approaches with trade-offs, uses structured frameworks (SCAMPER, First Principles), and hands off to plan for structuring."
+model: gemini-3-pro
 ---
 
 
@@ -46,6 +47,23 @@ Activated for product-level rethinks — not "how to implement X" but "should we
 2. MUST generate 2-3 approaches where at least 1 eliminates the need for the feature entirely
 3. MUST apply the "10-star experience" lens: what would a 1-star, 5-star, and 10-star version look like?
 4. MUST challenge assumptions: "why does this need to be a page?" "why does the user need to do this at all?"
+
+### Design-It-Twice Mode
+Activated when exploring alternative *interface shapes* for a deepening candidate. Spawns N=3-4 parallel subagents, each pinned to a radically different design constraint (minimize / maximize-flexibility / optimize-common-case / ports-and-adapters), computes a diversity score over feature vectors, and presents sequentially with an opinionated recommendation. Used by `improve-architecture` when a deepened module's interface is non-obvious.
+
+**Design-It-Twice triggers:**
+- `improve-architecture` (Step 7 hand-off) when the picked candidate has multiple credible interface shapes
+- User says "design it twice", "explore interfaces", "what are the API options"
+- Manual: `/rune brainstorm design-it-twice <module>`
+
+**Design-It-Twice constraints:**
+1. MUST spawn N=3 (minimum) or N=4 (when dependency category is remote-owned or true-external) parallel subagents
+2. Each subagent pinned to exactly ONE of the 4 standard constraints — enforced via prompt template
+3. Diversity score MUST be >= 0.4 before presenting (re-spawn once if below)
+4. Recommendation MUST be opinionated with a concrete hedge condition — "it depends" is BLOCKED
+5. Hybrid synthesis (Step 4.5) is opt-in when 2 designs have complementary strengths
+
+Full doctrine: [references/design-it-twice.md](references/design-it-twice.md).
 
 ### Rescue Mode
 Activated when an approach has been tried and **fundamentally failed** — not a bug, but a wrong approach. Rescue mode forces **category-diverse** alternatives instead of variants of the failed approach.
@@ -105,6 +123,8 @@ Direct API call ≠ Wrapper/middleware layer ≠ Reverse engineering ≠ Browser
 - `plan` (L2): when architecture decision needs creative exploration (Discovery Mode)
 - User: `/rune brainstorm <topic>` direct invocation (Discovery Mode)
 - User: `/rune brainstorm rescue <context>` manual rescue (Rescue Mode)
+- `ba` (L2): when multiple requirement approaches exist
+- `improve-architecture` (L2): when a deepened module's interface needs Design-It-Twice exploration
 
 ## Cross-Hub Connections
 
@@ -146,6 +166,7 @@ CRAZY 8s         — 8 ideas in 8 minutes (rapid ideation)
 ### Step 0 — Detect Mode
 
 Check the invocation context:
+- If `mode="design-it-twice"` is set, or caller is `improve-architecture` Step 7, or user says "design it twice / explore interfaces" → **Design-It-Twice Mode** (jump to Step 2.5 directly)
 - If `mode="vision"` is set, or user says "rethink/reimagine/step back" → **Vision Mode**
 - If `mode="rescue"` is set, or caller is Approach Pivot Gate / 3-Fix Escalation → **Rescue Mode**
 - Otherwise → **Discovery Mode**
@@ -212,6 +233,7 @@ When Step 1 or Step 1.5 reveals gaps, ask structured clarifying questions using 
 
 **Discovery Mode**: Produce exactly 2–3 distinct approaches.
 **Rescue Mode**: Produce exactly 3–5 approaches, each a **different category** from the failed approach.
+**Design-It-Twice Mode**: skip to Step 2.5.
 
 Each approach must be meaningfully different — not just variations of the same idea. For each approach provide:
 - **Name**: short memorable label
@@ -222,6 +244,21 @@ Each approach must be meaningfully different — not just variations of the same
 - **Risk**: low | medium | high + one-line explanation of the main risk
 
 If the domain is unfamiliar or data is needed, invoke `the rune-research skill` before generating options. For product/market context, invoke `the rune-trend-scout skill`.
+
+### Step 2.5 — Constraint Matrix Spawn (Design-It-Twice Mode only)
+
+Spawn N=3 parallel subagents (or N=4 if dependency category is `remote-owned` / `true-external`). Each is pinned to exactly one constraint via Task tool spawn:
+
+| Constraint ID | Pinning |
+|---------------|---------|
+| C1 | "Minimize the interface — aim for 1–3 entry points. Maximize leverage per entry point." |
+| C2 | "Maximize flexibility — support many use cases, extension surface." |
+| C3 | "Optimize for the most common caller — make the default case trivial. Rare cases pay cost." |
+| C4 | "Design around ports and adapters for cross-seam dependencies." (only when applicable) |
+
+Use the spawn prompt template from [references/design-it-twice.md](references/design-it-twice.md). Include CONTEXT.md domain terms in the prompt so each design names things consistently with project domain language.
+
+Each subagent returns a YAML block: interface, usage example, what's hidden, dependency strategy/adapters, tradeoffs.
 
 ### Step 3 — Evaluate
 
@@ -246,13 +283,84 @@ Additionally in Rescue Mode:
 
 For approaches with many interacting variables, invoke `the rune-sequential-thinking skill` to reason through trade-offs systematically.
 
+### Step 3.5 — Diversity Gate (Design-It-Twice Mode only)
+
+After subagents return, compute the diversity score:
+
+```
+feature_vector(design) = [
+  count(methods), count(return_types), count(adapter_kinds),
+  count(dependencies), paradigm_tag, has_async, has_streaming
+]
+diversity = 1 - mean(pairwise_jaccard(feature_vectors))
+```
+
+| Diversity | Action |
+|-----------|--------|
+| ≥ 0.6 | Proceed to Step 4 |
+| 0.4 – 0.59 | Surface to user: "designs are similar in [shared trait] — re-spawn with different constraints?" |
+| < 0.4 | Re-spawn once with rotated constraints; if still <0.4, give up and present what's there with a diversity-low warning |
+
+Emit `diversity_score` in chain_metadata.
+
 ### Step 4 — Recommend
+
 Select ONE approach as the recommendation. State:
 - Which option is recommended
 - Primary reason (1 sentence)
 - Conditions under which a different option would be better (hedge case)
 
 Do not recommend "it depends" without a concrete decision rule.
+
+### Step 4.5 — Tiered Recommendations (Product/Strategy Mode)
+
+For product-level brainstorming (Vision Mode or when approaches have strategic implications), structure the recommendation into **time-horizon tiers**:
+
+| Tier | Timeframe | Focus |
+|------|-----------|-------|
+| **Quick Win** | 0-30 days | Immediate value, validates direction, low risk |
+| **Differentiation** | 1-3 months | Competitive advantage, harder to copy |
+| **Long-term Moat** | 6-12 months | Defensible position, compounds over time |
+
+**For each tier, specify:**
+
+```markdown
+### Quick Win (0-30 days)
+- **Action**: [specific deliverable from the chosen approach]
+- **Resources**: [team/tools needed]
+- **Expected Impact**: [measurable outcome]
+- **Validates**: [what assumption this proves/disproves]
+
+### Differentiation (1-3 months)
+- **Action**: [...]
+- **Resources**: [...]
+- **Expected Impact**: [...]
+
+### Long-term Moat (6-12 months)
+- **Action**: [...]
+- **Resources**: [...]
+- **Expected Impact**: [...]
+```
+
+**Rules:**
+- Quick Win MUST be achievable with chosen approach in first sprint
+- Each tier builds on the previous — not 3 independent tracks
+- Skip this step for pure technical brainstorming (no product/strategy dimension)
+- If all tiers look equally expensive → approach may be too complex for Quick Win
+
+### Step 4.5 — Hybrid Synthesis (Design-It-Twice Mode, optional)
+
+If two designs have complementary strengths (e.g., C1's leverage + C4's seam discipline), propose a 4th option that combines them. Skip this step when no two designs have clear complementary strengths.
+
+```
+Option D (Hybrid C1 + C4):
+  - Interface: 3 methods (from C1's minimization)
+  - Adapters: HttpAdapter + InMemoryAdapter (from C4's port discipline)
+  - Pros: small surface AND testable across the seam
+  - Cons: more upfront design work; locks the port early
+```
+
+The hybrid is the recommended default in many cases. Be opinionated.
 
 ### Step 5 — Return to Plan
 Pass the recommended approach back to `the rune-plan skill` for structuring into an executable implementation plan. Include:
@@ -272,6 +380,9 @@ If the user rejects the recommendation, return to Step 2 with adjusted constrain
 6. [Rescue Mode] MUST NOT generate variants of the failed approach — each approach must be a different CATEGORY
 7. [Rescue Mode] MUST use Collision-Zone or Inversion framework — conventional thinking already failed
 8. [Rescue Mode] MUST include at least 1 unconventional/hacky approach — sometimes the "dirty" solution is the only one that works
+9. [Design-It-Twice Mode] MUST spawn parallel subagents with one constraint pinned per agent — fake diversity (one agent producing N options) is BLOCKED
+10. [Design-It-Twice Mode] MUST emit `diversity_score` and re-spawn (once) if below 0.4 floor
+11. [Design-It-Twice Mode] MUST NOT produce "it depends" recommendations — pick one design with a concrete hedge condition
 
 ## Output Format
 
@@ -329,6 +440,10 @@ Known failure modes for this skill. Check these before declaring done.
 | [Rescue] All approaches are "clean/proper" — no hacky option | MEDIUM | At least 1 must be unconventional — wrappers, reverse-engineering, debug mode abuse, proxy layers |
 | Calling plan directly instead of presenting options first | CRITICAL | Steps 2-3 are mandatory — present options, get approval, THEN call plan |
 | "Creative" options that ignore stated constraints | MEDIUM | Every option must satisfy the constraints declared in Step 1 |
+| [Design-It-Twice] Single agent producing N options instead of N parallel subagents | HIGH | Step 2.5 — constraint pinning happens at spawn, not in a loop. Each constraint = one Task call |
+| [Design-It-Twice] Diversity score below 0.4 ignored | HIGH | Step 3.5 gate — re-spawn once; if still low, present with explicit "low-diversity" warning |
+| [Design-It-Twice] "It depends" recommendation | HIGH | Step 4 — must pick one with a hedge; if genuinely tied, propose hybrid (Step 4.5) and recommend that |
+| [Design-It-Twice] Forgetting to include CONTEXT.md domain terms in subagent prompt | MEDIUM | Step 2.5 spawn template requires domain glossary be passed through |
 
 ## Done When
 

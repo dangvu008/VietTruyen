@@ -41,6 +41,9 @@ interface EdgeAccumulator {
   edgeType: NarrativeEdge['edgeType'];
   weight: number;
   evidenceChapterIds: Set<string>;
+  attributes?: Record<string, string>;
+  confidence?: number;
+  origin?: NarrativeEdge['origin'];
   updatedAt: string;
 }
 
@@ -65,7 +68,8 @@ function buildNode(
   nodeType: NarrativeNodeType,
   refId: string,
   label: string,
-  updatedAt: string
+  updatedAt: string,
+  opts?: Pick<NarrativeNode, 'attributes' | 'confidence' | 'origin'>
 ): NarrativeNode {
   return {
     id: buildNarrativeNodeId(projectId, nodeType, refId),
@@ -74,6 +78,9 @@ function buildNode(
     refId,
     label,
     salience: 0,
+    attributes: opts?.attributes,
+    confidence: opts?.confidence,
+    origin: opts?.origin,
     updatedAt,
   };
 }
@@ -94,7 +101,8 @@ function addEdge(
   fromNodeId: string | undefined,
   toNodeId: string | undefined,
   weight: number,
-  chapterId?: string
+  chapterId?: string,
+  opts?: Pick<NarrativeEdge, 'attributes' | 'confidence' | 'origin'>
 ): void {
   if (!fromNodeId || !toNodeId || fromNodeId === toNodeId || weight <= 0) return;
 
@@ -115,7 +123,93 @@ function addEdge(
     edgeType,
     weight,
     evidenceChapterIds: chapterId ? new Set([chapterId]) : new Set(),
+    attributes: opts?.attributes,
+    confidence: opts?.confidence,
+    origin: opts?.origin,
     updatedAt: new Date().toISOString(),
+  });
+}
+
+function splitSceneTexts(chapter: Chapter): string[] {
+  const paragraphs = (chapter.content || '')
+    .split(/\n{2,}/g)
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  if (paragraphs.length >= 2) {
+    return paragraphs;
+  }
+
+  const sentences = (chapter.content || '')
+    .split(/(?<=[.!?…])\s+/g)
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  if (sentences.length === 0) {
+    return chapter.summary?.trim() ? [chapter.summary.trim()] : [];
+  }
+
+  const groups: string[] = [];
+  for (let index = 0; index < sentences.length; index += 3) {
+    groups.push(sentences.slice(index, index + 3).join(' '));
+  }
+  return groups;
+}
+
+function addStructuralNodes(
+  project: Project,
+  arcs: Arc[],
+  nodeMap: Map<string, NarrativeNode>
+): void {
+  const now = new Date().toISOString();
+  const chapters = sortChapters(project.chapters || []);
+
+  chapters.forEach((chapter, chapterIndex) => {
+    splitSceneTexts(chapter).forEach((sceneText, sceneIndex) => {
+      const refId = `${chapter.id}:scene:${sceneIndex}`;
+      const label = sceneText.slice(0, 80).trim() || `Scene ${sceneIndex + 1}`;
+      const sceneNode = buildNode(project.id, 'scene', refId, label, chapter.updatedAt || now, {
+        attributes: {
+          chapterId: chapter.id,
+          chapterIndex: String(chapter.sequenceNumber ?? chapterIndex + 1),
+          sceneIndex: String(sceneIndex),
+        },
+        confidence: 0.9,
+        origin: 'derived',
+      });
+      nodeMap.set(sceneNode.id, sceneNode);
+    });
+  });
+
+  (project.outline || []).forEach((beat, beatIndex) => {
+    const beatNode = buildNode(project.id, 'beat', `beat:${beatIndex}`, beat.title || `Beat ${beatIndex + 1}`, project.updatedAt || now, {
+      attributes: {
+        beatIndex: String(beatIndex),
+        focus: beat.focus || '',
+        summary: beat.summary || '',
+      },
+      confidence: 0.95,
+      origin: 'project',
+    });
+    nodeMap.set(beatNode.id, beatNode);
+  });
+
+  arcs.forEach((arc) => {
+    const motifTexts = [arc.premise, arc.escalation, arc.climax, arc.exitState, ...(arc.unresolvedDebts || [])]
+      .map((item) => item.trim())
+      .filter(Boolean);
+    motifTexts.slice(0, 2).forEach((motifText, motifIndex) => {
+      const refId = `${arc.id}:motif:${motifIndex}`;
+      const motifNode = buildNode(project.id, 'motif', refId, motifText.slice(0, 80), arc.updatedAt || now, {
+        attributes: {
+          arcId: arc.id,
+          motifIndex: String(motifIndex),
+        },
+        confidence: 0.7,
+        origin: 'derived',
+      });
+      nodeMap.set(motifNode.id, motifNode);
+    });
   });
 }
 
@@ -180,6 +274,8 @@ function buildBaseNodes(project: Project, arcs: Arc[]): Map<string, NarrativeNod
     const node = buildNode(project.id, 'faction', refId, faction, project.updatedAt || now);
     nodeMap.set(node.id, node);
   }
+
+  addStructuralNodes(project, arcs, nodeMap);
 
   return nodeMap;
 }
@@ -358,6 +454,131 @@ function addArcEdges(
   }
 }
 
+function addSceneEdges(
+  project: Project,
+  metadata: ChapterMetadata[],
+  edgeMap: Map<string, EdgeAccumulator>,
+  nodeMap: Map<string, NarrativeNode>
+): void {
+  const metadataByChapterId = new Map(metadata.map((item) => [item.chapterId, item]));
+  const chapters = sortChapters(project.chapters || []);
+
+  chapters.forEach((chapter, chapterIndex) => {
+    const sceneTexts = splitSceneTexts(chapter);
+    const chapterNodeId = buildNarrativeNodeId(project.id, 'chapter', chapter.id);
+    const chapterMetadata = metadataByChapterId.get(chapter.id);
+
+    sceneTexts.forEach((sceneText, sceneIndex) => {
+      const sceneNodeId = buildNarrativeNodeId(project.id, 'scene', `${chapter.id}:scene:${sceneIndex}`);
+      if (!nodeMap.has(sceneNodeId)) return;
+
+      addEdge(edgeMap, project.id, 'scene_membership', chapterNodeId, sceneNodeId, 2, chapter.id, {
+        attributes: {
+          chapterId: chapter.id,
+          sceneIndex: String(sceneIndex),
+        },
+        confidence: 0.9,
+        origin: 'derived',
+      });
+
+      for (const character of project.characters || []) {
+        const haystack = normalizeTextForMatch(`${sceneText} ${chapter.summary || ''}`);
+        const nameSignals = [character.name, ...(character.aliases || [])]
+          .map((item) => normalizeTextForMatch(item))
+          .filter(Boolean);
+        if (!nameSignals.some((signal) => haystack.includes(signal))) continue;
+        addEdge(edgeMap, project.id, 'co_presence', sceneNodeId, buildNarrativeNodeId(project.id, 'character', character.id), 1, chapter.id, {
+          confidence: 0.7,
+          origin: 'derived',
+        });
+      }
+
+      if (chapterMetadata) {
+        for (const entityRef of chapterMetadata.entityRefs) {
+          const entityNodeId =
+            entityRef.entityType === 'world'
+              ? buildNarrativeNodeId(project.id, 'world', WORLD_ENTITY_ID)
+              : buildNarrativeNodeId(project.id, 'character', entityRef.entityId);
+          if (!nodeMap.has(entityNodeId)) continue;
+          addEdge(edgeMap, project.id, 'scene_membership', sceneNodeId, entityNodeId, 1, chapter.id, {
+            attributes: {
+              context: entityRef.context,
+            },
+            confidence: 0.6,
+            origin: 'derived',
+          });
+        }
+      }
+    });
+  });
+}
+
+function addBeatEdges(
+  project: Project,
+  metadata: ChapterMetadata[],
+  edgeMap: Map<string, EdgeAccumulator>,
+  nodeMap: Map<string, NarrativeNode>
+): void {
+  const metadataByChapterId = new Map(metadata.map((item) => [item.chapterId, item]));
+  const chapters = sortChapters(project.chapters || []);
+
+  chapters.forEach((chapter, chapterIndex) => {
+    const beat = project.outline?.[chapterIndex];
+    if (!beat) return;
+
+    const beatNodeId = buildNarrativeNodeId(project.id, 'beat', `beat:${chapterIndex}`);
+    const chapterNodeId = buildNarrativeNodeId(project.id, 'chapter', chapter.id);
+    if (!nodeMap.has(beatNodeId) || !nodeMap.has(chapterNodeId)) return;
+
+    addEdge(edgeMap, project.id, 'beat_alignment', beatNodeId, chapterNodeId, 2, chapter.id, {
+      attributes: {
+        focus: beat.focus || '',
+      },
+      confidence: 0.95,
+      origin: 'project',
+    });
+
+    const chapterMetadata = metadataByChapterId.get(chapter.id);
+    if (!chapterMetadata) return;
+    for (const entityRef of chapterMetadata.entityRefs) {
+      const entityNodeId =
+        entityRef.entityType === 'world'
+          ? buildNarrativeNodeId(project.id, 'world', WORLD_ENTITY_ID)
+          : buildNarrativeNodeId(project.id, 'character', entityRef.entityId);
+      if (!nodeMap.has(entityNodeId)) continue;
+      addEdge(edgeMap, project.id, 'beat_alignment', beatNodeId, entityNodeId, importanceWeight(entityRef.importance), chapter.id, {
+        attributes: {
+          context: entityRef.context,
+        },
+        confidence: 0.75,
+        origin: 'derived',
+      });
+    }
+  });
+}
+
+function addRetconNodes(
+  project: Project,
+  canonicalEdits: CanonicalEdit[],
+  nodeMap: Map<string, NarrativeNode>
+): void {
+  const now = new Date().toISOString();
+
+  canonicalEdits.forEach((edit) => {
+    const label = `${edit.attributeKey}: ${edit.oldValue} → ${edit.newValue}`;
+    const node = buildNode(project.id, 'retcon_event', edit.id, label, edit.createdAt || now, {
+      attributes: {
+        entityId: edit.entityId,
+        attributeKey: edit.attributeKey,
+        effectiveFromChapter: String(edit.effectiveFromChapter),
+      },
+      confidence: edit.confidence,
+      origin: edit.sourceType === 'ai_enriched' ? 'ai_enriched' : 'project',
+    });
+    nodeMap.set(node.id, node);
+  });
+}
+
 function addCanonicalImpactEdges(
   project: Project,
   canonicalEdits: CanonicalEdit[],
@@ -385,6 +606,25 @@ function addCanonicalImpactEdges(
       severityWeight(task.severity),
       task.chapterId
     );
+
+    const retconNodeId = buildNarrativeNodeId(project.id, 'retcon_event', task.canonicalEditId);
+    if (nodeMap.has(retconNodeId)) {
+      addEdge(edgeMap, project.id, 'retcon_targets', retconNodeId, entityNodeId, severityWeight(task.severity), task.chapterId, {
+        attributes: {
+          attributeKey: task.attributeKey,
+        },
+        confidence: 0.95,
+        origin: 'project',
+      });
+      addEdge(edgeMap, project.id, 'continuity_risk', retconNodeId, chapterNodeId, severityWeight(task.severity), task.chapterId, {
+        attributes: {
+          recommendedAction: task.recommendedAction,
+          dependencyContext: task.dependencyContext,
+        },
+        confidence: 0.95,
+        origin: 'project',
+      });
+    }
   }
 }
 
@@ -397,6 +637,9 @@ function finalizeEdges(edgeMap: Map<string, EdgeAccumulator>): NarrativeEdge[] {
     edgeType: edge.edgeType,
     weight: edge.weight,
     evidenceChapterIds: Array.from(edge.evidenceChapterIds).sort(),
+    attributes: edge.attributes,
+    confidence: edge.confidence,
+    origin: edge.origin,
     updatedAt: edge.updatedAt,
   }));
 }
@@ -454,7 +697,7 @@ function buildCommunities(
       visited.add(current);
       memberNodeIds.push(current);
 
-      for (const neighbor of adjacency.get(current) || []) {
+      for (const neighbor of Array.from(adjacency.get(current) || [])) {
         if (!visited.has(neighbor)) {
           queue.push(neighbor);
         }
@@ -500,6 +743,7 @@ export function buildNarrativeGraph(input: BuildNarrativeGraphInput): NarrativeG
   const propagationTasks = input.propagationTasks || [];
 
   const nodeMap = buildBaseNodes(project, arcs);
+  addRetconNodes(project, canonicalEdits, nodeMap);
   const edgeMap = new Map<string, EdgeAccumulator>();
 
   addTemporalEdges(project, edgeMap);
@@ -508,6 +752,8 @@ export function buildNarrativeGraph(input: BuildNarrativeGraphInput): NarrativeG
   addFactionEdges(project, edgeMap, nodeMap);
   addForeshadowEdges(project, edgeMap, nodeMap);
   addArcEdges(project, arcs, metadata, edgeMap, nodeMap);
+  addSceneEdges(project, metadata, edgeMap, nodeMap);
+  addBeatEdges(project, metadata, edgeMap, nodeMap);
   addCanonicalImpactEdges(project, canonicalEdits, propagationTasks, edgeMap, nodeMap);
 
   const edges = finalizeEdges(edgeMap);
