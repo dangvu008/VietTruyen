@@ -99,4 +99,5 @@ export interface ChapterWriteResult {
   divergence: DivergenceReport;
   selectedBranch: SurpriseBranch;
   contextUsage?: ContextUsageStats;
+  ecotAnalysis?: string;
 }

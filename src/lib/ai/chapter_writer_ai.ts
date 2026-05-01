@@ -8,7 +8,7 @@ import type {
   SurpriseBranch,
   TensionLevel,
 } from '../../types/surprise';
-import { buildSurpriseContext } from './context_builder';
+import { buildSurpriseContext, buildWritingContext } from './context_builder';
 import { getModelForTask } from './model_router';
 import { buildBranchPlannerPrompts, buildChapterWriterPrompts } from './surprise_prompts';
 import {
@@ -18,9 +18,22 @@ import {
   validateDivergence,
 } from './surprise_engine';
 import { callAiModelTracked } from './tracked_ai_client';
+import { callAiStreaming } from './streaming_ai_client';
 
 function cleanJsonLike(text: string): string {
   return text.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
+}
+
+function extractJsonObject(text: string): string {
+  const cleaned = cleanJsonLike(text);
+  const firstBrace = cleaned.indexOf('{');
+  const lastBrace = cleaned.lastIndexOf('}');
+
+  if (firstBrace === -1 || lastBrace === -1 || lastBrace <= firstBrace) {
+    throw new Error('Writer output thiếu JSON ledger hợp lệ.');
+  }
+
+  return cleaned.slice(firstBrace, lastBrace + 1);
 }
 
 function clampRiskScore(value: unknown): number {
@@ -73,42 +86,130 @@ export function parsePlannerResponse(
   });
 }
 
+function buildDefaultLedger(): ChapterLedger {
+  return {
+    summary: '',
+    beatStatus: 'hit',
+    usedCharacterNames: [],
+    introducedEntities: [],
+    foreshadowPlanted: [],
+    preservedAnchorIds: [],
+  };
+}
+
+/**
+ * Fallback: khi không có sentinel markers, cố gắng extract nội dung từ raw text.
+ * Loại bỏ phần JSON ledger nếu có ở đầu/cuối, giữ lại phần văn xuôi.
+ */
+function extractContentFallback(responseText: string): { ledger: ChapterLedger; content: string } {
+  // [Domain:AI] STEP — Try to extract JSON block from start, treat rest as content
+  const trimmed = responseText.trim();
+
+  // Case 1: Starts with JSON block {…} then prose
+  if (trimmed.startsWith('{')) {
+    try {
+      const firstBrace = trimmed.indexOf('{');
+      const lastBrace = trimmed.indexOf('}');
+      if (firstBrace !== -1 && lastBrace !== -1) {
+        const jsonPart = trimmed.slice(firstBrace, lastBrace + 1);
+        const rest = trimmed.slice(lastBrace + 1).trim();
+        if (rest.length > 100) {
+          const ledgerJson = JSON.parse(jsonPart) as Partial<ChapterLedger>;
+          const ledger = {
+            summary: String(ledgerJson.summary || '').trim(),
+            beatStatus: ledgerJson.beatStatus === 'delay' || ledgerJson.beatStatus === 'replace' ? ledgerJson.beatStatus : 'hit' as const,
+            usedCharacterNames: normalizeList(ledgerJson.usedCharacterNames),
+            introducedEntities: normalizeList(ledgerJson.introducedEntities),
+            foreshadowPlanted: normalizeList(ledgerJson.foreshadowPlanted),
+            preservedAnchorIds: normalizeList(ledgerJson.preservedAnchorIds),
+          };
+          return { ledger, content: rest };
+        }
+      }
+    } catch {
+      // not valid JSON — fall through
+    }
+  }
+
+  // Case 2: No structure at all — use full text as content
+  if (trimmed.length > 100) {
+    return { ledger: buildDefaultLedger(), content: trimmed };
+  }
+
+  throw new Error('Writer output rỗng hoặc quá ngắn để sử dụng.');
+}
+
 export function parseWriterResponse(responseText: string): {
   ledger: ChapterLedger;
   content: string;
+  ecotAnalysis?: string;
 } {
+  const ecotMarker = '@@ECOT_ANALYSIS@@';
   const ledgerMarker = '@@LEDGER@@';
   const contentMarker = '@@CONTENT@@';
+  
+  const ecotIndex = responseText.indexOf(ecotMarker);
   const ledgerIndex = responseText.indexOf(ledgerMarker);
   const contentIndex = responseText.indexOf(contentMarker);
 
-  if (ledgerIndex === -1 || contentIndex === -1 || contentIndex <= ledgerIndex) {
-    throw new Error('Writer output không đúng sentinel contract.');
+  let ecotAnalysis: string | undefined = undefined;
+  if (ecotIndex !== -1 && ledgerIndex !== -1 && ledgerIndex > ecotIndex) {
+    ecotAnalysis = responseText.slice(ecotIndex + ecotMarker.length, ledgerIndex).trim();
   }
 
-  const ledgerText = responseText
-    .slice(ledgerIndex + ledgerMarker.length, contentIndex)
-    .trim()
-    .split('\n')
-    .find((line) => line.trim().startsWith('{'));
-  const content = responseText.slice(contentIndex + contentMarker.length).trim();
+  // [Domain:AI] STEP 1 — Happy path: both sentinel markers present and in correct order
+  if (ledgerIndex !== -1 && contentIndex !== -1 && contentIndex > ledgerIndex) {
+    const ledgerText = responseText
+      .slice(ledgerIndex + ledgerMarker.length, contentIndex)
+      .trim();
+    const content = responseText.slice(contentIndex + contentMarker.length).trim();
 
-  if (!ledgerText || !content) {
-    throw new Error('Writer output thiếu ledger hoặc content.');
+    if (ledgerText && content) {
+      try {
+        const ledgerJson = JSON.parse(extractJsonObject(ledgerText)) as Partial<ChapterLedger>;
+        return {
+          ledger: {
+            summary: String(ledgerJson.summary || '').trim(),
+            beatStatus: ledgerJson.beatStatus === 'delay' || ledgerJson.beatStatus === 'replace' ? ledgerJson.beatStatus : 'hit',
+            usedCharacterNames: normalizeList(ledgerJson.usedCharacterNames),
+            introducedEntities: normalizeList(ledgerJson.introducedEntities),
+            foreshadowPlanted: normalizeList(ledgerJson.foreshadowPlanted),
+            preservedAnchorIds: normalizeList(ledgerJson.preservedAnchorIds),
+          },
+          content,
+          ecotAnalysis,
+        };
+      } catch (parseErr) {
+        console.warn('[parseWriterResponse] Ledger JSON parse failed, falling back:', parseErr);
+        // Ledger parse failed but content is valid — use content with default ledger
+        return { ledger: buildDefaultLedger(), content, ecotAnalysis };
+      }
+    }
   }
 
-  const ledgerJson = JSON.parse(cleanJsonLike(ledgerText)) as Partial<ChapterLedger>;
-  return {
-    ledger: {
-      summary: String(ledgerJson.summary || '').trim(),
-      beatStatus: ledgerJson.beatStatus === 'delay' || ledgerJson.beatStatus === 'replace' ? ledgerJson.beatStatus : 'hit',
-      usedCharacterNames: normalizeList(ledgerJson.usedCharacterNames),
-      introducedEntities: normalizeList(ledgerJson.introducedEntities),
-      foreshadowPlanted: normalizeList(ledgerJson.foreshadowPlanted),
-      preservedAnchorIds: normalizeList(ledgerJson.preservedAnchorIds),
-    },
-    content,
-  };
+  // [Domain:AI] STEP 2 — Fallback: sentinels missing or wrong order
+  // Log for diagnostics without throwing
+  console.warn(
+    '[parseWriterResponse] Sentinel markers not found or wrong order. Attempting fallback extraction.',
+    `\nledgerIndex=${ledgerIndex}, contentIndex=${contentIndex}`,
+    `\nFirst 200 chars: ${responseText.slice(0, 200)}`,
+  );
+
+  return extractContentFallback(responseText);
+}
+
+function mergeWriterContextText(primaryContext: string, ghostwriterContext: string): string {
+  const trimmedPrimary = primaryContext.trim();
+  const trimmedGhostwriter = ghostwriterContext.trim();
+
+  if (!trimmedGhostwriter) return trimmedPrimary;
+  if (!trimmedPrimary) return trimmedGhostwriter;
+
+  return [
+    trimmedPrimary,
+    '## GHOSTWRITER RUNTIME CONTEXT',
+    trimmedGhostwriter,
+  ].join('\n\n');
 }
 
 async function resolveTaskModel(taskType: 'plan_chapter' | 'write_chapter') {
@@ -160,7 +261,6 @@ export async function planChapterBranches(opts: {
     userPrompt: prompts.user,
     taskType: 'plan_chapter',
     responseFormat: 'json_object',
-    skipCache: true,
     pipelineSessionId,
     pipelineStep: 'plan_branches',
   });
@@ -196,8 +296,12 @@ export async function writeChapterFromBranch(opts: {
   sourceOverride?: string;
   styleInstruction?: string;
   pipelineSessionId?: string;
+  /** Called with each streamed chunk when streaming mode is active */
+  onChunk?: (chunk: string, accumulated: string) => void;
+  /** AbortSignal to cancel the streaming generation */
+  signal?: AbortSignal;
 }): Promise<ChapterWriteResult> {
-  const { project, targetChapterIndex, tensionLevel, branch, prompt, notes, sourceOverride, styleInstruction, pipelineSessionId } = opts;
+  const { project, targetChapterIndex, tensionLevel, branch, prompt, notes, sourceOverride, styleInstruction, pipelineSessionId, onChunk, signal } = opts;
   const anchors = extractAnchors(project, targetChapterIndex);
   const expectation = detectExpectation(project, targetChapterIndex, anchors);
   const styleRules = await getProjectRules(project.id).catch(() => []);
@@ -211,10 +315,19 @@ export async function writeChapterFromBranch(opts: {
     styleRules,
     sourceOverride,
   );
+  const writingContext = await buildWritingContext(
+    project,
+    targetChapterIndex,
+    styleRules,
+  ).catch(() => null);
+  const mergedContextText = mergeWriterContextText(
+    surpriseContext.contextText,
+    writingContext?.contextText || '',
+  );
 
   const { model } = await resolveTaskModel('write_chapter');
   const prompts = buildChapterWriterPrompts({
-    contextText: surpriseContext.contextText,
+    contextText: mergedContextText,
     branch,
     tensionLevel,
     prompt,
@@ -222,20 +335,40 @@ export async function writeChapterFromBranch(opts: {
     styleInstruction,
   });
 
-  const responseText = await callAiModelTracked({
-    provider: model.provider,
-    modelId: model.modelId,
-    modelName: model.name,
-    baseUrl: model.baseUrl,
-    systemPrompt: prompts.system,
-    userPrompt: prompts.user,
-    taskType: 'write_chapter',
-    skipCache: true,
-    pipelineSessionId,
-    pipelineStep: 'write_chapter',
-  });
+  // [Domain:AI] STEP — Use streaming client when onChunk callback is provided
+  let responseText: string;
+  if (onChunk) {
+    const streamResult = await callAiStreaming({
+      provider: model.provider,
+      modelId: model.modelId,
+      modelName: model.name,
+      baseUrl: model.baseUrl,
+      systemPrompt: prompts.system,
+      userPrompt: prompts.user,
+      taskType: 'write_chapter',
+      signal,
+      onChunk,
+    });
+    responseText = streamResult.text;
+    if (!responseText.trim() && !streamResult.completed) {
+      throw new Error('Người dùng đã dừng quá trình tạo nội dung.');
+    }
+  } else {
+    responseText = await callAiModelTracked({
+      provider: model.provider,
+      modelId: model.modelId,
+      modelName: model.name,
+      baseUrl: model.baseUrl,
+      systemPrompt: prompts.system,
+      userPrompt: prompts.user,
+      taskType: 'write_chapter',
+      skipCache: true,
+      pipelineSessionId,
+      pipelineStep: 'write_chapter',
+    });
+  }
 
-  const { ledger, content } = parseWriterResponse(responseText);
+  const { ledger, content, ecotAnalysis } = parseWriterResponse(responseText);
   const divergence = validateDivergence(
     content,
     ledger,
@@ -251,6 +384,7 @@ export async function writeChapterFromBranch(opts: {
     ledger,
     divergence,
     selectedBranch: branch,
+    ecotAnalysis,
     contextUsage: {
       rawTokens: surpriseContext.rawTokenEstimate,
       cleanTokens: surpriseContext.tokenEstimate,
