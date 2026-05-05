@@ -37,6 +37,9 @@ import type {
   VersionSnapshot,
 } from './storage_types';
 
+const CHAPTER_READ_FAILURE_COOLDOWN_MS = 30_000;
+const chapterReadRetryAfter = new Map<string, number>();
+
 export class OnlineStorageProvider implements StorageProvider {
   readonly mode = 'online' as const;
 
@@ -111,27 +114,29 @@ export class OnlineStorageProvider implements StorageProvider {
       .from('projects')
       .select('*')
       .eq('id', projectId)
-      .single();
+      .maybeSingle();
 
     if (error || !row) return null;
 
     // [Domain:Storage] STEP 2 — Fetch related entities in parallel
     const [worldRes, charsRes, beatsRes, foreshadowingsRes] = await Promise.all([
-      supabase.from('world_rules').select('*').eq('project_id', projectId).single(),
+      supabase.from('world_rules').select('*').eq('project_id', projectId).maybeSingle(),
       supabase.from('characters').select('*').eq('project_id', projectId).order('sort_order'),
       supabase.from('outline_beats').select('*').eq('project_id', projectId).order('sort_order'),
       supabase.from('foreshadowings').select('*').eq('project_id', projectId).order('created_at'),
     ]);
 
-    const world: WorldRules = worldRes.data
+    const worldRow = worldRes.data as (typeof worldRes.data & { facts?: WorldRules['facts'] }) | null;
+
+    const world: WorldRules = worldRow
       ? {
-          geography: worldRes.data.geography || '',
-          magicSystem: worldRes.data.magic_system || '',
-          techLevel: worldRes.data.tech_level || '',
-          currency: worldRes.data.currency || '',
-          factions: worldRes.data.factions || [],
-          rules: worldRes.data.rules || '',
-          facts: worldRes.data.facts || [],
+          geography: worldRow.geography || '',
+          magicSystem: worldRow.magic_system || '',
+          techLevel: worldRow.tech_level || '',
+          currency: worldRow.currency || '',
+          factions: worldRow.factions || [],
+          rules: worldRow.rules || '',
+          facts: worldRow.facts || [],
         }
       : { geography: '', magicSystem: '', techLevel: '', currency: '', factions: [], rules: '', facts: [] };
 
@@ -142,6 +147,13 @@ export class OnlineStorageProvider implements StorageProvider {
       arc: c.arc || '',
       currentStage: c.current_stage || '',
       traits: c.traits || '',
+      psychology: {
+        coreWound: c.core_wound || '',
+        deepFear: c.deep_fear || '',
+        hiddenDesire: c.hidden_desire || '',
+        selfDeception: c.self_deception || '',
+        bodyLanguage: c.body_language || '',
+      },
     }));
 
     const outline: OutlineBeat[] = (beatsRes.data || []).map((b) => ({
@@ -216,6 +228,14 @@ export class OnlineStorageProvider implements StorageProvider {
   // ── Chapter CRUD ────────────────────────────────────────
 
   async getProjectChapters(projectId: string): Promise<Chapter[]> {
+    const retryAfter = chapterReadRetryAfter.get(projectId);
+    if (retryAfter && retryAfter > Date.now()) {
+      console.warn(
+        `[OnlineStorage] getProjectChapters: skipping Supabase retry for project ${projectId}; recent read failed.`,
+      );
+      return [];
+    }
+
     const { data, error } = await supabase
       .from('chapters')
       .select('*')
@@ -223,16 +243,18 @@ export class OnlineStorageProvider implements StorageProvider {
       .order('sort_order');
 
     if (error) {
-      // [Domain:Storage] RLS infinite recursion → return empty to allow IndexedDB fallback
-      if (error.message.includes('infinite recursion')) {
+      // [Domain:Storage] Supabase/RLS read failure → return empty to allow IndexedDB fallback
+      if (shouldFallbackToEmptyChapters(error)) {
+        chapterReadRetryAfter.set(projectId, Date.now() + CHAPTER_READ_FAILURE_COOLDOWN_MS);
         console.warn(
-          `[OnlineStorage] getProjectChapters: RLS policy recursion for project ${projectId}, falling back.`,
+          `[OnlineStorage] getProjectChapters: Supabase read failed for project ${projectId}, falling back.`,
         );
         return [];
       }
       throw new Error(`getProjectChapters: ${error.message}`);
     }
 
+    chapterReadRetryAfter.delete(projectId);
     return (data || []).map(mapChapterRow);
   }
 
@@ -242,7 +264,7 @@ export class OnlineStorageProvider implements StorageProvider {
       .select('*')
       .eq('id', chapterId)
       .eq('project_id', projectId)
-      .single();
+      .maybeSingle();
 
     if (error || !data) return null;
     return mapChapterRow(data);
@@ -450,6 +472,17 @@ export class OnlineStorageProvider implements StorageProvider {
 }
 
 // ── Helpers ─────────────────────────────────────────────────
+
+function shouldFallbackToEmptyChapters(error: { message?: string; code?: string; status?: number } | null | undefined): boolean {
+  if (!error) return false;
+  const message = error.message?.toLowerCase() || '';
+  return (
+    message.includes('infinite recursion')
+    || message.includes('rls')
+    || message.includes('policy')
+    || (typeof error.status === 'number' && error.status >= 500)
+  );
+}
 
 function mapChapterRow(row: Record<string, unknown>): Chapter {
   return {

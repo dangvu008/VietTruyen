@@ -21,60 +21,165 @@ export const URBAN_DAILY_TEMPLATE: StoryTemplate = {
   ],
   "subGenres": [
     {
-      "name": "Đô Thị Nhật Thường",
-      "description": "真实生活感 + 小人物逆袭 + 细节共鸣。在平凡中书写不平凡，让读者看到自己的影子。",
-      "coreAppeal": "真实生活感 + 小人物逆袭 + 细节共鸣。在平凡中书写不平凡，让读者看到自己的影子。"
+      "name": "职场奋斗流",
+      "description": "职场打拼，升职加薪，事业成功",
+      "coreAppeal": "业绩碾压、升职打脸、财务自由",
+      "referenceWorks": [
+        "杜拉拉升职记",
+        "我的前半生",
+        "欢乐颂"
+      ]
+    },
+    {
+      "name": "市井生活流",
+      "description": "普通人的日常生活，烟火气息",
+      "coreAppeal": "生活智慧、人情冷暖、小确幸",
+      "referenceWorks": [
+        "请回答1988",
+        "武林外传"
+      ]
+    },
+    {
+      "name": "创业逆袭流",
+      "description": "白手起家，商业成功",
+      "coreAppeal": "商业智慧、资本运作、财富积累",
+      "referenceWorks": [
+        "大江大河",
+        "鸡毛飞上天",
+        "正阳门下"
+      ]
+    },
+    {
+      "name": "重生都市流",
+      "description": "重生回到过去，改变人生",
+      "coreAppeal": "先知先觉、投资暴富、弥补遗憾",
+      "referenceWorks": [
+        "重生之神级学霸",
+        "重生完美时代"
+      ]
     }
   ],
-  "worldRules": [],
-  "coolPatterns": [],
-  "conflictPatterns": [],
+  "worldRules": [
+    {
+      "name": "社会阶层",
+      "description": "阶层 / 特点 / 资源 ------ / ------ / ------ 富豪 / 资本家 / 无限 中产 / 白领精英 / 充足 工薪 / 普通上班族 / 有限 底层 / 打工人 / 匮乏"
+    },
+    {
+      "name": "职场生态",
+      "description": "角色 / 特点 / 与主角关系 ------ / ------ / ----------- 老板 / 决策者 / 需要争取 上司 / 直接领导 / 可敌可友 同事 / 竞争者 / 合作竞争 下属 / 执行者 / 培养使用 客户 / 资源方 / 需要维护"
+    },
+    {
+      "name": "资源体系",
+      "description": "**金钱**: 最直接的资源 **人脉**: 关系网络 **能力**: 专业技能 **信息**: 情报优势 **时间**: 最稀缺的资源 --"
+    }
+  ],
+  "coolPatterns": [
+    {
+      "name": "业绩碾压",
+      "scenario": "工作任务/项目竞争",
+      "appeal": "主角业绩远超对手，让人刮目相看",
+      "keyNote": "要展示过程，不能只有结果"
+    },
+    {
+      "name": "升职打脸",
+      "scenario": "曾经看不起主角的人",
+      "appeal": "主角升职后，对方要向主角汇报",
+      "keyNote": "要有铺垫，不能太刻意"
+    },
+    {
+      "name": "投资暴富",
+      "scenario": "主角投资某个项目/股票",
+      "appeal": "获得巨额回报，财务自由",
+      "keyNote": "要有合理的信息来源"
+    },
+    {
+      "name": "人脉变现",
+      "scenario": "关键时刻，人脉发挥作用",
+      "appeal": "之前积累的关系帮了大忙",
+      "keyNote": "人脉要提前铺垫"
+    }
+  ],
+  "conflictPatterns": [
+    {
+      "type": "职场冲突",
+      "source": "冲突 / 来源 / 解决 ------ / ------ / ------ 业绩竞争 / 同事 / 用实力说话 权力斗争 / 上司 / 站队/自保 资源争夺 / 部门 / 谈判/合作 裁员危机 / 公司 / 证明价值",
+      "resolution": "冲突 / 来源 / 解决 ------ / ------ / ------ 业绩竞争 / 同事 / 用实力说话 权力斗争 / 上司 / 站队/自保 资源争夺 / 部门 / 谈判/合作 裁员危机 / 公司 / 证明价值"
+    },
+    {
+      "type": "生活冲突",
+      "source": "冲突 / 来源 / 解决 ------ / ------ / ------ 经济压力 / 房贷/养家 / 开源节流 家庭矛盾 / 亲人 / 沟通理解 感情问题 / 伴侣 / 经营关系 健康问题 / 自身 / 调整生活 --",
+      "resolution": "冲突 / 来源 / 解决 ------ / ------ / ------ 经济压力 / 房贷/养家 / 开源节流 家庭矛盾 / 亲人 / 沟通理解 感情问题 / 伴侣 / 经营关系 健康问题 / 自身 / 调整生活 --"
+    }
+  ],
   "outlineArcs": [
     {
       "title": "卷一：起步 (1-80章)",
-      "chapterRange": "1-100",
+      "chapterRange": "1-80",
       "coreFocus": "主角进入职场/开始创业",
       "coreConflict": "底层",
       "climax": "首次证明自己，获得认可"
     },
     {
       "title": "卷二：立足 (81-180章)",
-      "chapterRange": "1-100",
+      "chapterRange": "81-180",
       "coreFocus": "站稳脚跟，建立基础",
       "coreConflict": "基层",
       "climax": "首次晋升/项目成功"
     },
     {
       "title": "卷三：崛起 (181-300章)",
-      "chapterRange": "1-100",
+      "chapterRange": "181-300",
       "coreFocus": "快速上升，崭露头角",
       "coreConflict": "中层",
       "climax": "重大项目成功，进入核心圈"
     },
     {
       "title": "卷四：巅峰 (301-450章)",
-      "chapterRange": "1-100",
+      "chapterRange": "301-450",
       "coreFocus": "成为行业精英",
       "coreConflict": "高层",
       "climax": "达到事业巅峰"
     },
     {
       "title": "卷五：圆满 (451-550章)",
-      "chapterRange": "1-100",
+      "chapterRange": "451-550",
       "coreFocus": "人生圆满",
       "coreConflict": "顶层",
       "climax": "事业家庭双丰收"
     }
   ],
+  "targetWordCount": "1.500.000 chữ",
+  "targetChapterCount": 550,
   "pitfalls": [
     {
-      "description": "Thiết lập trước sau mâu thuẫn.",
+      "description": "过度日常，没有冲突",
+      "severity": "critical"
+    },
+    {
+      "description": "爽点密度不足",
+      "severity": "critical"
+    },
+    {
+      "description": "主角无行动力",
+      "severity": "critical"
+    },
+    {
+      "description": "金手指太明显",
       "severity": "critical"
     }
   ],
   "bestPractices": [
     {
-      "description": "Thiết lập tự nhất quán."
+      "description": "日常中有冲突"
+    },
+    {
+      "description": "保持爽点节奏"
+    },
+    {
+      "description": "主角主动出击"
+    },
+    {
+      "description": "成功要有铺垫"
     }
   ],
   "entityTags": [

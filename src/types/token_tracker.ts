@@ -11,6 +11,7 @@ export type PipelineStepLabel =
   | 'context_build'
   | 'plan_branches'
   | 'write_chapter'
+  | 'pre_save_quality_gate'
   | 'review_checkers'
   | 'style_analysis'
   | 'data_extraction'
@@ -113,7 +114,8 @@ export const COST_PER_1M_INPUT: Record<string, number> = {
   'gpt-4.1-mini': 0.40,
   'openai/gpt-4.1-mini': 0.40,
   'openai/gpt-4o-mini': 0.15,
-  'mistralai/mistral-small-creative': 0.10,
+  'mistralai/mistral-small-creative': 0.15,
+  'mistralai/mistral-small-2603': 0.15,
   'gryphe/mythomax-l2-13b': 0.06,
   'qwen/qwen3.5-flash-02-23': 0.065,
   'anthropic/claude-3.5-sonnet': 3.00,
@@ -134,7 +136,8 @@ export const COST_PER_1M_OUTPUT: Record<string, number> = {
   'gpt-4.1-mini': 1.60,
   'openai/gpt-4.1-mini': 1.60,
   'openai/gpt-4o-mini': 0.60,
-  'mistralai/mistral-small-creative': 0.30,
+  'mistralai/mistral-small-creative': 0.60,
+  'mistralai/mistral-small-2603': 0.60,
   'gryphe/mythomax-l2-13b': 0.06,
   'qwen/qwen3.5-flash-02-23': 0.26,
   'anthropic/claude-3.5-sonnet': 15.00,

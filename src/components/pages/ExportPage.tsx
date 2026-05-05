@@ -56,6 +56,7 @@ const ExportPage: React.FC<ExportPageProps> = ({ project }) => {
     { id: 'md', label: 'MD', icon: 'markdown' },
     { id: 'html', label: 'HTML', icon: 'code' },
     { id: 'docx', label: 'DOCX', icon: 'article' },
+    { id: 'canon', label: 'CANON ZIP', icon: 'folder_zip' },
   ];
 
   const totalWords = project.chapters?.reduce((acc, ch) => acc + (ch.content?.split(/\s+/).length || 0), 0) || 0;

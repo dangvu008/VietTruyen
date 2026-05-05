@@ -12,7 +12,7 @@
  *     Legacy key filtering is still supported for direct guest mode.
  * v3: Cost-aware routing — picks the cheapest capable model for each task.
  */
-import type { AiModel, AiModelCapability, AiModelTier } from '../../types/story';
+import type { AiModel, AiModelCapability, AiModelHealth, AiModelTier } from '../../types/story';
 import { resolveModelCostRates } from './token_estimator';
 
 export type AiTaskType =
@@ -225,6 +225,26 @@ function pickBestAutoModel(taskType: AiTaskType, available: AiModel[]): AiModel 
     .sort((a, b) => a.score - b.score || a.cost - b.cost || a.index - b.index)[0]?.model;
 }
 
+function isModelAvailableByHealth(model: AiModel, modelHealth: Record<string, AiModelHealth>): boolean {
+  const providerPrefix = model.modelId.includes('/')
+    ? `${model.provider}-${model.modelId.split('/')[0]}`
+    : undefined;
+  const healthEntries = [
+    modelHealth[model.id],
+    providerPrefix ? modelHealth[providerPrefix] : undefined,
+  ].filter(Boolean) as AiModelHealth[];
+
+  if (healthEntries.length === 0) return true;
+
+  return healthEntries.every((health) => {
+    if (health.status === 'available') return true;
+    if (health.status === 'cooldown' && health.unavailableUntil) {
+      return new Date(health.unavailableUntil).getTime() <= Date.now();
+    }
+    return false;
+  });
+}
+
 /**
  * Chọn model phù hợp nhất cho task type.
  * Ưu tiên theo tier preference. API keys handled by proxy.
@@ -237,13 +257,18 @@ export function getModelForTask(
   apiKeys?: Record<string, string>,
   activeModelId?: string,
   taskModelOverrides: TaskModelOverrideMap = {},
+  modelHealth: Record<string, AiModelHealth> = {},
+  excludedModelIds: string[] = [],
+  preferredProvider?: string,
 ): AiModel | undefined {
   // If apiKeys provided and non-empty, filter by available keys (legacy mode)
   // Otherwise, all models are available (proxy mode)
   const hasLegacyKeys = apiKeys && Object.values(apiKeys).some(k => k.length > 0);
-  const available = hasLegacyKeys
+  const excluded = new Set(excludedModelIds);
+  const available = (hasLegacyKeys
     ? models.filter((m) => apiKeys![m.provider])
-    : models;
+    : models
+  ).filter((model) => !excluded.has(model.id) && isModelAvailableByHealth(model, modelHealth));
 
   if (available.length === 0) return undefined;
 
@@ -259,6 +284,11 @@ export function getModelForTask(
     if (taskOverride) return taskOverride;
   }
 
+  const providerScopedModels = preferredProvider
+    ? available.filter((model) => model.provider === preferredProvider)
+    : [];
+  const routingPool = providerScopedModels.length > 0 ? providerScopedModels : available;
+
   // 2. Chế độ Tự động (Smart Routing) - chấm điểm theo tier, giá token, context và năng lực.
-  return pickBestAutoModel(taskType, available) ?? available[0];
+  return pickBestAutoModel(taskType, routingPool) ?? routingPool[0];
 }

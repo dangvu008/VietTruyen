@@ -6,12 +6,66 @@ import type { SourceFormat, SourceImportJob } from '../../types/surgery';
 
 const CHAPTER_HEADER_RE = /(^|\n)\s*(ch(?:apter|ương)?\s*\d+[^\n]*|hồi\s*\d+[^\n]*|quyển\s*\d+[^\n]*)/gi;
 
+/** [Domain:SourceIngest] Non-global version for single-line testing */
+const CHAPTER_HEADER_LINE_RE = /^\s*(ch(?:apter|ương)?\s*\d+|hồi\s*\d+|quyển\s*\d+)/i;
+
+
+
 function chunkText(text: string, size = 5500): string[] {
   const chunks: string[] = [];
   for (let cursor = 0; cursor < text.length; cursor += size) {
     chunks.push(text.slice(cursor, cursor + size));
   }
   return chunks;
+}
+
+/**
+ * [Domain:SourceIngest] STEP — Detect TOC artifact content.
+ * Returns true if the content is just other chapter titles (Table of Contents lines).
+ * This happens when a file has a TOC at the beginning and the regex matches those entries.
+ */
+function isTocArtifactContent(content: string): boolean {
+  const lines = content.split('\n').map((line) => line.trim()).filter(Boolean);
+  if (lines.length === 0) return true;
+  if (lines.length > 8) return false;
+  const headerLineCount = lines.filter((line) => CHAPTER_HEADER_LINE_RE.test(line)).length;
+  return headerLineCount >= lines.length * 0.5;
+}
+
+/**
+ * [Domain:SourceIngest] STEP — Normalize title for dedup comparison.
+ * Strips whitespace variations and lowercases for stable matching.
+ */
+function normalizeChapterTitle(title: string): string {
+  return title.replace(/\s+/g, ' ').trim().toLowerCase();
+}
+
+/**
+ * [Domain:SourceIngest] STEP — Deduplicate chapters by normalized title.
+ * When a TOC + actual chapters create two entries with the same title,
+ * keeps the entry with the longest content and discards the short one.
+ * Reassigns sequenceNumber to maintain contiguous ordering.
+ */
+function deduplicateChaptersByTitle(chapters: Chapter[]): Chapter[] {
+  const bestByTitle = new Map<string, Chapter>();
+
+  for (const chapter of chapters) {
+    const key = normalizeChapterTitle(chapter.title);
+    const existing = bestByTitle.get(key);
+
+    if (!existing || chapter.content.length > existing.content.length) {
+      bestByTitle.set(key, chapter);
+    }
+  }
+
+  const keptIds = new Set([...bestByTitle.values()].map((chapter) => chapter.id));
+
+  return chapters
+    .filter((chapter) => keptIds.has(chapter.id))
+    .map((chapter, index) => ({
+      ...chapter,
+      sequenceNumber: index + 1,
+    }));
 }
 
 export function parseRawTextToChapters(text: string): Chapter[] {
@@ -30,9 +84,18 @@ export function parseRawTextToChapters(text: string): Chapter[] {
       const lines = block.split('\n').map((item) => item.trim()).filter(Boolean);
       const title = lines[0] || `Chương ${index + 1}`;
       const content = lines.slice(1).join('\n').trim();
+
+      // [Domain:SourceIngest] STEP — Skip empty content
       if (!content) {
         continue;
       }
+
+      // [Domain:SourceIngest] STEP — Skip TOC artifact entries
+      // (content is just other chapter titles, not actual narrative)
+      if (isTocArtifactContent(content)) {
+        continue;
+      }
+
       chapters.push({
         id: createId(),
         title,
@@ -43,8 +106,11 @@ export function parseRawTextToChapters(text: string): Chapter[] {
         updatedAt: new Date().toISOString(),
       });
     }
-    if (chapters.length > 0) {
-      return chapters;
+
+    // [Domain:SourceIngest] STEP — Deduplicate by title (TOC remnants vs real chapters)
+    const deduped = deduplicateChaptersByTitle(chapters);
+    if (deduped.length > 0) {
+      return deduped;
     }
   }
 
@@ -76,6 +142,7 @@ export async function importSourceTextToProject(params: {
     projectId,
     sourceTitle,
     sourceFormat,
+    sourceText: text.trim(),
     status: 'running',
     totalChunks,
     processedChunks: 0,

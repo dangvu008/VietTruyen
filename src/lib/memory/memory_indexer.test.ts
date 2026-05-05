@@ -5,78 +5,83 @@ import {
   narrativeDb,
   getEntityDefinitions,
   getEntityDependencies,
+  getProjectChapters,
   getProjectNarrativeCommunities,
   getProjectNarrativeEdges,
   getProjectNarrativeNodes,
+  storeChapter,
 } from '../../db/narrative_db';
-import { backfillProjectMemory } from './memory_indexer';
+import { backfillProjectMemory, syncProjectMemory } from './memory_indexer';
 import type { Project } from '../../types/story';
 
 afterEach(async () => {
   await narrativeDb.delete();
+  await narrativeDb.open();
 });
 
 describe('memory_indexer', () => {
-  it('backfills entity definitions and chapter dependencies from a project', async () => {
-    const project: Project = {
-      id: 'project-indexer',
-      title: 'Test Project',
-      logline: '',
-      genre: 'Tiên hiệp',
-      subGenre: [],
-      writingStyle: '',
-      tone: '',
-      styleId: 'tien-hiep',
-      targetChapters: 100,
-      endgame: '',
-      mainCharacterCount: 1,
-      supportCharacterCount: 1,
-      characterSetup: '',
-      worldSetting: '',
-      mainPlot: '',
-      world: {
-        geography: 'Gia Mã đế quốc',
-        magicSystem: 'Đấu khí',
-        techLevel: 'Cổ đại',
-        currency: 'Kim tệ',
-        factions: ['Vân Lam Tông'],
-        rules: 'Cường giả vi tôn',
-        facts: [],
+  const buildProject = (chapters: Project['chapters']): Project => ({
+    id: 'project-indexer',
+    title: 'Test Project',
+    logline: '',
+    genre: 'Tiên hiệp',
+    subGenre: [],
+    writingStyle: '',
+    tone: '',
+    styleId: 'tien-hiep',
+    targetChapters: 100,
+    endgame: '',
+    mainCharacterCount: 1,
+    supportCharacterCount: 1,
+    characterSetup: '',
+    worldSetting: '',
+    mainPlot: '',
+    world: {
+      geography: 'Gia Mã đế quốc',
+      magicSystem: 'Đấu khí',
+      techLevel: 'Cổ đại',
+      currency: 'Kim tệ',
+      factions: ['Vân Lam Tông'],
+      rules: 'Cường giả vi tôn',
+      facts: [],
+    },
+    characters: [
+      {
+        id: 'char_1',
+        name: 'Tiêu Viêm',
+        role: 'Chính',
+        arc: '',
+        currentStage: 'Đấu Linh',
+        traits: 'Cứng đầu',
+        aliases: ['Tiêu thiếu gia'],
+        facts: [{ id: 'f_1', key: 'vũ_khí', value: 'Huyền Trọng Xích' }],
       },
-      characters: [
-        {
-          id: 'char_1',
-          name: 'Tiêu Viêm',
-          role: 'Chính',
-          arc: '',
-          currentStage: 'Đấu Linh',
-          traits: 'Cứng đầu',
-          aliases: ['Tiêu thiếu gia'],
-          facts: [{ id: 'f_1', key: 'vũ_khí', value: 'Huyền Trọng Xích' }],
-        },
-      ],
-      outline: [],
-      chapters: [
-        {
-          id: 'ch_1',
-          title: 'Chương 1',
-          summary: 'Tiêu Viêm cầm Huyền Trọng Xích và bước vào Gia Mã đế quốc.',
-          content: 'Tiêu thiếu gia hạ kiếm xuống nền đá lạnh.',
-          sequenceNumber: 1,
-          status: 'draft',
-          createdAt: '2026-01-01',
-          updatedAt: '2026-01-01',
-        },
-      ],
-      foreshadowings: [],
-      notes: '',
-      canonVersion: 1,
-      storageMode: 'indexeddb',
-      arcCount: 0,
-      hasGlobalIndex: false,
-      createdAt: '2026-01-01',
-      updatedAt: '2026-01-01',
-    };
+    ],
+    outline: [],
+    chapters,
+    foreshadowings: [],
+    notes: '',
+    canonVersion: 1,
+    storageMode: 'indexeddb',
+    arcCount: 0,
+    hasGlobalIndex: false,
+    createdAt: '2026-01-01',
+    updatedAt: '2026-01-01',
+  });
+
+  it('backfills entity definitions and chapter dependencies from a project', async () => {
+    const project = buildProject([
+      {
+        id: 'ch_1',
+        title: 'Chương 1',
+        summary: 'Tiêu Viêm cầm Huyền Trọng Xích và bước vào Gia Mã đế quốc.',
+        content: 'Tiêu thiếu gia hạ kiếm xuống nền đá lạnh.',
+        sequenceNumber: 1,
+        status: 'draft',
+        createdAt: '2026-01-01',
+        updatedAt: '2026-01-01',
+      },
+    ]);
 
     await backfillProjectMemory(project);
 
@@ -96,5 +101,45 @@ describe('memory_indexer', () => {
     expect(edges.some((item) => item.edgeType === 'scene_membership')).toBe(true);
     expect(communities.length).toBeGreaterThan(0);
     expect(embeddings.some((item) => item.contentType === 'scene')).toBe(true);
+  });
+
+  it('does not wipe stored chapter payloads when syncing a stripped reload snapshot', async () => {
+    const fullChapter = {
+      id: 'ch_1',
+      title: 'Chương 1',
+      summary: 'Tiêu Viêm cầm Huyền Trọng Xích và bước vào Gia Mã đế quốc.',
+      content: 'Tiêu thiếu gia hạ kiếm xuống nền đá lạnh.',
+      sequenceNumber: 1,
+      status: 'draft' as const,
+      createdAt: '2026-01-01',
+      updatedAt: '2026-01-01',
+    };
+    const project = buildProject([fullChapter]);
+
+    await storeChapter({
+      ...fullChapter,
+      projectId: project.id,
+      index: 0,
+    });
+
+    await syncProjectMemory({
+      ...project,
+      chapters: [
+        {
+          ...fullChapter,
+          summary: undefined,
+          content: '',
+        },
+      ],
+    });
+
+    const storedChapters = await getProjectChapters(project.id);
+
+    expect(storedChapters).toHaveLength(1);
+    expect(storedChapters[0]).toMatchObject({
+      id: fullChapter.id,
+      content: fullChapter.content,
+      summary: fullChapter.summary,
+    });
   });
 });

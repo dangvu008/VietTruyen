@@ -26,8 +26,40 @@ export const URBAN_SUPERPOWER_TEMPLATE: StoryTemplate = {
     }
   ],
   "worldRules": [],
-  "coolPatterns": [],
-  "conflictPatterns": [],
+  "coolPatterns": [
+    {
+      "name": "扮猪吃虎",
+      "scenario": "以为主角是普通学生/打工仔，富二代/小混混骑脸输出。",
+      "appeal": "以为主角是普通学生/打工仔，富二代/小混混骑脸输出。"
+    },
+    {
+      "name": "赌石/鉴宝 (黄金瞳)",
+      "scenario": "古玩街，专家打眼，主角捡漏。",
+      "appeal": "用极低价格买到蕴含灵气的玉石/法器。"
+    },
+    {
+      "name": "校花保镖",
+      "scenario": "奉命保护大小姐/校花，同居生活。",
+      "appeal": "暧昧互动，解决追求者，最后人财两得。"
+    }
+  ],
+  "conflictPatterns": [
+    {
+      "type": "隐秘期 (The Hidden Era)",
+      "source": "主角觉醒，试图隐藏身份，躲避官方调查和反派追杀。",
+      "resolution": "主角觉醒，试图隐藏身份，躲避官方调查和反派追杀。"
+    },
+    {
+      "type": "爆发期 (The Outbreak Era)",
+      "source": "社会秩序动荡，新旧势力洗牌。官方公开异能存在，建立异能学院。",
+      "resolution": "社会秩序动荡，新旧势力洗牌。官方公开异能存在，建立异能学院。"
+    },
+    {
+      "type": "新秩序期 (The New Order)",
+      "source": "种族战争（人族 vs 妖族/异界入侵者）。",
+      "resolution": "种族战争（人族 vs 妖族/异界入侵者）。"
+    }
+  ],
   "outlineArcs": [
     {
       "title": "Quyển 1: Khởi Đầu",

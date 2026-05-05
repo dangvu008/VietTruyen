@@ -37,6 +37,7 @@ describe('auth_service signUpWithEmailPassword', () => {
         origin: 'tauri://localhost',
       },
     });
+    vi.stubEnv('VITE_AUTH_REDIRECT_URL', '');
     signUp.mockResolvedValue({ error: null });
 
     await signUpWithEmailPassword('user@gmail.com', 'secret123');
@@ -54,6 +55,7 @@ describe('auth_service signUpWithEmailPassword', () => {
         origin: 'http://127.0.0.1:1420',
       },
     });
+    vi.stubEnv('VITE_AUTH_REDIRECT_URL', 'http://127.0.0.1:1420');
     signUp
       .mockResolvedValueOnce({ error: new Error('Requested function was not found') })
       .mockResolvedValueOnce({ error: null });
@@ -90,6 +92,7 @@ describe('auth_service signInWithGoogle', () => {
         origin: 'http://127.0.0.1:1420',
       },
     });
+    vi.stubEnv('VITE_AUTH_REDIRECT_URL', '');
     signInWithOAuth.mockResolvedValue({ error: null });
 
     const result = await signInWithGoogle();
@@ -107,10 +110,10 @@ describe('auth_service signInWithGoogle', () => {
     });
   });
 
-  it('prefers VITE_AUTH_REDIRECT_URL when desktop origin is non-http', async () => {
+  it('prefers VITE_AUTH_REDIRECT_URL when running in a standard browser', async () => {
     vi.stubGlobal('window', {
       location: {
-        origin: 'tauri://localhost',
+        origin: 'http://localhost:1420',
       },
     });
     vi.stubEnv('VITE_AUTH_REDIRECT_URL', 'http://127.0.0.1:1420');
@@ -131,16 +134,19 @@ describe('auth_service signInWithGoogle', () => {
     });
   });
 
-  it('fails fast with a clear error when desktop origin has no valid HTTP callback', async () => {
+  it('fails fast when Google OAuth is triggered inside the desktop runtime', async () => {
     vi.stubGlobal('window', {
+      __TAURI_INTERNALS__: {},
       location: {
         origin: 'tauri://localhost',
+        protocol: 'tauri:',
       },
     });
+    vi.stubEnv('VITE_AUTH_REDIRECT_URL', 'http://127.0.0.1:1420');
 
     const result = await signInWithGoogle();
 
     expect(signInWithOAuth).not.toHaveBeenCalled();
-    expect(result.error?.message).toContain('VITE_AUTH_REDIRECT_URL');
+    expect(result.error?.message).toContain('desktop');
   });
 });

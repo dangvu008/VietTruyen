@@ -8,12 +8,16 @@ const {
   getEntitySnapshotAt,
   getContinuityWarnings,
   getRelevantNarrativeCommunities,
+  getActiveNarrativeStateFactsAtChapter,
+  getOpenHooksForProject,
 } = vi.hoisted(() => ({
   searchMemoryEmbeddings: vi.fn(),
   searchMemory: vi.fn(),
   getEntitySnapshotAt: vi.fn(),
   getContinuityWarnings: vi.fn(),
   getRelevantNarrativeCommunities: vi.fn(),
+  getActiveNarrativeStateFactsAtChapter: vi.fn(),
+  getOpenHooksForProject: vi.fn(),
 }));
 
 vi.mock('./vector_query', () => ({
@@ -25,6 +29,14 @@ vi.mock('./memory_query', () => ({
   getEntitySnapshotAt,
   getContinuityWarnings,
   getRelevantNarrativeCommunities,
+}));
+
+vi.mock('../../db/narrative_db', () => ({
+  getActiveNarrativeStateFactsAtChapter,
+}));
+
+vi.mock('./pending_hooks_repository', () => ({
+  getOpenHooksForProject,
 }));
 
 import { retrieveForWriting } from './hybrid_memory_query';
@@ -100,6 +112,8 @@ describe('hybrid_memory_query', () => {
     getEntitySnapshotAt.mockReset();
     getContinuityWarnings.mockReset();
     getRelevantNarrativeCommunities.mockReset();
+    getActiveNarrativeStateFactsAtChapter.mockReset();
+    getOpenHooksForProject.mockReset();
   });
 
   it('returns pack-oriented retrieval buckets and supports legacy rendering adapters', async () => {
@@ -119,6 +133,25 @@ describe('hybrid_memory_query', () => {
       {
         chapterIndex: 3,
         recommendedAction: 'Không để Lâm Tề lộ cảnh giới thật quá sớm',
+      },
+    ]);
+    getActiveNarrativeStateFactsAtChapter.mockResolvedValue([
+      {
+        subjectId: 'char-lam-te',
+        predicate: 'current_stage',
+        value: 'Trúc Cơ',
+        validFromChapter: 1,
+        confidence: 0.95,
+      },
+    ]);
+    getOpenHooksForProject.mockResolvedValue([
+      {
+        id: 'hook-1',
+        description: 'Bí cảnh có cấm chế chưa lộ mặt',
+        plantedChapterIndex: 1,
+        expectedPayoffBy: 3,
+        relatedEntityIds: ['char-lam-te'],
+        confidence: 0.88,
       },
     ]);
     getRelevantNarrativeCommunities.mockResolvedValue([
@@ -194,6 +227,8 @@ describe('hybrid_memory_query', () => {
       contentTypes: ['scene', 'chapter_summary', 'character_note', 'canon_fact', 'world_note'],
     });
     expect(result.canonPack.some((item) => item.body.includes('Trúc Cơ'))).toBe(true);
+    expect(result.statePack.some((item) => item.body.includes('current_stage'))).toBe(true);
+    expect(result.hookPack.some((item) => item.body.includes('cấm chế'))).toBe(true);
     expect(result.riskPack.some((item) => item.body.includes('Không để Lâm Tề lộ cảnh giới'))).toBe(true);
     expect(result.graphPack[0]?.title).toContain('Lâm Tề / Bí cảnh');
     expect(result.semanticPack[0]?.body).toContain('Lâm Tề giấu thân phận rồi tiến vào bí cảnh');
@@ -209,6 +244,8 @@ describe('hybrid_memory_query', () => {
     getEntitySnapshotAt.mockResolvedValue(undefined);
     getContinuityWarnings.mockResolvedValue([]);
     getRelevantNarrativeCommunities.mockResolvedValue([]);
+    getActiveNarrativeStateFactsAtChapter.mockResolvedValue([]);
+    getOpenHooksForProject.mockResolvedValue([]);
     searchMemoryEmbeddings.mockResolvedValue([]);
 
     const { retrieveForPlotQa } = await import('./hybrid_memory_query');

@@ -51,6 +51,7 @@ function buildCharacters(
     traits: character.traits,
     arc: character.arc,
     currentStage: character.currentStage || '',
+    psychology: character.psychology,
   }));
 }
 

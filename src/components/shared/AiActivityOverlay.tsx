@@ -9,6 +9,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Cpu, Zap, Clock, ChevronDown, ChevronUp, Coins, X } from 'lucide-react';
 import { useAiActivityStore } from '../../store/use_ai_activity_store';
 import type { ActiveAiCall, CompletedAiCall } from '../../store/use_ai_activity_store';
+import ModelSelectorDropdown from './ModelSelectorDropdown';
 
 // ─── Provider display config ────────────────────────────
 const PROVIDER_COLORS: Record<string, string> = {
@@ -429,7 +430,6 @@ export const AiActivityOverlay: React.FC = () => {
             background: 'linear-gradient(135deg, rgba(24,20,17,0.98), rgba(36,30,25,0.96))',
             border: '1px solid rgba(212,165,116,0.15)',
             boxShadow: '0 8px 32px rgba(0,0,0,0.5), 0 0 16px rgba(212,165,116,0.05)',
-            overflow: 'hidden',
           }}>
             {/* Header */}
             <div style={{
@@ -506,6 +506,19 @@ export const AiActivityOverlay: React.FC = () => {
                   </button>
                 )}
               </div>
+            </div>
+
+            {/* Model Selector Bar */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '8px 14px',
+              borderBottom: '1px solid rgba(255,255,255,0.05)',
+              background: 'rgba(0,0,0,0.15)',
+            }}>
+              <span style={{ fontSize: 11, color: '#9c8e82', fontWeight: 600 }}>Nguồn Model:</span>
+              <ModelSelectorDropdown direction="up" />
             </div>
 
             {/* Session stats bar */}

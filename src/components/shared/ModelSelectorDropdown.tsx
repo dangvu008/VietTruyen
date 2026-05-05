@@ -84,9 +84,9 @@ const S = {
     flexShrink: 0,
     opacity: 0.6,
   }),
-  dropdown: {
+  dropdown: (direction: 'up' | 'down') => ({
     position: 'absolute' as const,
-    top: 'calc(100% + 6px)',
+    ...(direction === 'up' ? { bottom: 'calc(100% + 6px)' } : { top: 'calc(100% + 6px)' }),
     right: 0,
     minWidth: 280,
     maxHeight: 420,
@@ -99,7 +99,8 @@ const S = {
     zIndex: 100,
     padding: '6px 0',
     animation: 'modelDropdownFadeIn 0.15s ease-out',
-  },
+    transformOrigin: direction === 'up' ? 'bottom right' : 'top right',
+  }),
   groupHeader: {
     display: 'flex',
     alignItems: 'center' as const,
@@ -176,7 +177,7 @@ const S = {
 
 // ─── Component ──────────────────────────────────────────────
 
-export default function ModelSelectorDropdown() {
+export default function ModelSelectorDropdown({ direction = 'down' }: { direction?: 'up' | 'down' }) {
   const { models, activeModelId, setActiveModel } = useAiStore();
   const [isOpen, setIsOpen] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -241,7 +242,7 @@ export default function ModelSelectorDropdown() {
 
       {/* Dropdown */}
       {isOpen && (
-        <div style={S.dropdown}>
+        <div style={S.dropdown(direction)}>
           {/* Auto option */}
           <div
             style={S.autoItem(isAuto)}

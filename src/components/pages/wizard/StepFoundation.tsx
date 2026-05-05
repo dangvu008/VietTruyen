@@ -57,6 +57,7 @@ export default function StepFoundation() {
       traits: '',
       arc: '',
       currentStage: 'Khởi đầu',
+      psychology: undefined,
     };
     addCharacter(project.id, newChar);
     setEditingCharId(newChar.id);
@@ -181,6 +182,17 @@ export default function StepFoundation() {
                           }}
                         />
                       ))}
+                      <textarea
+                        value={char.psychology?.selfDeception || ''}
+                        onChange={(e) => updateCharacter(project.id, char.id, { psychology: { ...char.psychology, selfDeception: e.target.value } })}
+                        placeholder="Tự lừa mình điều gì?"
+                        rows={2}
+                        style={{
+                          background: 'rgba(80,69,59,0.15)', border: '1px solid rgba(80,69,59,0.3)',
+                          borderRadius: 8, color: '#e8e1dc', fontSize: 13, outline: 'none',
+                          padding: '8px 12px', resize: 'none', fontFamily: 'Manrope, system-ui, sans-serif', width: '100%',
+                        }}
+                      />
                       <div style={{ display: 'flex', gap: 8 }}>
                         <button onClick={() => setEditingCharId(null)} style={{ padding: '6px 14px', borderRadius: 8, border: 'none', background: 'rgba(212,165,116,0.15)', color: '#f2c08d', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>✓ Xong</button>
                         <button onClick={() => { removeCharacter(project.id, char.id); setEditingCharId(null); }} style={{ padding: '6px 14px', borderRadius: 8, border: 'none', background: 'rgba(239,68,68,0.1)', color: '#fca5a5', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>🗑 Xóa</button>
@@ -192,6 +204,7 @@ export default function StepFoundation() {
                         {char.name} <span style={{ fontSize: 12, color: '#d4a574', fontWeight: 600 }}>({char.role})</span>
                       </div>
                       <div style={{ fontSize: 13, color: '#d4c4b7', lineHeight: 1.5 }}>{char.traits || 'Chưa có mô tả — nhấn để chỉnh sửa'}</div>
+                      {char.psychology?.selfDeception && <div style={{ fontSize: 12, color: '#9c8e82', marginTop: 4 }}>Nội tâm ẩn: {char.psychology.selfDeception}</div>}
                       {char.arc && <div style={{ fontSize: 12, color: '#9c8e82', marginTop: 4 }}>↗ {char.arc}</div>}
                     </div>
                   )}

@@ -1,6 +1,7 @@
 import type { Project } from '../types/story';
+import { generateCanonBundleArchive } from '../lib/canon/canon_bundle';
 
-export type ExportFormat = 'txt' | 'md' | 'html' | 'docx';
+export type ExportFormat = 'txt' | 'md' | 'html' | 'docx' | 'canon';
 
 export interface ExportOptions {
   includeBible: boolean;
@@ -178,5 +179,11 @@ export const exportProject = async (
     const doc = new Document({ sections: [{ children: paragraphs }] });
     const blob = await Packer.toBlob(doc);
     downloadBlob(blob, `${slug}.docx`);
+    return;
+  }
+
+  if (format === 'canon') {
+    const archive = await generateCanonBundleArchive(project, options);
+    downloadBlob(archive, `${slug}-canon.zip`);
   }
 };

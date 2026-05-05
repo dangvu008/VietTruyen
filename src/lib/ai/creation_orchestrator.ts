@@ -19,6 +19,7 @@ import {
 } from '../../store/use_project_store';
 import { useWorkflowSessionStore } from '../../store/use_workflow_session_store';
 import { useTokenStore } from '../../store/use_token_store';
+import { useNotificationStore } from '../../store/use_notification_store';
 import { callAiModelTracked } from './tracked_ai_client';
 import { getModelForTask } from './model_router';
 import {
@@ -32,6 +33,13 @@ import { getDiscussTopicsForIdea } from './creation_discuss_config';
 import { generateMasterOutline } from './outline_planner';
 import { createId } from '../../core/id';
 import { buildCreationProjectSeed } from '../creation/project_seed';
+import { summarizeDebugChapters, traceStoryDebugEvent } from '../debug/story_debug_trace';
+import {
+  buildPlotPreviewRepairFeedback,
+  isWeakPlotPreview,
+  normalizeCreationPlotPreview,
+} from '../creation/plot_preview_normalizer';
+import { normalizeCreationFramework } from '../creation/framework_normalizer';
 import type { CreationMessageTokenUsage, CreationPlotPreview } from '../../types/creation_chat';
 import type { BrainstormResult } from '../../types/narrative_memory';
 import type { Chapter, Project } from '../../types/story';
@@ -51,7 +59,10 @@ async function resolveModel(task: 'brainstorm' | 'plan_chapter' | 'write_chapter
     aiState.models,
     undefined,
     aiState.activeModelId,
-    aiState.taskModelOverrides
+    aiState.taskModelOverrides,
+    aiState.modelHealth,
+    [],
+    aiState.preferredProvider
   );
   if (!model) throw new Error('Chưa cấu hình AI model. Vào Cài đặt → AI.');
   return model;
@@ -526,7 +537,11 @@ async function generatePlotPreview(revisionFeedback?: string): Promise<void> {
       ? buildPlotPreviewRevisionPrompt(originalIdea, answers, plotPreview, revisionFeedback)
       : buildPlotPreviewPrompt(originalIdea, answers, chatHistory);
 
-    const usageCapture = createUsageCapture();
+    const usageRecords: TokenUsageRecord[] = [];
+    const captureUsage = (record: TokenUsageRecord) => {
+      usageRecords.unshift(record);
+    };
+
     const response = await callAiModelTracked({
       provider: model.provider,
       modelId: model.modelId,
@@ -537,16 +552,45 @@ async function generatePlotPreview(revisionFeedback?: string): Promise<void> {
       taskType: 'plan_chapter',
       responseFormat: 'json_object',
       skipCache: true,
-      onUsage: usageCapture.setRecord,
+      onUsage: captureUsage,
     });
 
-    const result: CreationPlotPreview = JSON.parse(extractJsonObject(response));
+    let result = normalizeCreationPlotPreview(
+      JSON.parse(extractJsonObject(response)) as CreationPlotPreview,
+    );
+
+    if (isWeakPlotPreview(result)) {
+      const repairPrompt = buildPlotPreviewRevisionPrompt(
+        originalIdea,
+        answers,
+        result,
+        buildPlotPreviewRepairFeedback(result),
+      );
+
+      const repairedResponse = await callAiModelTracked({
+        provider: model.provider,
+        modelId: model.modelId,
+        modelName: model.name,
+        baseUrl: model.baseUrl,
+        systemPrompt: repairPrompt.system,
+        userPrompt: repairPrompt.user,
+        taskType: 'plan_chapter',
+        responseFormat: 'json_object',
+        skipCache: true,
+        onUsage: captureUsage,
+      });
+
+      result = normalizeCreationPlotPreview(
+        JSON.parse(extractJsonObject(repairedResponse)) as CreationPlotPreview,
+      );
+    }
+
     store.addPlotPreview(
       result,
       revisionFeedback
         ? 'Mình đã cập nhật lại bản cốt truyện theo góp ý mới. Nếu ổn, hãy chốt để AI dựng khung chi tiết.'
         : 'Đây là bản review cốt truyện. Bạn có thể góp ý thêm trong chat hoặc chốt để AI dựng khung chi tiết.',
-      usageCapture.getUsage(),
+      sumMessageTokenUsage(usageRecords),
     );
     store.finishWorkflowStep(
       'review_plot',
@@ -573,7 +617,12 @@ async function generateFramework(): Promise<void> {
 
   try {
     const model = await resolveModel('plan_chapter');
-    const prompt = buildCreationFrameworkPrompt(originalIdea, answers, chatHistory, plotPreview);
+    const prompt = buildCreationFrameworkPrompt(
+      originalIdea,
+      answers,
+      chatHistory,
+      plotPreview ? normalizeCreationPlotPreview(plotPreview) : plotPreview,
+    );
 
     const usageCapture = createUsageCapture();
     const response = await callAiModelTracked({
@@ -589,7 +638,9 @@ async function generateFramework(): Promise<void> {
       onUsage: usageCapture.setRecord,
     });
 
-    const result: BrainstormResult = JSON.parse(extractJsonObject(response));
+    const result = normalizeCreationFramework(
+      JSON.parse(extractJsonObject(response)) as BrainstormResult,
+    );
 
     // Transition to framework phase + add preview message
     store.setPhase('framework');
@@ -679,6 +730,16 @@ export async function handleFrameworkConfirm(): Promise<FrameworkConfirmResult |
   const store = getStore();
   const { framework } = store;
   if (!framework) return null;
+  traceStoryDebugEvent({
+    domain: 'generation',
+    action: 'creation.framework_confirm.start',
+    level: 'info',
+    summary: 'Framework confirmation started; project, outline, and chapter compose will run.',
+    details: {
+      chapterSkeletonCount: framework.chapterSkeleton?.length ?? 0,
+      title: framework.bible.title,
+    },
+  });
 
   const projectId = await ensureProjectFromFramework(framework);
 
@@ -714,6 +775,19 @@ export async function handleFrameworkConfirm(): Promise<FrameworkConfirmResult |
   // Thay vì chỉ tạo tiêu đề rồi bắt user bấm từng chương
   const batchCompose = await batchComposeAllChapters(projectId);
   const readyForEditor = batchCompose.total === 0 || batchCompose.failCount === 0;
+  traceStoryDebugEvent({
+    domain: 'generation',
+    action: 'creation.framework_confirm.complete',
+    level: readyForEditor ? 'info' : 'warn',
+    summary: readyForEditor
+      ? 'Framework confirmation completed and generated chapters are ready for editor.'
+      : 'Framework confirmation completed but some chapter generation failed.',
+    details: {
+      projectId,
+      batchCompose,
+      readyForEditor,
+    },
+  });
 
   if (!readyForEditor) {
     const failedList = batchCompose.failedChapterTitles.slice(0, 3).join(', ');
@@ -738,6 +812,13 @@ export async function batchComposeAllChapters(projectId: string): Promise<BatchC
   // [Domain:CreationChat] STEP 1 — Load project snapshot to find empty chapters
   let workingProject = await getProjectSnapshot(projectId);
   if (!workingProject) {
+    traceStoryDebugEvent({
+      domain: 'generation',
+      action: 'creation.batch_compose.no_project',
+      level: 'warn',
+      summary: 'Batch compose could not find project snapshot.',
+      details: { projectId },
+    });
     return {
       total: 0,
       successCount: 0,
@@ -747,6 +828,18 @@ export async function batchComposeAllChapters(projectId: string): Promise<BatchC
   }
 
   const emptyChapters = workingProject.chapters.filter((ch) => !ch.content?.trim());
+  traceStoryDebugEvent({
+    domain: 'generation',
+    action: 'creation.batch_compose.start',
+    level: 'info',
+    summary: `Batch compose found ${emptyChapters.length} empty chapters.`,
+    details: {
+      projectId,
+      projectTitle: workingProject.title,
+      chapters: summarizeDebugChapters(workingProject.chapters),
+      emptyChapterTitles: emptyChapters.map((chapter) => chapter.title),
+    },
+  });
   if (emptyChapters.length === 0) {
     store.addSystemMessage('📖 Tất cả chương đã có nội dung.');
     return {
@@ -796,6 +889,19 @@ export async function batchComposeAllChapters(projectId: string): Promise<BatchC
       'compose',
       `AI đang viết nháp ${ch.title || `Chương ${chapterIndex + 1}`} (${i + 1}/${total})`,
     );
+    traceStoryDebugEvent({
+      domain: 'generation',
+      action: 'creation.batch_compose.chapter_start',
+      level: 'info',
+      summary: `Batch compose started chapter ${i + 1}/${total}.`,
+      details: {
+        projectId,
+        chapterId: ch.id,
+        chapterTitle: ch.title,
+        chapterIndex,
+        sequenceNumber: ch.sequenceNumber,
+      },
+    });
 
     try {
       // [Domain:CreationChat] STEP 2a — Build intent and run full_write_pipeline
@@ -826,6 +932,20 @@ export async function batchComposeAllChapters(projectId: string): Promise<BatchC
       if (!writeResult?.content?.trim()) {
         throw new Error(session?.error?.message || 'AI không trả về nội dung chương.');
       }
+      traceStoryDebugEvent({
+        domain: 'generation',
+        action: 'creation.batch_compose.ai_result',
+        level: 'info',
+        summary: `AI returned chapter content for ${writeResult.title || ch.title}.`,
+        details: {
+          projectId,
+          chapterId: ch.id,
+          chapterTitle: writeResult.title || ch.title,
+          contentChars: writeResult.content.length,
+          ledger: writeResult.ledger,
+          pipelineSessionId: session?.id,
+        },
+      });
 
       // [Domain:CreationChat] STEP 2b — Persist chapter content to project store
       const { chapter: persistedChapter, project: persistedProject } = await persistDraftChapter({
@@ -836,6 +956,19 @@ export async function batchComposeAllChapters(projectId: string): Promise<BatchC
         chapterIndex,
       });
       workingProject = persistedProject;
+      traceStoryDebugEvent({
+        domain: 'generation',
+        action: 'creation.batch_compose.chapter_persisted',
+        level: 'info',
+        summary: `Generated chapter persisted for ${persistedChapter.title || ch.title}.`,
+        details: {
+          projectId,
+          chapterId: persistedChapter.id,
+          chapterTitle: persistedChapter.title,
+          contentChars: persistedChapter.content.length,
+          projectChapters: summarizeDebugChapters(persistedProject.chapters),
+        },
+      });
 
       // [Domain:CreationChat] STEP 2c — Track in creation chat as accepted chapter + draft message
       const chapterTokenUsage = sumMessageTokenUsage(
@@ -876,11 +1009,31 @@ export async function batchComposeAllChapters(projectId: string): Promise<BatchC
       );
     } catch (err) {
       console.error(`[BatchCompose] Failed chapter ${ch.title}:`, err);
+      traceStoryDebugEvent({
+        domain: 'generation',
+        action: 'creation.batch_compose.chapter_failed',
+        level: 'error',
+        summary: `Batch compose failed for ${ch.title || `Chương ${chapterIndex + 1}`}.`,
+        details: {
+          projectId,
+          chapterId: ch.id,
+          chapterTitle: ch.title,
+          chapterIndex,
+          error: err,
+        },
+      });
       failCount++;
       failedChapterTitles.push(ch.title || `Chương ${chapterIndex + 1}`);
+      const errorMessage = err instanceof Error ? err.message : 'Lỗi không xác định';
       store.addSystemMessage(
-        `⚠️ Lỗi khi viết ${ch.title || `Chương ${chapterIndex + 1}`}: ${err instanceof Error ? err.message : 'Lỗi không xác định'}`
+        `⚠️ Lỗi khi viết ${ch.title || `Chương ${chapterIndex + 1}`}: ${errorMessage}`
       );
+      useNotificationStore.getState().push({
+        type: 'error',
+        title: `AI gặp lỗi khi viết ${ch.title || `Chương ${chapterIndex + 1}`}`,
+        message: errorMessage,
+        duration: 0,
+      });
     }
   }
 
@@ -906,12 +1059,33 @@ export async function batchComposeAllChapters(projectId: string): Promise<BatchC
     store.addSystemMessage(
       `📊 Kết quả: ${successCount}/${total} chương thành công, ${failCount} chương cần viết lại.`
     );
+    useNotificationStore.getState().push({
+      type: 'warning',
+      title: `AI viết xong ${successCount}/${total} chương`,
+      message: `${failCount} chương cần viết lại: ${failedChapterTitles.join(', ')}`,
+      duration: 0,
+    });
     store.finishWorkflowStep(
       'compose',
       `Đã viết ${successCount}/${total} chương. ${failCount} chương cần viết lại.`,
       { linkedProjectId: projectId },
     );
   }
+
+  traceStoryDebugEvent({
+    domain: 'generation',
+    action: 'creation.batch_compose.complete',
+    level: failCount === 0 ? 'info' : 'warn',
+    summary: `Batch compose completed: ${successCount}/${total} successful.`,
+    details: {
+      projectId,
+      total,
+      successCount,
+      failCount,
+      failedChapterTitles,
+      finalProject: summarizeDebugChapters(workingProject.chapters),
+    },
+  });
 
   return {
     total,
@@ -1000,6 +1174,22 @@ export async function handleWriteChapter(userNotes?: string): Promise<void> {
       content: writeResult.content,
       tokenUsage: chapterTokenUsage,
     });
+    const existingAccepted = store.acceptedChapters.find(
+      (chapter) => chapter.chapterIndex === currentChapterIndex,
+    );
+    if (existingAccepted) {
+      store.updateAcceptedChapter(existingAccepted.id, {
+        title: writeResult.title,
+        content: writeResult.content,
+      });
+    } else {
+      store.addAcceptedChapter({
+        chapterIndex: currentChapterIndex,
+        title: writeResult.title,
+        content: writeResult.content,
+        charCount: writeResult.content.length,
+      });
+    }
     store.linkProject(projectId);
     store.finishWorkflowStep(
       'compose',
@@ -1026,6 +1216,7 @@ export async function handleAcceptChapter(
   chapterIndex: number,
   title: string,
   content: string,
+  options: { silent?: boolean } = {},
 ): Promise<void> {
   const store = getStore();
   const project =
@@ -1075,6 +1266,8 @@ export async function handleAcceptChapter(
       charCount: content.length,
     });
   }
+
+  if (options.silent) return;
 
   const nextIndex = chapterIndex + 1;
   store.setCurrentChapterIndex(nextIndex);

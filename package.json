@@ -4,7 +4,10 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "bash dev.sh",
+    "dev:ui": "vite",
+    "dev:all": "bash dev.sh",
+    "dev:9router": "cd 9router && npm run dev",
     "build": "tsc && vite build",
     "test": "vitest",
     "test:run": "vitest run",
@@ -30,9 +33,12 @@
     "zustand": "^4.5.5"
   },
   "devDependencies": {
+    "@playwright/test": "^1.59.1",
     "@tauri-apps/cli": "^2.1.0",
+    "@types/node": "^25.6.0",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
+    "@vitalets/google-translate-api": "^9.2.1",
     "@vitejs/plugin-react": "^4.3.1",
     "autoprefixer": "^10.4.20",
     "fake-indexeddb": "^6.2.5",

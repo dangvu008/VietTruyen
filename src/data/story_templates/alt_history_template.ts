@@ -20,60 +20,203 @@ export const ALT_HISTORY_TEMPLATE: StoryTemplate = {
   ],
   "subGenres": [
     {
-      "name": "Lịch Sử Xuyên Không / Não Động",
-      "description": "历史框架 + 设定反转 + 规则博弈。当超自然规则与历史交织，改变历史的代价是什么？",
-      "coreAppeal": "历史框架 + 设定反转 + 规则博弈。当超自然规则与历史交织，改变历史的代价是什么？"
+      "name": "历史规则化流",
+      "description": "历史规律被具象化为可操作的规则",
+      "coreAppeal": "规则利用、历史改写、因果博弈",
+      "referenceWorks": [
+        "庆余年",
+        "赘婿",
+        "临高启明"
+      ]
+    },
+    {
+      "name": "历史异闻流",
+      "description": "历史背后隐藏的超自然真相",
+      "coreAppeal": "真相揭露、阴谋破解、历史重构",
+      "referenceWorks": [
+        "长安十二时辰",
+        "大唐悬疑录",
+        "显微镜下的大明"
+      ]
+    },
+    {
+      "name": "穿越改命流",
+      "description": "穿越者试图改变历史走向",
+      "coreAppeal": "蝴蝶效应、历史转折、命运抗争",
+      "referenceWorks": [
+        "寻秦记",
+        "回到明朝当王爷",
+        "新宋"
+      ]
+    },
+    {
+      "name": "历史游戏流",
+      "description": "历史世界被游戏化/系统化",
+      "coreAppeal": "系统利用、任务完成、历史干预",
+      "referenceWorks": [
+        "我在大康的咸鱼生活",
+        "大明国师"
+      ]
     }
   ],
-  "worldRules": [],
-  "coolPatterns": [],
-  "conflictPatterns": [],
+  "worldRules": [
+    {
+      "name": "历史规则化流",
+      "description": "**特点**: 历史规律被具象化为可操作的规则 **核心爽点**: 规则利用、历史改写、因果博弈 **代表作**: 《庆余年》《赘婿》《临高启明》"
+    }
+  ],
+  "coolPatterns": [
+    {
+      "name": "历史预知",
+      "scenario": "利用历史知识预判事件",
+      "appeal": "先知先觉，布局成功",
+      "keyNote": "要有合理的信息来源"
+    },
+    {
+      "name": "规则利用",
+      "scenario": "发现并利用历史规则",
+      "appeal": "以规则换优势",
+      "keyNote": "规则要自洽"
+    },
+    {
+      "name": "历史反转",
+      "scenario": "改变历史走向",
+      "appeal": "蝴蝶效应，历史重构",
+      "keyNote": "要有代价"
+    },
+    {
+      "name": "因果博弈",
+      "scenario": "与历史规则/守护者博弈",
+      "appeal": "智力对决，险中求胜",
+      "keyNote": "双方都要有智商"
+    }
+  ],
+  "conflictPatterns": [
+    {
+      "type": "历史脑洞题材模板 (Historical Brainwave)",
+      "source": "> **核心卖点**: 历史框架 + 设定反转 + 规则博弈。当超自然规则与历史交织，改变历史的代价是什么？ --",
+      "resolution": "> **核心卖点**: 历史框架 + 设定反转 + 规则博弈。当超自然规则与历史交织，改变历史的代价是什么？ --"
+    },
+    {
+      "type": "因果博弈",
+      "source": "与历史规则/守护者博弈",
+      "resolution": "双方都要有智商"
+    },
+    {
+      "type": "卷三：博弈 (151-280章)",
+      "source": "**核心**: 与规则/势力博弈 **地位**: 重要人物 **高潮**: 重大历史事件干预",
+      "resolution": "**核心**: 与规则/势力博弈 **地位**: 重要人物 **高潮**: 重大历史事件干预"
+    },
+    {
+      "type": "历史学者",
+      "source": "知识丰富",
+      "resolution": "历史预知"
+    },
+    {
+      "type": "规则利用者",
+      "source": "善于发现规则",
+      "resolution": "规则博弈"
+    },
+    {
+      "type": "理想主义者",
+      "source": "想改变历史",
+      "resolution": "动力强"
+    },
+    {
+      "type": "务实主义者",
+      "source": "适应环境",
+      "resolution": "生存能力"
+    },
+    {
+      "type": "历史名人",
+      "source": "推动剧情",
+      "resolution": "推动剧情"
+    },
+    {
+      "type": "原创人物",
+      "source": "情感线",
+      "resolution": "情感线"
+    },
+    {
+      "type": "规则守护者",
+      "source": "对手",
+      "resolution": "对手"
+    },
+    {
+      "type": "同类穿越者",
+      "source": "竞争/合作",
+      "resolution": "竞争/合作"
+    }
+  ],
   "outlineArcs": [
     {
       "title": "卷一：入局 (1-60章)",
-      "chapterRange": "1-100",
+      "chapterRange": "1-60",
       "coreFocus": "进入历史，发现规则",
       "coreConflict": "边缘人物",
       "climax": "首次利用规则"
     },
     {
       "title": "卷二：立足 (61-150章)",
-      "chapterRange": "1-100",
+      "chapterRange": "61-150",
       "coreFocus": "站稳脚跟，积累资源",
       "coreConflict": "有一定影响力",
       "climax": "改变局部历史"
     },
     {
       "title": "卷三：博弈 (151-280章)",
-      "chapterRange": "1-100",
+      "chapterRange": "151-280",
       "coreFocus": "与规则/势力博弈",
       "coreConflict": "重要人物",
       "climax": "重大历史事件干预"
     },
     {
       "title": "卷四：抉择 (281-400章)",
-      "chapterRange": "1-100",
+      "chapterRange": "281-400",
       "coreFocus": "面临重大抉择",
       "coreConflict": "核心人物",
       "climax": "关键历史节点"
     },
     {
       "title": "卷五：终局 (401-500章)",
-      "chapterRange": "1-100",
+      "chapterRange": "401-500",
       "coreFocus": "最终结局",
       "coreConflict": "历史改变者/见证者",
       "climax": "圆满结局"
     }
   ],
+  "targetWordCount": "1.500.000 chữ",
+  "targetChapterCount": 500,
   "pitfalls": [
     {
-      "description": "Thiết lập trước sau mâu thuẫn.",
+      "description": "设定过玄幻",
+      "severity": "critical"
+    },
+    {
+      "description": "因果逻辑混乱",
+      "severity": "critical"
+    },
+    {
+      "description": "历史常识错误",
+      "severity": "critical"
+    },
+    {
+      "description": "代价不兑现",
       "severity": "critical"
     }
   ],
   "bestPractices": [
     {
-      "description": "Thiết lập tự nhất quán."
+      "description": "设定与历史融合"
+    },
+    {
+      "description": "因果逻辑清晰"
+    },
+    {
+      "description": "历史基础准确"
+    },
+    {
+      "description": "代价明确兑现"
     }
   ],
   "entityTags": [

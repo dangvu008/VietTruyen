@@ -14,7 +14,37 @@ export type { Chapter } from '../../types/story';
  * UI-facing chapter status derived from real Chapter data + ephemeral AI state.
  * This is NOT persisted — computed on-the-fly in StoryWorkspace.
  */
-export type ChapterUIStatus = 'empty' | 'ai-draft' | 'reviewing' | 'edited' | 'approved' | 'published';
+export type ChapterUIStatus =
+  | 'empty'
+  | 'ai-draft'
+  | 'generating'
+  | 'interrupted'
+  | 'reviewing'
+  | 'edited'
+  | 'approved'
+  | 'published';
+
+export const MIN_COMPLETE_CHAPTER_WORDS = 400;
+
+export interface ChapterCompletionAction {
+  label: string;
+  title: string;
+  mode: 'continue' | 'regenerate';
+}
+
+function countChapterWords(content: string): number {
+  const trimmed = content.trim();
+  if (!trimmed) return 0;
+  return trimmed.split(/\s+/).length;
+}
+
+export function isProbablyInterruptedChapter(chapter: Chapter): boolean {
+  if (chapter.generationStatus === 'generating') return false;
+  if (chapter.generationStatus === 'partial' || chapter.generationStatus === 'failed') return true;
+  if (chapter.status === 'final' || chapter.status === 'published') return false;
+  const words = countChapterWords(chapter.content || '');
+  return words > 0 && words < MIN_COMPLETE_CHAPTER_WORDS;
+}
 
 /** Editor interaction modes */
 export type EditorMode = 'read' | 'review' | 'detail' | 'write' | 'diff';
@@ -29,6 +59,19 @@ export interface EditorSelection {
   start: number;
   end: number;
   text: string;
+}
+
+export type EditorSelectionIntent =
+  | 'internal_monologue'
+  | 'dialogue'
+  | 'shorten'
+  | 'enhance_details'
+  | 'custom';
+
+export interface EditorSelectionIntentRequest {
+  id: string;
+  intent: Exclude<EditorSelectionIntent, 'custom'>;
+  selection: EditorSelection;
 }
 
 export interface EditorAiProposal {
@@ -51,6 +94,10 @@ export interface ChatMessage {
   isStreaming?: boolean;
   /** True if message was cut short by user stop — can be resumed */
   isPartialStop?: boolean;
+  /** True when this assistant message is draft prose that can be inserted into the active chapter */
+  canInsertToDraft?: boolean;
+  /** Original prompt scope to preserve the intended insertion target */
+  insertScope?: PromptScope;
 }
 
 /**
@@ -62,6 +109,10 @@ export function deriveChapterUIStatus(
   hasAiProposal: boolean,
   hasDirtyContent: boolean,
 ): ChapterUIStatus {
+  if (chapter.generationStatus === 'generating') return 'generating';
+
+  if (isProbablyInterruptedChapter(chapter)) return 'interrupted';
+
   // If there's an AI proposal waiting for review
   if (hasAiProposal) return 'ai-draft';
 
@@ -79,10 +130,32 @@ export function deriveChapterUIStatus(
   return 'edited';
 }
 
+export function getChapterCompletionAction(
+  chapter: Chapter,
+  uiStatus: ChapterUIStatus,
+): ChapterCompletionAction | null {
+  if (uiStatus !== 'interrupted') return null;
+
+  const hasUsableContent = Boolean(chapter.content?.trim());
+  if (hasUsableContent) {
+    return {
+      label: 'Hoàn thiện',
+      title: 'AI sẽ viết tiếp từ phần đang dở để hoàn thiện chương.',
+      mode: 'continue',
+    };
+  }
+
+  return {
+    label: 'Hoàn thiện',
+    title: 'AI sẽ dựng lại chương này từ đầu vì nội dung hiện tại không còn usable.',
+    mode: 'regenerate',
+  };
+}
+
 /** Review warning surfaced by the AI Librarian */
 export interface ReviewWarning {
   id: string;
-  type: 'consistency' | 'lore' | 'tone';
+  type: 'consistency' | 'lore' | 'tone' | 'continuity' | 'hook' | 'timeline' | 'revision';
   message: string;
   severity: 'low' | 'medium' | 'high';
 }
@@ -93,6 +166,7 @@ export interface AIReviewSummary {
   warnings: ReviewWarning[];
   characters: string[];
   notes: string[];
+  revisionTasks?: string[];
 }
 
 /** Project metadata subset needed by the topbar */

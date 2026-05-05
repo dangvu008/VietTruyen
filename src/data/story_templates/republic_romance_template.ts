@@ -20,60 +20,224 @@ export const REPUBLIC_ROMANCE_TEMPLATE: StoryTemplate = {
   ],
   "subGenres": [
     {
-      "name": "Dân Quốc Ngôn Tình",
-      "description": "时代动荡 + 身份隐秘 + 爱恨纠葛。在乱世的风云中，书写刻骨铭心的爱情传奇。",
-      "coreAppeal": "时代动荡 + 身份隐秘 + 爱恨纠葛。在乱世的风云中，书写刻骨铭心的爱情传奇。"
+      "name": "豪门恩怨流",
+      "description": "民国大家族的爱恨情仇",
+      "coreAppeal": "家族争斗、身份反转、虐恋情深",
+      "referenceWorks": [
+        "金粉世家",
+        "京华烟云",
+        "半生缘",
+        "倾城之恋"
+      ]
+    },
+    {
+      "name": "乱世佳人流",
+      "description": "战乱背景下的爱情",
+      "coreAppeal": "乱世相守、生死不渝、家国情怀",
+      "referenceWorks": [
+        "人间正道是沧桑",
+        "北平无战事",
+        "伪装者"
+      ]
+    },
+    {
+      "name": "名媛风华流",
+      "description": "民国名媛的传奇人生",
+      "coreAppeal": "独立女性、时代风华、爱情抉择",
+      "referenceWorks": [
+        "上海滩",
+        "情深深雨濛濛",
+        "像雾像雨又像风"
+      ]
+    },
+    {
+      "name": "谍影情深流",
+      "description": "谍战背景下的爱情",
+      "coreAppeal": "身份秘密、信任考验、生死相依",
+      "referenceWorks": [
+        "麻雀",
+        "胭脂",
+        "旗袍",
+        "伪装者"
+      ]
     }
   ],
-  "worldRules": [],
-  "coolPatterns": [],
-  "conflictPatterns": [],
+  "worldRules": [
+    {
+      "name": "社会阶层",
+      "description": "阶层 / 特点 / 生活状态 ------ / ------ / ---------- 军阀/政要 / 权力核心 / 奢华/危险 世家大族 / 传统势力 / 讲究/保守 新兴资本 / 商业新贵 / 开放/逐利 知识分子 / 思想先锋 / 理想/清贫 平民百姓 / 社会基础 / 艰难/朴实"
+    },
+    {
+      "name": "时代特征",
+      "description": "时期 / 特点 / 核心矛盾 ------ / ------ / ---------- 北洋时期 / 军阀混战 / 权力争夺 黄金十年 / 相对稳定 / 新旧冲突 抗战时期 / 民族危亡 / 家国抉择 解放前夕 / 风云变幻 / 命运选择"
+    },
+    {
+      "name": "女性处境",
+      "description": "类型 / 特点 / 困境 ------ / ------ / ------ 大家闺秀 / 家教严格 / 婚姻不自主 新女性 / 追求独立 / 社会偏见 交际花 / 周旋权贵 / 身不由己 革命女性 / 投身革命 / 生死考验 --"
+    }
+  ],
+  "coolPatterns": [
+    {
+      "name": "身份反转",
+      "scenario": "卑微身份实为大家闺秀/革命者",
+      "appeal": "真相揭露，打脸众人",
+      "keyNote": "要有伏笔铺垫"
+    },
+    {
+      "name": "乱世相守",
+      "scenario": "战乱中不离不弃",
+      "appeal": "生死相依，感人至深",
+      "keyNote": "要有真实的危机"
+    },
+    {
+      "name": "家族认可",
+      "scenario": "克服阻碍获得家族认可",
+      "appeal": "有情人终成眷属",
+      "keyNote": "要展示女主的闪光点"
+    },
+    {
+      "name": "复仇成功",
+      "scenario": "对害过自己的人复仇",
+      "appeal": "正义伸张，大快人心",
+      "keyNote": "复仇要有底线"
+    }
+  ],
+  "conflictPatterns": [
+    {
+      "type": "北洋时期",
+      "source": "军阀混战",
+      "resolution": "权力争夺"
+    },
+    {
+      "type": "黄金十年",
+      "source": "相对稳定",
+      "resolution": "新旧冲突"
+    },
+    {
+      "type": "抗战时期",
+      "source": "民族危亡",
+      "resolution": "家国抉择"
+    },
+    {
+      "type": "解放前夕",
+      "source": "风云变幻",
+      "resolution": "命运选择"
+    },
+    {
+      "type": "乱世相守",
+      "source": "战乱中不离不弃",
+      "resolution": "要有真实的危机"
+    },
+    {
+      "type": "家族认可",
+      "source": "克服阻碍获得家族认可",
+      "resolution": "要展示女主的闪光点"
+    },
+    {
+      "type": "卷三：考验 (151-250章)",
+      "source": "**核心**: 家族/时代阻碍 **关系**: 暧昧→危机 **高潮**: 被迫分离",
+      "resolution": "**核心**: 家族/时代阻碍 **关系**: 暧昧→危机 **高潮**: 被迫分离"
+    },
+    {
+      "type": "卷四：守护 (251-350章)",
+      "source": "**核心**: 为爱对抗一切 **关系**: 危机→重逢 **高潮**: 克服阻碍",
+      "resolution": "**核心**: 为爱对抗一切 **关系**: 危机→重逢 **高潮**: 克服阻碍"
+    },
+    {
+      "type": "恶毒姨太",
+      "source": "制造冲突",
+      "resolution": "被惩罚"
+    },
+    {
+      "type": "痴情备胎",
+      "source": "三角关系",
+      "resolution": "成全/黑化"
+    },
+    {
+      "type": "严厉长辈",
+      "source": "阻碍",
+      "resolution": "认可"
+    },
+    {
+      "type": "忠心丫鬟",
+      "source": "助攻",
+      "resolution": "也收获幸福"
+    },
+    {
+      "type": "必须避免",
+      "source": "❌ 时代感薄弱 ❌ 冲突流于狗血 ❌ 女主太傻白甜 ❌ 历史常识错误",
+      "resolution": "❌ 时代感薄弱 ❌ 冲突流于狗血 ❌ 女主太傻白甜 ❌ 历史常识错误"
+    }
+  ],
   "outlineArcs": [
     {
       "title": "卷一：相遇 (1-60章)",
-      "chapterRange": "1-100",
+      "chapterRange": "1-60",
       "coreFocus": "命运交织，情感萌芽",
       "coreConflict": "",
       "climax": "第一次心动"
     },
     {
       "title": "卷二：相知 (61-150章)",
-      "chapterRange": "1-100",
+      "chapterRange": "61-150",
       "coreFocus": "深入了解，感情升温",
       "coreConflict": "",
       "climax": "确认心意"
     },
     {
       "title": "卷三：考验 (151-250章)",
-      "chapterRange": "1-100",
+      "chapterRange": "151-250",
       "coreFocus": "家族/时代阻碍",
       "coreConflict": "",
       "climax": "被迫分离"
     },
     {
       "title": "卷四：守护 (251-350章)",
-      "chapterRange": "1-100",
+      "chapterRange": "251-350",
       "coreFocus": "为爱对抗一切",
       "coreConflict": "",
       "climax": "克服阻碍"
     },
     {
       "title": "卷五：圆满 (351-400章)",
-      "chapterRange": "1-100",
+      "chapterRange": "351-400",
       "coreFocus": "有情人终成眷属",
       "coreConflict": "",
       "climax": "圆满结局"
     }
   ],
+  "targetWordCount": "1.000.000 chữ",
+  "targetChapterCount": 400,
   "pitfalls": [
     {
-      "description": "Thiết lập trước sau mâu thuẫn.",
+      "description": "时代感薄弱",
+      "severity": "critical"
+    },
+    {
+      "description": "冲突流于狗血",
+      "severity": "critical"
+    },
+    {
+      "description": "女主太傻白甜",
+      "severity": "critical"
+    },
+    {
+      "description": "历史常识错误",
       "severity": "critical"
     }
   ],
   "bestPractices": [
     {
-      "description": "Thiết lập tự nhất quán."
+      "description": "时代细节准确"
+    },
+    {
+      "description": "冲突有深度"
+    },
+    {
+      "description": "女主有成长"
+    },
+    {
+      "description": "历史背景合理"
     }
   ],
   "entityTags": [

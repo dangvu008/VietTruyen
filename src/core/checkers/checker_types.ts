@@ -8,6 +8,7 @@
 import type { GenreProfile } from '../../types/genre_profile';
 import type { CharacterProfile } from './ooc_checker';
 import type { StrandTracker } from '../../types/strand_weave';
+import type { NarrativeStateFact, PendingHook } from '../../types/narrative_memory';
 
 export interface CheckerContext {
   chapterId: string;
@@ -19,6 +20,15 @@ export interface CheckerContext {
   systemStateContext: string;
   previousSummary: string;
   activeThreads: string[];
+  chapterIntent?: string;
+  futureTarget?: string;
+  storyStateFacts?: Array<
+    Pick<NarrativeStateFact, 'subjectId' | 'predicate' | 'value' | 'validFromChapter' | 'confidence'>
+  >;
+  activeHooks?: Array<
+    Pick<PendingHook, 'id' | 'description' | 'plantedChapterIndex' | 'expectedPayoffBy' | 'confidence'>
+  >;
+  continuityWarnings?: string[];
 }
 
 export type CheckerSeverity = 'low' | 'medium' | 'high' | 'critical';
@@ -48,5 +58,7 @@ export interface CombinedReviewReport {
   combined_score: number; // Average of all overall_scores
   pass: boolean;          // True only if all critical metrics pass
   priority_fixes: CheckerIssue[]; // Merged list of high/critical issues across all checkers
+  suggestedRevisionTasks: string[];
+  guidedRevisionPrompt: string;
   reviewedAt: string;     // ISO timestamp
 }

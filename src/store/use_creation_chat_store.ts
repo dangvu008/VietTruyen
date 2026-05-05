@@ -19,6 +19,9 @@ import type {
   SuggestionGroup,
 } from '../types/creation_chat';
 import type { BrainstormResult } from '../types/narrative_memory';
+import { normalizeCreationPlotPreview } from '../lib/creation/plot_preview_normalizer';
+import { normalizeCreationFramework } from '../lib/creation/framework_normalizer';
+import { useNotificationStore } from './use_notification_store';
 
 interface WorkflowProgressPatch {
   linkedProjectId?: string | null;
@@ -77,6 +80,17 @@ interface CreationChatActions {
   ) => void;
   interruptWorkflowStep: (detail?: string) => void;
   linkProject: (projectId: string) => void;
+  syncEditorTextMessages: (
+    projectId: string,
+    chapterId: string,
+    messages: Array<{
+      id: string;
+      role: 'user' | 'assistant';
+      content: string;
+      timestamp: string;
+      isStreaming?: boolean;
+    }>,
+  ) => void;
   setAiWorking: (working: boolean) => void;
   setIsBatchComposing: (composing: boolean) => void;
   setBatchComposeProgress: (progress: BatchComposeProgress | null) => void;
@@ -137,6 +151,76 @@ function stripTransientMessages(messages: CreationMessage[]): CreationMessage[] 
   return messages.filter((message) => message.type !== 'loading');
 }
 
+const NOTIFIABLE_SUCCESS_STEPS = new Set<CreationWorkflowStep>([
+  'review_plot',
+  'framework',
+  'outline',
+  'compose',
+  'handoff',
+]);
+
+const WORKFLOW_STEP_LABELS: Record<CreationWorkflowStep, string> = {
+  describe: 'mô tả ý tưởng',
+  discuss: 'thảo luận',
+  review_plot: 'review cốt truyện',
+  framework: 'tạo khung truyện',
+  outline: 'tạo tổng cương',
+  compose: 'viết chương',
+  handoff: 'đồng bộ editor',
+};
+
+function buildWorkflowSuccessTitle(
+  step: CreationWorkflowStep,
+  detail: string,
+  patch?: WorkflowProgressPatch,
+): string {
+  if (step === 'compose' && patch?.lastGeneratedChapterTitle) {
+    return `Đã tạo xong ${patch.lastGeneratedChapterTitle}`;
+  }
+
+  switch (step) {
+    case 'review_plot':
+      return 'Đã tổng hợp bản review cốt truyện';
+    case 'framework':
+      return 'Đã tạo xong khung truyện';
+    case 'outline':
+      return 'Đã tạo xong tổng cương';
+    case 'handoff':
+      return 'Đã đồng bộ sang editor';
+    case 'compose':
+      return detail;
+    default:
+      return detail;
+  }
+}
+
+function notifyWorkflowSuccess(
+  step: CreationWorkflowStep,
+  detail: string,
+  patch?: WorkflowProgressPatch,
+): void {
+  if (!NOTIFIABLE_SUCCESS_STEPS.has(step)) return;
+
+  useNotificationStore.getState().push({
+    type: 'success',
+    title: buildWorkflowSuccessTitle(step, detail, patch),
+    message: detail,
+  });
+}
+
+function notifyWorkflowError(
+  step: CreationWorkflowStep,
+  detail: string,
+  error?: string,
+): void {
+  useNotificationStore.getState().push({
+    type: 'error',
+    title: `AI gặp lỗi khi ${WORKFLOW_STEP_LABELS[step]}`,
+    message: error ?? detail,
+    duration: 0,
+  });
+}
+
 function buildPersistedMessage(
   state: CreationChatState,
   message: Omit<CreationMessage, 'id' | 'timestamp'>,
@@ -149,6 +233,15 @@ function buildPersistedMessage(
     ],
     draftSavedAt: touch(),
   };
+}
+
+function normalizeFrameworkMessage(message: CreationMessage): CreationMessage {
+  return message.type === 'framework_preview' && message.frameworkData
+    ? {
+        ...message,
+        frameworkData: normalizeCreationFramework(message.frameworkData),
+      }
+    : message;
 }
 
 export const useCreationChatStore = create<
@@ -271,7 +364,7 @@ export const useCreationChatStore = create<
 
       setPlotPreview: (preview) =>
         set({
-          plotPreview: preview,
+          plotPreview: preview ? normalizeCreationPlotPreview(preview) : preview,
           plotPreviewConfirmed: false,
           draftSavedAt: touch(),
         }),
@@ -281,27 +374,32 @@ export const useCreationChatStore = create<
         introText = 'Đây là bản review cốt truyện trước khi AI dựng khung đầy đủ:',
         tokenUsage,
       ) =>
-        set((state) => ({
-          phase: 'review_plot',
-          plotPreview: data,
-          plotPreviewConfirmed: false,
-          messages: [
-            ...state.messages,
-            {
-              id: createId(),
-              role: 'ai',
-              content: introText,
-              type: 'plot_preview',
-              plotPreviewData: data,
-              tokenUsage,
-              timestamp: touch(),
-            },
-          ],
-          draftSavedAt: touch(),
-        })),
+        set((state) => {
+          const normalizedData = normalizeCreationPlotPreview(data);
+
+          return {
+            phase: 'review_plot',
+            plotPreview: normalizedData,
+            plotPreviewConfirmed: false,
+            messages: [
+              ...state.messages,
+              {
+                id: createId(),
+                role: 'ai',
+                content: introText,
+                type: 'plot_preview',
+                plotPreviewData: normalizedData,
+                tokenUsage,
+                timestamp: touch(),
+              },
+            ],
+            draftSavedAt: touch(),
+          };
+        }),
 
       confirmPlotPreview: () =>
         set((state) => ({
+          plotPreview: state.plotPreview ? normalizeCreationPlotPreview(state.plotPreview) : state.plotPreview,
           plotPreviewConfirmed: true,
           progress: {
             ...state.progress,
@@ -313,7 +411,7 @@ export const useCreationChatStore = create<
 
       setFramework: (result) =>
         set({
-          framework: result,
+          framework: normalizeCreationFramework(result),
           draftSavedAt: touch(),
         }),
 
@@ -330,7 +428,7 @@ export const useCreationChatStore = create<
 
       addFrameworkPreview: (data, tokenUsage) =>
         set((state) => ({
-          framework: data,
+          framework: normalizeCreationFramework(data),
           messages: [
             ...state.messages,
             {
@@ -338,7 +436,7 @@ export const useCreationChatStore = create<
               role: 'ai',
               content: 'Đã tạo xong khung lớn cho truyện:',
               type: 'framework_preview',
-              frameworkData: data,
+              frameworkData: normalizeCreationFramework(data),
               tokenUsage,
               timestamp: touch(),
             },
@@ -449,7 +547,8 @@ export const useCreationChatStore = create<
           draftSavedAt: touch(),
         })),
 
-      finishWorkflowStep: (step, detail, patch) =>
+      finishWorkflowStep: (step, detail, patch) => {
+        notifyWorkflowSuccess(step, detail, patch);
         set((state) => ({
           progress: {
             ...state.progress,
@@ -465,9 +564,11 @@ export const useCreationChatStore = create<
               patch?.lastGeneratedChapterTitle ?? state.progress.lastGeneratedChapterTitle,
           },
           draftSavedAt: touch(),
-        })),
+        }));
+      },
 
-      failWorkflowStep: (step, detail, error) =>
+      failWorkflowStep: (step, detail, error) => {
+        notifyWorkflowError(step, detail, error);
         set((state) => ({
           progress: {
             ...state.progress,
@@ -478,7 +579,8 @@ export const useCreationChatStore = create<
             updatedAt: touch(),
           },
           draftSavedAt: touch(),
-        })),
+        }));
+      },
 
       interruptWorkflowStep: (detail) =>
         set((state) => ({
@@ -502,6 +604,68 @@ export const useCreationChatStore = create<
           },
           draftSavedAt: touch(),
         })),
+
+      syncEditorTextMessages: (projectId, chapterId, messages) =>
+        set((state) => {
+          if (state.progress.linkedProjectId !== projectId) {
+            return state;
+          }
+
+          const idPrefix = `editor:${projectId}:${chapterId}:`;
+          const syncedMessages = messages
+            .filter(
+              (message) =>
+                !message.id.startsWith('creation-') &&
+                message.content.trim().length > 0,
+            )
+            .map((message) => ({
+              id: `${idPrefix}${message.id}`,
+              role: message.role === 'assistant' ? 'ai' as const : 'user' as const,
+              content: message.content,
+              type: 'text' as const,
+              timestamp: message.timestamp,
+            }));
+          const syncedIds = new Set(syncedMessages.map((message) => message.id));
+          const syncedById = new Map(syncedMessages.map((message) => [message.id, message]));
+          let changed = false;
+
+          const nextMessages = state.messages
+            .filter((message) => {
+              if (!message.id.startsWith(idPrefix)) return true;
+              const keep = syncedIds.has(message.id);
+              if (!keep) changed = true;
+              return keep;
+            })
+            .map((message) => {
+              const synced = syncedById.get(message.id);
+              if (!synced) return message;
+              syncedById.delete(message.id);
+
+              if (
+                message.role === synced.role &&
+                message.content === synced.content &&
+                message.timestamp === synced.timestamp &&
+                message.type === synced.type
+              ) {
+                return message;
+              }
+
+              changed = true;
+              return { ...message, ...synced };
+            });
+
+          if (syncedById.size > 0) {
+            changed = true;
+            nextMessages.push(...syncedById.values());
+          }
+
+          if (!changed) return state;
+
+          return {
+            messages: nextMessages,
+            draftSavedAt: touch(),
+          };
+        }),
 
       setAiWorking: (working) =>
         set({
@@ -565,16 +729,28 @@ export const useCreationChatStore = create<
           );
         }
       },
+      migrate: (persistedState) => {
+        const typedState = (persistedState ?? {}) as Partial<CreationChatState>;
+        return {
+          ...typedState,
+          framework: typedState.framework
+            ? normalizeCreationFramework(typedState.framework)
+            : typedState.framework ?? null,
+          messages: Array.isArray(typedState.messages)
+            ? typedState.messages.map((message) => normalizeFrameworkMessage(message as CreationMessage))
+            : [],
+        };
+      },
       partialize: (state) => ({
         sessionId: state.sessionId,
         sessionStartedAt: state.sessionStartedAt,
         phase: state.phase,
-        messages: stripTransientMessages(state.messages),
+        messages: stripTransientMessages(state.messages).map(normalizeFrameworkMessage),
         currentTopicIndex: state.currentTopicIndex,
         answers: state.answers,
         plotPreview: state.plotPreview,
         plotPreviewConfirmed: state.plotPreviewConfirmed,
-        framework: state.framework,
+        framework: state.framework ? normalizeCreationFramework(state.framework) : state.framework,
         frameworkConfirmed: state.frameworkConfirmed,
         currentChapterIndex: state.currentChapterIndex,
         acceptedChapters: state.acceptedChapters,

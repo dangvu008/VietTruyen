@@ -10,8 +10,11 @@ import {
 } from '../db/narrative_db';
 import { useStorageStore } from './use_storage_store';
 import { deriveAdaptationChapters } from '../lib/adaptation/derive_adaptation_chapters';
+import { guardChapterContent } from '../lib/chapter/chapter_content_guard';
+import { summarizeDebugChapters, traceStoryDebugEvent } from '../lib/debug/story_debug_trace';
 import { ensureChapterSequenceNumbers, getNextChapterSequenceNumber } from '../lib/memory/chapter_order';
 import { normalizeCharacter, normalizeWorldRules } from '../lib/memory/memory_registry';
+import type { StorageProvider } from '../lib/storage/storage_provider';
 import type { AdaptationConfig } from '../types/adaptation';
 import type {
   Chapter,
@@ -64,6 +67,33 @@ export interface ProjectState {
 const now = () => new Date().toISOString();
 const DEFAULT_PROJECT_TITLE = 'Dự án mới';
 
+function sanitizePersistedChapter(chapter: Chapter): Chapter {
+  const guarded = guardChapterContent(chapter.content);
+  if (!guarded.sanitized && !guarded.rejected) {
+    return chapter;
+  }
+
+  if (guarded.rejected) {
+    console.warn(
+      '[useProjectStore] Rejected contaminated chapter content:',
+      chapter.title || chapter.id,
+      guarded.reasons.join(','),
+    );
+  }
+
+  return {
+    ...chapter,
+    content: guarded.content,
+    generationStatus: guarded.rejected ? 'failed' : chapter.generationStatus,
+  };
+}
+
+function normalizeChapterCollection(chapters: Chapter[]): Chapter[] {
+  return ensureChapterSequenceNumbers(
+    chapters.map((chapter) => sanitizePersistedChapter({ ...chapter })),
+  );
+}
+
 const createUniqueProjectTitle = (projects: Project[], requestedTitle?: string): string => {
   const baseTitle = requestedTitle?.trim() || DEFAULT_PROJECT_TITLE;
   const usedTitles = new Set(
@@ -82,10 +112,13 @@ const createUniqueProjectTitle = (projects: Project[], requestedTitle?: string):
   return `${baseTitle} ${suffix}`;
 };
 
-const normalizeChapter = (chapter: Chapter, existingChapters: Chapter[] = []): Chapter => ({
-  ...chapter,
-  sequenceNumber: chapter.sequenceNumber ?? getNextChapterSequenceNumber(existingChapters),
-});
+const normalizeChapter = (chapter: Chapter, existingChapters: Chapter[] = []): Chapter => {
+  const sanitized = sanitizePersistedChapter(chapter);
+  return {
+    ...sanitized,
+    sequenceNumber: sanitized.sequenceNumber ?? getNextChapterSequenceNumber(existingChapters),
+  };
+};
 
 const normalizeProject = (project: Project): Project => ({
   ...project,
@@ -94,7 +127,7 @@ const normalizeProject = (project: Project): Project => ({
     facts: project.world?.facts || [],
   }),
   characters: (project.characters || []).map((character) => normalizeCharacter(character)),
-  chapters: ensureChapterSequenceNumbers((project.chapters || []).map((chapter) => ({ ...chapter }))),
+  chapters: normalizeChapterCollection(project.chapters || []),
   foreshadowings: project.foreshadowings || [],
   canonVersion: project.canonVersion ?? 1,
   storageMode: project.storageMode ?? ((project.chapters || []).length > 0 ? 'indexeddb' : 'inline'),
@@ -181,8 +214,115 @@ function hasChapterPayload(chapter: Chapter): boolean {
   return Boolean(chapter.content?.trim() || chapter.summary?.trim());
 }
 
+function hasChapterContent(chapter: Chapter): boolean {
+  return Boolean(chapter.content?.trim());
+}
+
 function hasAnyChapterPayload(chapters: Chapter[]): boolean {
   return chapters.some((chapter) => hasChapterPayload(chapter));
+}
+
+function getCreationChatRecoveryChapters(project: Project): Chapter[] {
+  if (typeof localStorage === 'undefined') return [];
+
+  try {
+    const raw = localStorage.getItem('viettruyen-creation-chat');
+    if (!raw) return [];
+
+    const parsed = JSON.parse(raw) as {
+      state?: {
+        progress?: { linkedProjectId?: string | null };
+        acceptedChapters?: Array<{
+          chapterIndex: number;
+          title?: string;
+          content?: string;
+          createdAt?: string;
+          updatedAt?: string;
+        }>;
+        messages?: Array<{
+          type?: string;
+          chapterDraft?: {
+            chapterIndex: number;
+            title?: string;
+            content?: string;
+          };
+          timestamp?: string;
+        }>;
+      };
+    };
+    const state = parsed.state;
+    if (!state || state.progress?.linkedProjectId !== project.id) return [];
+
+    const bySequence = new Map<number, Chapter>();
+    const projectBySequence = new Map(
+      project.chapters
+        .filter((chapter) => chapter.sequenceNumber != null)
+        .map((chapter) => [chapter.sequenceNumber!, chapter]),
+    );
+
+    const upsertRecoveryChapter = (params: {
+      chapterIndex: number;
+      title?: string;
+      content?: string;
+      createdAt?: string;
+      updatedAt?: string;
+    }) => {
+      const content = params.content?.trim();
+      if (!content) return;
+
+      const sequenceNumber = params.chapterIndex + 1;
+      const existing = projectBySequence.get(sequenceNumber);
+      const timestamp = params.updatedAt || params.createdAt || now();
+      bySequence.set(sequenceNumber, {
+        id: existing?.id || createId(),
+        title: params.title || existing?.title || `Chương ${sequenceNumber}`,
+        content,
+        summary: existing?.summary,
+        sequenceNumber,
+        status: existing?.status || 'draft',
+        createdAt: existing?.createdAt || params.createdAt || timestamp,
+        updatedAt: timestamp,
+      });
+    };
+
+    for (const accepted of state.acceptedChapters || []) {
+      upsertRecoveryChapter(accepted);
+    }
+
+    for (const message of state.messages || []) {
+      if (message.type !== 'chapter_draft' || !message.chapterDraft) continue;
+      upsertRecoveryChapter({
+        ...message.chapterDraft,
+        createdAt: message.timestamp,
+        updatedAt: message.timestamp,
+      });
+    }
+
+    return Array.from(bySequence.values());
+  } catch (error) {
+    console.warn(
+      '[getCreationChatRecoveryChapters] Unable to read creation chat recovery data:',
+      error instanceof Error ? error.message : error,
+    );
+    return [];
+  }
+}
+
+function hasCompleteChapterContentCoverage(chapters: Chapter[], expectedChapterCount: number): boolean {
+  if (expectedChapterCount <= 0) return false;
+  if (chapters.length < expectedChapterCount) return false;
+  return chapters.every((chapter) => hasChapterContent(chapter));
+}
+
+function findMatchingChapter(
+  chapter: Chapter,
+  chapterById: Map<string, Chapter>,
+  chapterBySequence: Map<number, Chapter>,
+): Chapter | undefined {
+  return (
+    chapterById.get(chapter.id)
+    ?? (chapter.sequenceNumber != null ? chapterBySequence.get(chapter.sequenceNumber) : undefined)
+  );
 }
 
 function mergeChapterPayloadFallback(primary: Chapter[], fallback: Chapter[]): Chapter[] {
@@ -192,26 +332,128 @@ function mergeChapterPayloadFallback(primary: Chapter[], fallback: Chapter[]): C
   const fallbackBySequence = new Map(
     fallback
       .filter((chapter) => chapter.sequenceNumber != null)
-      .map((chapter) => [chapter.sequenceNumber, chapter])
+      .map((chapter) => [chapter.sequenceNumber!, chapter])
   );
 
-  return primary.map((chapter) => {
-    if (hasChapterPayload(chapter)) return chapter;
+  const primaryIds = new Set(primary.map((chapter) => chapter.id));
+  const primarySequences = new Set(
+    primary
+      .map((chapter) => chapter.sequenceNumber)
+      .filter((sequenceNumber): sequenceNumber is number => sequenceNumber != null)
+  );
 
-    const fallbackChapter =
-      fallbackById.get(chapter.id) ??
-      (chapter.sequenceNumber != null ? fallbackBySequence.get(chapter.sequenceNumber) : undefined);
+  const mergedPrimary = primary.map((chapter) => {
+    const fallbackChapter = findMatchingChapter(chapter, fallbackById, fallbackBySequence);
 
     if (!fallbackChapter || !hasChapterPayload(fallbackChapter)) {
       return chapter;
     }
 
+    const content = hasChapterContent(chapter) ? chapter.content : fallbackChapter.content;
+    const summary = chapter.summary?.trim() ? chapter.summary : fallbackChapter.summary ?? chapter.summary;
+
+    if (content === chapter.content && summary === chapter.summary) {
+      return chapter;
+    }
+
     return {
       ...chapter,
-      content: fallbackChapter.content,
-      summary: fallbackChapter.summary ?? chapter.summary,
+      content,
+      summary,
     };
   });
+
+  const appendedFallback = fallback.filter((chapter) => {
+    if (primaryIds.has(chapter.id)) return false;
+    if (chapter.sequenceNumber != null && primarySequences.has(chapter.sequenceNumber)) return false;
+    return true;
+  });
+
+  return appendedFallback.length > 0
+    ? [...mergedPrimary, ...appendedFallback]
+    : mergedPrimary;
+}
+
+async function repairMissingChapterPayloadsFromProvider(
+  projectId: string,
+  chapters: Chapter[],
+  provider: StorageProvider,
+  fallbackSources: Chapter[],
+): Promise<Chapter[]> {
+  const chaptersNeedingRepair = new Map<string, Chapter>();
+  const chaptersById = new Map(chapters.map((chapter) => [chapter.id, chapter]));
+  const chaptersBySequence = new Map(
+    chapters
+      .filter((chapter) => chapter.sequenceNumber != null)
+      .map((chapter) => [chapter.sequenceNumber!, chapter]),
+  );
+
+  for (const chapter of chapters) {
+    if (!hasChapterContent(chapter)) {
+      chaptersNeedingRepair.set(chapter.id, chapter);
+    }
+  }
+
+  for (const chapter of fallbackSources) {
+    const currentChapter = findMatchingChapter(chapter, chaptersById, chaptersBySequence);
+
+    if (!currentChapter || !hasChapterContent(currentChapter)) {
+      chaptersNeedingRepair.set(chapter.id, chapter);
+    }
+  }
+
+  if (chaptersNeedingRepair.size === 0) {
+    return chapters;
+  }
+
+  const repairedFromProvider = await Promise.all(
+    Array.from(chaptersNeedingRepair.values()).map(async (chapter) => {
+      try {
+        return await provider.getChapter(projectId, chapter.id);
+      } catch (providerError) {
+        console.warn(
+          `[useProjectStore] Provider getChapter failed for ${chapter.id}; keeping fallback content:`,
+          providerError instanceof Error ? providerError.message : providerError,
+        );
+        return null;
+      }
+    }),
+  );
+
+  const recoveredChapters = repairedFromProvider.filter(
+    (chapter): chapter is Chapter => Boolean(chapter && hasChapterPayload(chapter)),
+  );
+
+  if (recoveredChapters.length === 0) {
+    return chapters;
+  }
+
+  const recoveredById = new Map(recoveredChapters.map((chapter) => [chapter.id, chapter]));
+  const recoveredBySequence = new Map(
+    recoveredChapters
+      .filter((chapter) => chapter.sequenceNumber != null)
+      .map((chapter) => [chapter.sequenceNumber!, chapter]),
+  );
+
+  const repairedExisting = chapters.map((chapter) => {
+    const recovered = findMatchingChapter(chapter, recoveredById, recoveredBySequence);
+    if (!recovered || !hasChapterPayload(recovered)) {
+      return chapter;
+    }
+
+    return {
+      ...chapter,
+      content: hasChapterContent(chapter) ? chapter.content : recovered.content,
+      summary: chapter.summary?.trim() ? chapter.summary : recovered.summary ?? chapter.summary,
+    };
+  });
+
+  const repairedIds = new Set(repairedExisting.map((chapter) => chapter.id));
+  const appendedRecovered = recoveredChapters.filter((chapter) => !repairedIds.has(chapter.id));
+
+  return appendedRecovered.length > 0
+    ? [...repairedExisting, ...appendedRecovered]
+    : repairedExisting;
 }
 
 async function syncProviderProjectChapters(projectId: string, chapters: Chapter[]): Promise<void> {
@@ -257,53 +499,135 @@ async function syncProviderProjectSnapshot(project: Project, caller: string): Pr
 }
 
 async function persistProjectChapters(projectId: string, chapters: Chapter[]): Promise<void> {
-  const normalized = ensureChapterSequenceNumbers(chapters);
-  await replaceStoredProjectChapters(
+  const normalized = normalizeChapterCollection(chapters);
+  traceStoryDebugEvent({
+    domain: 'storage',
+    action: 'chapters.persist.start',
+    level: 'info',
+    summary: `Persisting ${normalized.length} project chapters.`,
+    details: {
+      projectId,
+      chapters: summarizeDebugChapters(normalized),
+      providerMode: useStorageStore.getState().provider?.mode ?? null,
+    },
+  });
+
+  // [Domain:Storage] Run IndexedDB + provider sync IN PARALLEL.
+  // Previously sequential: if IndexedDB was slow, provider sync was delayed.
+  // Now both fire immediately via Promise.allSettled so provider gets data ASAP.
+  const indexedDbPromise = replaceStoredProjectChapters(
     projectId,
-    normalized.map((chapter) => toStoredChapter(projectId, chapter))
+    normalized.map((chapter) => toStoredChapter(projectId, chapter)),
   );
 
   const provider = useStorageStore.getState().provider;
-  if (provider) {
-    try {
-      await provider.replaceProjectChapters(projectId, normalized);
-    } catch (providerError) {
-      console.warn(
-        '[persistProjectChapters] Provider replaceProjectChapters failed; kept IndexedDB cache:',
-        providerError instanceof Error ? providerError.message : providerError,
-      );
-    }
-  }
+  const providerPromise = provider
+    ? provider.replaceProjectChapters(projectId, normalized).catch((providerError) => {
+        console.warn(
+          '[persistProjectChapters] Provider replaceProjectChapters failed; kept IndexedDB cache:',
+          providerError instanceof Error ? providerError.message : providerError,
+        );
+        traceStoryDebugEvent({
+          domain: 'storage',
+          action: 'chapters.persist.provider_failed',
+          level: 'error',
+          summary: 'Provider chapter persistence failed; IndexedDB remains the local cache.',
+          details: {
+            projectId,
+            providerMode: provider.mode,
+            error: providerError,
+          },
+        });
+      })
+    : Promise.resolve();
+
+  const results = await Promise.allSettled([indexedDbPromise, providerPromise]);
+  traceStoryDebugEvent({
+    domain: 'storage',
+    action: 'chapters.persist.complete',
+    level: results.some((result) => result.status === 'rejected') ? 'warn' : 'info',
+    summary: `Chapter persistence completed for ${projectId}.`,
+    details: {
+      projectId,
+      chapters: summarizeDebugChapters(normalized),
+      indexedDbStatus: results[0]?.status,
+      providerStatus: results[1]?.status,
+      indexedDbError: results[0]?.status === 'rejected' ? results[0].reason : undefined,
+      providerError: results[1]?.status === 'rejected' ? results[1].reason : undefined,
+    },
+  });
 }
 
 async function loadProjectWithFullChapters(project: Project): Promise<Project> {
   const normalized = normalizeProject(project);
-  
+  traceStoryDebugEvent({
+    domain: 'storage',
+    action: 'project.load_full_chapters.start',
+    level: 'info',
+    summary: `Loading full chapter payloads for project "${normalized.title}".`,
+    details: {
+      projectId: normalized.id,
+      title: normalized.title,
+      inMemory: summarizeDebugChapters(normalized.chapters || []),
+      storageMode: normalized.storageMode,
+    },
+  });
+
   // [Domain:Storage] STEP 0 — Giữ lại chapters từ in-memory state làm fallback cuối cùng
   // partialize strip content khi persist → reload → chapters rỗng, nhưng nếu state
   // hiện tại đang có content (e.g. vừa adaptProject xong) thì phải giữ lại.
   const inMemoryChapters = normalized.chapters || [];
+  const creationRecoveryChapters = getCreationChatRecoveryChapters(normalized);
   const inMemoryHasPayload = hasAnyChapterPayload(inMemoryChapters);
-  
+  const stored = await getProjectChapters(normalized.id);
+  const indexedDbChapters = stored.map((chapter) => fromStoredChapter(chapter));
+  const indexedDbHasPayload = hasAnyChapterPayload(indexedDbChapters);
+  const expectedChapterCount = Math.max(
+    inMemoryChapters.length,
+    indexedDbChapters.length,
+    creationRecoveryChapters.length,
+  );
+  const localHasCompleteContent =
+    hasCompleteChapterContentCoverage(indexedDbChapters, expectedChapterCount) ||
+    hasCompleteChapterContentCoverage(inMemoryChapters, expectedChapterCount);
+
   // [Domain:Storage] STEP 1 — Thử dùng provider trước (Supabase online)
   const provider = useStorageStore.getState().provider;
   let providerChapters: Chapter[] = [];
-  
-  if (provider) {
+
+  if (provider && !localHasCompleteContent) {
     try {
       providerChapters = await provider.getProjectChapters(normalized.id);
+      traceStoryDebugEvent({
+        domain: 'storage',
+        action: 'project.load_full_chapters.provider_read',
+        level: 'info',
+        summary: `Provider returned ${providerChapters.length} chapters for project "${normalized.title}".`,
+        details: {
+          projectId: normalized.id,
+          providerMode: provider.mode,
+          chapters: summarizeDebugChapters(providerChapters),
+        },
+      });
     } catch (providerError) {
       // [Domain:Storage] STEP 1a — Provider failed (e.g. RLS recursion), log and fallback
       console.warn(
         '[loadProjectWithFullChapters] Provider getProjectChapters failed, falling back to IndexedDB:',
         providerError instanceof Error ? providerError.message : providerError,
       );
+      traceStoryDebugEvent({
+        domain: 'storage',
+        action: 'project.load_full_chapters.provider_failed',
+        level: 'error',
+        summary: 'Provider chapter retrieval failed; falling back to IndexedDB/in-memory recovery.',
+        details: {
+          projectId: normalized.id,
+          providerMode: provider.mode,
+          error: providerError,
+        },
+      });
     }
   }
-  
-  const stored = await getProjectChapters(normalized.id);
-  const indexedDbChapters = stored.map((chapter) => fromStoredChapter(chapter));
-  const indexedDbHasPayload = hasAnyChapterPayload(indexedDbChapters);
   const providerHasPayload = hasAnyChapterPayload(providerChapters);
 
   let fullChapters = providerChapters;
@@ -338,7 +662,58 @@ async function loadProjectWithFullChapters(project: Project): Promise<Project> {
     chapterStorageMode = 'indexeddb';
   }
 
+  if (
+    provider
+    && (
+      fullChapters.length < expectedChapterCount
+      || !hasCompleteChapterContentCoverage(fullChapters, expectedChapterCount)
+    )
+  ) {
+    fullChapters = await repairMissingChapterPayloadsFromProvider(
+      normalized.id,
+      fullChapters,
+      provider,
+      mergeChapterPayloadFallback(
+        mergeChapterPayloadFallback(indexedDbChapters, inMemoryChapters),
+        creationRecoveryChapters,
+      ),
+    );
+  }
+
+  if (creationRecoveryChapters.length > 0) {
+    const recoveredChapters =
+      fullChapters.length > 0
+        ? mergeChapterPayloadFallback(fullChapters, creationRecoveryChapters)
+        : inMemoryChapters.length > 0
+          ? mergeChapterPayloadFallback(inMemoryChapters, creationRecoveryChapters)
+          : creationRecoveryChapters;
+    if (
+      recoveredChapters.length > 0 &&
+      recoveredChapters.filter((chapter) => chapter.content?.trim()).length >
+        fullChapters.filter((chapter) => chapter.content?.trim()).length
+    ) {
+      fullChapters = recoveredChapters;
+      chapterStorageMode = 'indexeddb';
+      await persistProjectChapters(normalized.id, fullChapters);
+    }
+  }
+
   if (fullChapters.length > 0 && hasAnyChapterPayload(fullChapters)) {
+    traceStoryDebugEvent({
+      domain: 'storage',
+      action: 'project.load_full_chapters.success',
+      level: 'info',
+      summary: `Loaded full chapter payloads from ${chapterStorageMode}.`,
+      details: {
+        projectId: normalized.id,
+        selectedStorageMode: chapterStorageMode,
+        providerAvailable: Boolean(provider),
+        indexedDb: summarizeDebugChapters(indexedDbChapters),
+        provider: summarizeDebugChapters(providerChapters),
+        inMemory: summarizeDebugChapters(inMemoryChapters),
+        final: summarizeDebugChapters(fullChapters),
+      },
+    });
     return normalizeProject({
       ...normalized,
       chapters: fullChapters,
@@ -346,9 +721,80 @@ async function loadProjectWithFullChapters(project: Project): Promise<Project> {
     });
   }
 
+  // [Domain:Storage] FIX RC-2 — Retry with provider if it wasn't available earlier
+  // If we have chapter structure but zero content, and provider was null at the start
+  // of this function, check if it's now available (initProvider may have completed
+  // while we were querying IndexedDB).
+  if (
+    !provider &&
+    expectedChapterCount > 0 &&
+    !hasAnyChapterPayload(fullChapters)
+  ) {
+    const retryProvider = useStorageStore.getState().provider;
+    if (retryProvider) {
+      try {
+        const retried = await retryProvider.getProjectChapters(normalized.id);
+        if (retried.length > 0 && hasAnyChapterPayload(retried)) {
+          console.log('[loadProjectWithFullChapters] RC-2 retry succeeded — provider became available', {
+            projectId: normalized.id,
+            retriedCount: retried.length,
+            retriedWithContent: retried.filter((c) => c.content?.trim()).length,
+          });
+          traceStoryDebugEvent({
+            domain: 'storage',
+            action: 'project.load_full_chapters.retry_success',
+            level: 'info',
+            summary: 'Provider retry restored chapter content after initial provider absence.',
+            details: {
+              projectId: normalized.id,
+              providerMode: retryProvider.mode,
+              retried: summarizeDebugChapters(retried),
+            },
+          });
+          fullChapters = mergeChapterPayloadFallback(retried, inMemoryChapters);
+          chapterStorageMode = 'provider';
+
+          if (hasAnyChapterPayload(fullChapters)) {
+            return normalizeProject({
+              ...normalized,
+              chapters: fullChapters,
+              storageMode: chapterStorageMode,
+            });
+          }
+        }
+      } catch (retryError) {
+        console.warn('[loadProjectWithFullChapters] RC-2 retry failed:', retryError);
+        traceStoryDebugEvent({
+          domain: 'storage',
+          action: 'project.load_full_chapters.retry_failed',
+          level: 'warn',
+          summary: 'Provider retry failed during full chapter load.',
+          details: {
+            projectId: normalized.id,
+            error: retryError,
+          },
+        });
+      }
+    }
+  }
+
   // [Domain:Storage] STEP 3 — Fallback: trả chapters dù rỗng content (giữ structure)
   const bestAvailableChapters = fullChapters.length > 0 ? fullChapters : inMemoryChapters;
   if (bestAvailableChapters.length > 0) {
+    traceStoryDebugEvent({
+      domain: 'storage',
+      action: 'project.load_full_chapters.structure_only',
+      level: 'warn',
+      summary: 'Only chapter structure is available; content payload is still missing.',
+      details: {
+        projectId: normalized.id,
+        selectedStorageMode: bestAvailableChapters === inMemoryChapters ? normalized.storageMode : chapterStorageMode,
+        bestAvailable: summarizeDebugChapters(bestAvailableChapters),
+        indexedDb: summarizeDebugChapters(indexedDbChapters),
+        provider: summarizeDebugChapters(providerChapters),
+        creationRecovery: summarizeDebugChapters(creationRecoveryChapters),
+      },
+    });
     return normalizeProject({
       ...normalized,
       chapters: ensureChapterSequenceNumbers(bestAvailableChapters),
@@ -359,6 +805,21 @@ async function loadProjectWithFullChapters(project: Project): Promise<Project> {
   const inlineChapters = ensureChapterSequenceNumbers(normalized.chapters || []);
   const hasInlinePayload = inlineChapters.some((chapter) => chapter.content.trim() || chapter.summary?.trim());
   if (!hasInlinePayload) {
+    traceStoryDebugEvent({
+      domain: 'storage',
+      action: 'project.load_full_chapters.empty',
+      level: 'warn',
+      summary: `No chapter payloads found for project "${normalized.title}".`,
+      details: {
+        projectId: normalized.id,
+        expectedChapterCount,
+        providerAvailable: Boolean(provider),
+        indexedDb: summarizeDebugChapters(indexedDbChapters),
+        provider: summarizeDebugChapters(providerChapters),
+        inMemory: summarizeDebugChapters(inMemoryChapters),
+        creationRecovery: summarizeDebugChapters(creationRecoveryChapters),
+      },
+    });
     return normalizeProject({
       ...normalized,
       storageMode: inlineChapters.length > 0 ? 'indexeddb' : normalized.storageMode,
@@ -366,6 +827,16 @@ async function loadProjectWithFullChapters(project: Project): Promise<Project> {
   }
 
   await persistProjectChapters(normalized.id, inlineChapters);
+  traceStoryDebugEvent({
+    domain: 'storage',
+    action: 'project.load_full_chapters.inline_fallback',
+    level: 'warn',
+    summary: 'Inline chapter payload fallback was persisted.',
+    details: {
+      projectId: normalized.id,
+      inline: summarizeDebugChapters(inlineChapters),
+    },
+  });
   return normalizeProject({
     ...normalized,
     chapters: inlineChapters,
@@ -406,10 +877,58 @@ async function syncProjectMetadataToProvider(projectId: string) {
       `snapshot chapters are all empty-content but in-memory state has content. ` +
       `This prevents uploadProject from wiping Supabase chapters with stripped data.`
     );
+    traceStoryDebugEvent({
+      domain: 'storage',
+      action: 'project.metadata_sync.skipped_stripped_snapshot',
+      level: 'warn',
+      summary: 'Skipped provider metadata sync because snapshot would strip chapter content.',
+      details: {
+        projectId,
+        snapshot: summarizeDebugChapters(snap.chapters),
+        inMemory: summarizeDebugChapters(project.chapters),
+      },
+    });
     return;
   }
 
-  await provider.saveProject(snap).catch((e) => console.warn('[syncProjectMetadataToProvider] Provider saveProject failed:', e));
+  // [Domain:Storage] NOTE — allChaptersStripped guard REMOVED.
+  // uploadProject in sync_service.ts already handles stripped chapters safely:
+  // - Stripped chapters (content='') get metadata-only UPDATE (not UPSERT)
+  // - Content/summary columns are NOT touched for stripped chapters
+  // - Orphan cleanup only deletes chapters NOT in keepIds
+  // The guard was creating a deadlock: after reload, ALL chapters are stripped
+  // by partialize → sync blocked → even after hydration restores content,
+  // non-chapter metadata updates (updateWorld, addCharacter) were still blocked
+  // because syncProjectMetadataToProvider was the only sync path for those.
+
+  await provider.saveProject(snap)
+    .then(() => {
+      traceStoryDebugEvent({
+        domain: 'storage',
+        action: 'project.metadata_sync.success',
+        level: 'info',
+        summary: 'Project metadata synced to provider.',
+        details: {
+          projectId,
+          providerMode: provider.mode,
+          chapters: summarizeDebugChapters(snap.chapters),
+        },
+      });
+    })
+    .catch((e) => {
+      console.warn('[syncProjectMetadataToProvider] Provider saveProject failed:', e);
+      traceStoryDebugEvent({
+        domain: 'storage',
+        action: 'project.metadata_sync.failed',
+        level: 'error',
+        summary: 'Project metadata sync to provider failed.',
+        details: {
+          projectId,
+          providerMode: provider.mode,
+          error: e,
+        },
+      });
+    });
 }
 
 export const useProjectStore = create<ProjectState>()(
@@ -731,10 +1250,92 @@ export const useProjectStore = create<ProjectState>()(
         },
 
         replaceProjectChapters: async (id, chapters, options) => {
-          const normalizedChapters = ensureChapterSequenceNumbers(chapters);
+          const inputChapters = normalizeChapterCollection(chapters);
+          traceStoryDebugEvent({
+            domain: 'storage',
+            action: 'project.replace_chapters.start',
+            level: 'info',
+            summary: `Replacing chapters for project ${id}.`,
+            details: {
+              projectId: id,
+              requestedStorageMode: options?.storageMode ?? null,
+              input: summarizeDebugChapters(inputChapters),
+            },
+          });
           const project = get().projects.find((item) => item.id === id);
-          const nextStorageMode = options?.storageMode ?? 'indexeddb';
+          const inputIds = new Set(inputChapters.map((chapter) => chapter.id));
+          const inputSequences = new Set(
+            inputChapters
+              .map((chapter) => chapter.sequenceNumber)
+              .filter((sequenceNumber): sequenceNumber is number => sequenceNumber != null),
+          );
+          const keepMatchingFallbacks = (fallbackChapters: Chapter[]) =>
+            fallbackChapters.filter(
+              (chapter) =>
+                inputIds.has(chapter.id) ||
+                (chapter.sequenceNumber != null && inputSequences.has(chapter.sequenceNumber)),
+            );
+
+          // [Domain:Storage] STEP — Merge with existing stored chapters to prevent content wipe
+          // When batch flow passes chapters with stripped content for non-active chapters,
+          // this ensures we backfill from IndexedDB before persisting.
+          const storedChapters = (await getProjectChapters(id).catch((error) => {
+            console.warn('[replaceProjectChapters] Unable to load existing chapter payload fallback:', error);
+            return [];
+          })).map((chapter) => fromStoredChapter(chapter));
+
+          let normalizedChapters = mergeChapterPayloadFallback(
+            mergeChapterPayloadFallback(inputChapters, keepMatchingFallbacks(project?.chapters || [])),
+            keepMatchingFallbacks(storedChapters),
+          );
+
+          // [Domain:Storage] Guard — Prevent content wipe: if stored has more content
+          // chapters than our merged result, force re-merge to preserve content
+          const existingContentCount = storedChapters.filter((c) => c.content?.trim()).length;
+          const normalizedContentCount = normalizedChapters.filter((c) => c.content?.trim()).length;
+          if (existingContentCount > 0 && normalizedContentCount < existingContentCount) {
+            console.warn('[replaceProjectChapters] GUARD: Normalized has fewer content chapters than stored. Re-merging.', {
+              existingContentCount,
+              normalizedContentCount,
+            });
+            traceStoryDebugEvent({
+              domain: 'storage',
+              action: 'project.replace_chapters.guard_remerge',
+              level: 'warn',
+              summary: 'Replace chapters guard re-merged stored content to prevent content wipe.',
+              details: {
+                projectId: id,
+                existingContentCount,
+                normalizedContentCount,
+                stored: summarizeDebugChapters(storedChapters),
+                normalizedBeforeGuard: summarizeDebugChapters(normalizedChapters),
+              },
+            });
+            normalizedChapters = mergeChapterPayloadFallback(normalizedChapters, keepMatchingFallbacks(storedChapters));
+          }
+
+          // [Domain:Storage] Auto-upgrade storageMode to 'provider' when provider is available.
+          // Callers often pass 'indexeddb' but if we have a provider, data MUST be synced.
+          const provider = useStorageStore.getState().provider;
+          const nextStorageMode = provider
+            ? 'provider'
+            : (options?.storageMode ?? 'indexeddb');
           const nextUpdatedAt = now();
+
+          // [Domain:Storage] STEP — Update Zustand state FIRST so subsequent operations
+          // see fresh content immediately (prevents race where hydration reads stale state).
+          set((state) => ({
+            projects: updateProjectArray(state.projects, id, (project) => ({
+              ...project,
+              chapters: normalizedChapters,
+              storageMode: nextStorageMode,
+              updatedAt: nextUpdatedAt,
+            })),
+          }));
+
+          // [Domain:Storage] STEP — Persist to IndexedDB + provider IN PARALLEL.
+          // persistProjectChapters fires both IndexedDB and provider.replaceProjectChapters
+          // simultaneously via Promise.allSettled, ensuring provider gets data ASAP.
           const nextProject = project
             ? normalizeProject({
                 ...project,
@@ -744,43 +1345,80 @@ export const useProjectStore = create<ProjectState>()(
               })
             : null;
 
-          if (nextProject) {
-            await syncProviderProjectSnapshot(nextProject, 'replaceProjectChapters');
-          }
+          // Fire persistence and provider snapshot sync in parallel — don't await sequentially.
+          const persistPromise = persistProjectChapters(id, normalizedChapters);
+          const snapshotPromise = nextProject
+            ? syncProviderProjectSnapshot(nextProject, 'replaceProjectChapters')
+            : Promise.resolve();
 
-          await persistProjectChapters(id, normalizedChapters);
-          set((state) => ({
-            projects: updateProjectArray(state.projects, id, (project) => ({
-              ...project,
-              chapters: normalizedChapters,
+          await Promise.allSettled([persistPromise, snapshotPromise]);
+          traceStoryDebugEvent({
+            domain: 'storage',
+            action: 'project.replace_chapters.complete',
+            level: 'info',
+            summary: `Replaced and persisted chapters for project ${id}.`,
+            details: {
+              projectId: id,
               storageMode: nextStorageMode,
-              updatedAt: nextUpdatedAt,
-            })),
-          }));
+              normalized: summarizeDebugChapters(normalizedChapters),
+              providerAvailable: Boolean(provider),
+            },
+          });
         },
 
         hydrateProjectChapters: async (id) => {
           const project = get().projects.find((item) => item.id === id);
           if (!project) return;
+          traceStoryDebugEvent({
+            domain: 'storage',
+            action: 'project.hydrate.start',
+            level: 'info',
+            summary: `Hydrating project chapters for ${id}.`,
+            details: {
+              projectId: id,
+              current: summarizeDebugChapters(project.chapters),
+              storageMode: project.storageMode,
+            },
+          });
           const fullProject = await loadProjectWithFullChapters(project);
 
           // [Domain:Storage] STEP — Determine if state needs updating
           // Compare chapter-level content to detect hydration payload arriving
           const currentChapters = project.chapters;
           const loadedChapters = fullProject.chapters;
+          const currentWithContent = currentChapters.filter((c) => c.content?.trim()).length;
+          const loadedWithContent = loadedChapters.filter((c) => c.content?.trim()).length;
+
           const shouldUpdate =
             project.storageMode !== fullProject.storageMode ||
             currentChapters.length !== loadedChapters.length ||
+            // [Domain:Storage] FIX — Also update when loaded has MORE content chapters
+            // Previously, when both sides had empty content, hydration was skipped
+            loadedWithContent > currentWithContent ||
             currentChapters.some((chapter, index) => {
               const next = loadedChapters[index];
               if (!next) return true;
               // Nội dung mới đến từ storage → cần update
-              if (next.content && !chapter.content) return true;
+              if (next.content?.trim() && !chapter.content?.trim()) return true;
               // Content hoặc summary thay đổi
               return chapter.content !== next.content || chapter.summary !== next.summary;
             });
 
-          if (!shouldUpdate) return;
+          if (!shouldUpdate) {
+            traceStoryDebugEvent({
+              domain: 'storage',
+              action: 'project.hydrate.no_update',
+              level: 'info',
+              summary: `Hydration found no newer chapter payloads for ${id}.`,
+              details: {
+                projectId: id,
+                currentWithContent,
+                loadedWithContent,
+                loaded: summarizeDebugChapters(loadedChapters),
+              },
+            });
+            return;
+          }
 
           // [Domain:Storage] STEP — Merge: giữ content tốt nhất giữa current state và loaded
           // Tránh ghi đè content có sẵn bằng content rỗng từ hydration thất bại
@@ -805,6 +1443,44 @@ export const useProjectStore = create<ProjectState>()(
               updatedAt: project.updatedAt,
             })),
           }));
+          traceStoryDebugEvent({
+            domain: 'storage',
+            action: 'project.hydrate.updated',
+            level: 'info',
+            summary: `Hydration updated chapter payloads for ${id}.`,
+            details: {
+              projectId: id,
+              beforeContentChapters: currentWithContent,
+              loadedContentChapters: loadedWithContent,
+              merged: summarizeDebugChapters(mergedChapters),
+              storageMode: fullProject.storageMode,
+            },
+          });
+
+          // [Domain:Storage] STEP — Sync restored content to cloud
+          // If hydration brought back content that wasn't in state before
+          // (e.g. content was only in IndexedDB because provider was null
+          // during initial AI generation), push it to cloud now.
+          const restoredWithContent = mergedChapters.filter((c) => c.content?.trim()).length;
+          if (restoredWithContent > 0 && restoredWithContent > currentWithContent) {
+            console.log('[hydrateProjectChapters] Content restored — syncing to cloud', {
+              projectId: id,
+              before: currentWithContent,
+              after: restoredWithContent,
+            });
+            traceStoryDebugEvent({
+              domain: 'storage',
+              action: 'project.hydrate.restored_content_sync',
+              level: 'info',
+              summary: 'Hydration restored chapter content and queued cloud sync.',
+              details: {
+                projectId: id,
+                before: currentWithContent,
+                after: restoredWithContent,
+              },
+            });
+            void persistProjectChapters(id, mergedChapters);
+          }
         },
 
         migrateProjectsToDexie: async () => {
@@ -986,6 +1662,85 @@ export const useProjectStore = create<ProjectState>()(
         state.projects = state.projects.map((project) => normalizeProject(project));
         if (!state.activeProjectId && state.projects[0]) {
           state.activeProjectId = state.projects[0].id;
+        }
+        traceStoryDebugEvent({
+          domain: 'storage',
+          action: 'project_store.rehydrate',
+          level: 'info',
+          summary: 'Project store rehydrated from localStorage.',
+          details: {
+            activeProjectId: state.activeProjectId,
+            projectCount: state.projects.length,
+            projects: state.projects.slice(0, 10).map((project) => ({
+              id: project.id,
+              title: project.title,
+              storageMode: project.storageMode,
+              chapters: summarizeDebugChapters(project.chapters),
+            })),
+          },
+        });
+
+        // [Domain:Storage] Auto-hydrate active project after rehydration.
+        // partialize strips chapter content to '' — after reload, chapters only
+        // have titles. We need to restore content from IndexedDB/provider ASAP.
+        //
+        // FIX RC-1: Wait for StorageProvider to initialize before hydrating.
+        // Previously queueMicrotask ran hydrate immediately but provider was
+        // still null → Supabase chapters couldn't be fetched → content stayed empty.
+        // Now we poll for provider readiness (max 5s) before hydrating.
+        const projectId = state.activeProjectId;
+        if (projectId) {
+          queueMicrotask(async () => {
+            // [Domain:Storage] STEP 1 — Wait for provider (max 5 seconds)
+            const MAX_WAIT_MS = 5000;
+            const POLL_INTERVAL_MS = 100;
+            const start = Date.now();
+            while (
+              !useStorageStore.getState().provider &&
+              !useStorageStore.getState().initError &&
+              Date.now() - start < MAX_WAIT_MS
+            ) {
+              await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+            }
+
+            const providerReady = Boolean(useStorageStore.getState().provider);
+            console.log('[onRehydrateStorage] Hydrating project', projectId, {
+              providerReady,
+              waitedMs: Date.now() - start,
+            });
+            traceStoryDebugEvent({
+              domain: 'storage',
+              action: 'project_store.rehydrate.auto_hydrate',
+              level: 'info',
+              summary: 'Auto-hydrating active project after project store rehydrate.',
+              details: {
+                projectId,
+                providerReady,
+                waitedMs: Date.now() - start,
+              },
+            });
+
+            // [Domain:Storage] STEP 2 — Hydrate (will use provider if available, IndexedDB fallback otherwise)
+            useProjectStore.getState().hydrateProjectChapters(projectId)
+              .then(() => {
+                // [Domain:Storage] STEP 3 — After hydration restores content,
+                // trigger metadata sync so project metadata (title, world,
+                // characters, etc.) also reaches Supabase. The allChaptersStripped
+                // guard is removed, so this will succeed even if some chapters
+                // are still stripped.
+                void syncProjectMetadataToProvider(projectId);
+              })
+              .catch((err) => {
+                console.warn('[onRehydrateStorage] Auto-hydrate failed:', err);
+                traceStoryDebugEvent({
+                  domain: 'storage',
+                  action: 'project_store.rehydrate.auto_hydrate_failed',
+                  level: 'error',
+                  summary: 'Auto-hydrate failed after project store rehydrate.',
+                  details: { projectId, error: err },
+                });
+              });
+          });
         }
       },
     }

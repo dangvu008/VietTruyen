@@ -26,32 +26,40 @@ import { getModelForTask } from './model_router';
 import { useAiStore } from '../../store/use_ai_store';
 import { createId } from '../../core/id';
 import { quickTruncate } from './token_estimator';
+import { buildJsonObjectSystem } from './prompt_standard';
+import { buildOutlineCharacterGuardrails } from './character_cast_guardrails';
 
 // ─── System Prompts ─────────────────────────────────────
 
-const MASTER_OUTLINE_SYSTEM = `Bạn là nhà quy hoạch cốt truyện cấp cao cho tiểu thuyết mạng.
-Nhiệm vụ: Tạo TỔNG CƯƠNG (总纲) — bản thiết kế tổng thể cho toàn bộ truyện.
-Quy tắc:
-- Chia truyện thành các QUYỂN (volumes) hợp lý
-- Mỗi quyển có premise → escalation → climax → exit state
-- Xác định 3-Act Structure: Kết thúc Hồi 1, Midpoint Hồi 2, Kết thúc Hồi 2
-- Đảm bảo arc progression liên tục, không có volume "filler"
-- LUÔN trả về JSON hợp lệ. Không markdown, không giải thích ngoài JSON.`;
+const MASTER_OUTLINE_SYSTEM = buildJsonObjectSystem(
+  'Senior webnovel macro planner',
+  'Create a master outline for the full novel',
+  [
+    'Split the story into meaningful volumes with no filler volumes.',
+    'Each volume needs premise, escalation, climax, and exit state.',
+    'Define act boundaries for a 3-act structure.',
+    'Maintain continuous arc progression.',
+  ],
+);
 
-const VOLUME_OUTLINE_SYSTEM = `Bạn là Biên kịch chuyên chia chapter cho tiểu thuyết mạng.
-Nhiệm vụ: Tạo QUYỂN CƯƠNG (卷纲) — phân chia chi tiết từng chương trong 1 quyển.
-Quy tắc:
-- Mỗi chương phải có mục tiêu rõ ràng, xung đột, và hooks
-- Đảm bảo escalation dần đều, climax đúng vị trí
-- Hook cuối mỗi chương phải kéo sang chương sau
-- LUÔN trả về JSON hợp lệ.`;
+const VOLUME_OUTLINE_SYSTEM = buildJsonObjectSystem(
+  'Webnovel volume planner',
+  'Break one volume into chapter-level beats',
+  [
+    'Each chapter needs a clear goal, conflict, and hook.',
+    'Escalation should rise steadily toward the climax.',
+    'Chapter endings should pull the reader into the next chapter.',
+  ],
+);
 
-const CHAPTER_OUTLINE_SYSTEM = `Bạn là Đạo diễn cảnh cho tiểu thuyết mạng.
-Nhiệm vụ: Tạo CHƯƠNG CƯƠNG (章纲) chi tiết cho 1 chương cụ thể.
-Quy tắc:
-- Chia thành beats: Opening → Development → Turning Point → Cliffhanger
-- Xác định nhân vật on-stage, cảm xúc, và power level
-- LUÔN trả về JSON hợp lệ.`;
+const CHAPTER_OUTLINE_SYSTEM = buildJsonObjectSystem(
+  'Scene director for webnovels',
+  'Create a detailed beat outline for one chapter',
+  [
+    'Structure the chapter as opening, development, turning point, and cliffhanger.',
+    'Track on-stage characters, emotional state, and power level where relevant.',
+  ],
+);
 
 // ─── Resolvers ──────────────────────────────────────────
 
@@ -62,7 +70,10 @@ async function resolveModel() {
     aiStore.models,
     undefined,
     aiStore.activeModelId,
-    aiStore.taskModelOverrides
+    aiStore.taskModelOverrides,
+    aiStore.modelHealth,
+    [],
+    aiStore.preferredProvider
   );
   if (!model) throw new Error('Không tìm thấy AI model cho lập dàn ý.');
   return model;
@@ -98,6 +109,8 @@ ${project.characters.slice(0, 5).map(c => `- ${c.name} (${c.role}): ${quickTrunc
 
 THẾ GIỚI:
 ${quickTruncate(project.worldSetting || project.world?.geography || '', 200)}
+
+${buildOutlineCharacterGuardrails(project, 'master', `Chương 1-${project.targetChapters || 100}`)}
 
 Trả về JSON:
 {
@@ -188,6 +201,8 @@ QUYỂN ${volumeIndex + 1}: "${volume.title}"
 
 NHÂN VẬT CHÍNH:
 ${project.characters.slice(0, 5).map(c => `- ${c.name}: ${quickTruncate(c.traits, 60)}`).join('\n')}
+
+${buildOutlineCharacterGuardrails(project, 'volume', `Chương ${chStart}-${chEnd}`)}
 
 Trả về JSON:
 {
@@ -282,6 +297,8 @@ CHƯƠNG ${chapterOutline.chapterNumber}: "${chapterOutline.title}"
 
 NHÂN VẬT:
 ${project.characters.slice(0, 5).map(c => `- ${c.name} (${c.role})`).join('\n')}
+
+${buildOutlineCharacterGuardrails(project, 'chapter', `Chương ${chapterOutline.chapterNumber}`)}
 
 Trả về JSON:
 {

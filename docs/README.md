@@ -4,9 +4,10 @@
 
 - [Canonical Product Spec](./CANONICAL_PRODUCT_SPEC.md)
 - [Canonical Agent Spec](./CANONICAL_AGENT_SPEC.md)
+- [Prompt Standard](./PROMPT_STANDARD.md)
 
-Hai tài liệu trên là nguồn chân lý mới.  
-Nếu tài liệu cũ mâu thuẫn với 2 tài liệu này, ưu tiên 2 tài liệu canonical.
+The files above are the current source of truth.
+If older docs conflict with them, prefer the canonical docs and the prompt standard.
 
 ## Legacy / Reference Docs
 

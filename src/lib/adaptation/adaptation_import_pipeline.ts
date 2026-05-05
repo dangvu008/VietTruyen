@@ -128,6 +128,7 @@ export async function analyzeAdaptationPreviewProject(
     deps.getProjectMemoryEmbeddings ?? getProjectMemoryEmbeddings;
 
   await syncProjectMemoryBridgeImpl(previewProject, {
+    mirrorEmbeddings: false,
     onProgress: options?.onProgress,
   });
 

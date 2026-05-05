@@ -8,8 +8,9 @@ import {
 import { getProjectSnapshot } from '../../store/use_project_store';
 import type { ImpactRecord, RewriteTask } from '../../types/surgery';
 import type { Arc } from '../../types/story';
+import { buildSelectedPlotDirectionInstruction } from './selected_plot_direction';
 
-function buildArcInstructions(arc: Arc, records: ImpactRecord[]): string {
+function buildArcInstructions(arc: Arc, records: ImpactRecord[], directionInstruction: string): string {
   const reasons = records
     .slice(0, 4)
     .map((record) => `${record.targetLabel}: ${record.reason}`)
@@ -18,17 +19,19 @@ function buildArcInstructions(arc: Arc, records: ImpactRecord[]): string {
   return [
     `Rewrite summary cho ${arc.label} (${arc.chapterStart}-${arc.chapterEnd}).`,
     `Giữ premise chính nhưng vá continuity theo impact scan.`,
+    directionInstruction,
     reasons,
   ]
     .filter(Boolean)
     .join('\n');
 }
 
-function buildChapterInstructions(record: ImpactRecord): string {
+function buildChapterInstructions(record: ImpactRecord, directionInstruction: string): string {
   return [
     `Chương bị ảnh hưởng bởi directive "${record.targetLabel}".`,
     `Lý do: ${record.reason}`,
     `Hướng xử lý: ${record.recommendedAction}`,
+    directionInstruction,
   ].join('\n');
 }
 
@@ -54,6 +57,7 @@ export async function enqueueRewriteTasks(projectId: string, scanId: string): Pr
 
   const tasks: RewriteTask[] = [];
   const now = new Date().toISOString();
+  const selectedDirectionInstruction = buildSelectedPlotDirectionInstruction(spec.selectedPlotDirection);
 
   for (const arc of arcs.filter((item) => scan.impactedArcIds.includes(item.id))) {
     const arcRecords = scan.records.filter((record) => record.arcId === arc.id);
@@ -67,7 +71,7 @@ export async function enqueueRewriteTasks(projectId: string, scanId: string): Pr
       type: 'arc_summary',
       status: 'ready',
       title: `Rewrite ${arc.label}`,
-      instructions: buildArcInstructions(arc, arcRecords),
+      instructions: buildArcInstructions(arc, arcRecords, selectedDirectionInstruction),
       severity: arcRecords.some((record) => record.severity === 'critical')
         ? 'critical'
         : arcRecords.some((record) => record.severity === 'high')
@@ -95,7 +99,7 @@ export async function enqueueRewriteTasks(projectId: string, scanId: string): Pr
       type: 'chapter_rewrite',
       status: 'ready',
       title: `Sửa chương ${record.chapterIndex}`,
-      instructions: buildChapterInstructions(record),
+      instructions: buildChapterInstructions(record, selectedDirectionInstruction),
       severity: record.severity,
       reasonType: record.reasonType,
       chapterIndex: record.chapterIndex,
@@ -118,7 +122,10 @@ export async function enqueueRewriteTasks(projectId: string, scanId: string): Pr
       type: 'qa_review',
       status: 'pending',
       title: `QA ${arc.label}`,
-      instructions: `Kiểm tra entry/exit state, orphan foreshadowing và continuity của ${arc.label}.`,
+      instructions: [
+        `Kiểm tra entry/exit state, orphan foreshadowing và continuity của ${arc.label}.`,
+        selectedDirectionInstruction,
+      ].filter(Boolean).join('\n'),
       severity: 'medium',
       reasonType: 'downstream',
       chapterIndex: arc.chapterEnd,

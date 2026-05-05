@@ -7,27 +7,51 @@ describe('chapter_order', () => {
     expect(extractSequenceNumberFromTitle('Chapter 12')).toBe(12);
   });
 
-  it('falls back to newest-first array order when titles are not parseable', () => {
+  it('preserves existing array order when titles are not parseable', () => {
     const chapters = ensureChapterSequenceNumbers([
       {
-        id: 'ch_newest',
-        title: 'Đêm trước biến cố',
-        content: '',
-        status: 'draft',
-        createdAt: '2026-01-03',
-        updatedAt: '2026-01-03',
-      },
-      {
-        id: 'ch_oldest',
-        title: 'Khởi đầu',
+        id: 'ch_first',
+        title: 'Mở màn',
         content: '',
         status: 'draft',
         createdAt: '2026-01-01',
         updatedAt: '2026-01-01',
       },
+      {
+        id: 'ch_second',
+        title: 'Biến cố',
+        content: '',
+        status: 'draft',
+        createdAt: '2026-01-02',
+        updatedAt: '2026-01-02',
+      },
     ]);
 
-    expect(chapters[0].sequenceNumber).toBe(2);
-    expect(chapters[1].sequenceNumber).toBe(1);
+    expect(chapters[0].sequenceNumber).toBe(1);
+    expect(chapters[1].sequenceNumber).toBe(2);
+  });
+
+  it('preserves array order when parsed chapter numbers are duplicated', () => {
+    const chapters = ensureChapterSequenceNumbers([
+      {
+        id: 'draft-1',
+        title: 'Chương 1: Hồ Nữ',
+        content: '',
+        status: 'draft',
+        createdAt: '2026-01-01',
+        updatedAt: '2026-01-01',
+      },
+      {
+        id: 'full-1',
+        title: 'Chương 1: Hồ Nữ',
+        content: 'Nội dung',
+        status: 'revised',
+        createdAt: '2026-01-02',
+        updatedAt: '2026-01-02',
+      },
+    ]);
+
+    expect(chapters[0].sequenceNumber).toBe(1);
+    expect(chapters[1].sequenceNumber).toBe(2);
   });
 });

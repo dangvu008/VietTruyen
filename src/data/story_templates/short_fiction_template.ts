@@ -26,30 +26,38 @@ export const SHORT_FICTION_TEMPLATE: StoryTemplate = {
   ],
   "worldRules": [],
   "coolPatterns": [],
-  "conflictPatterns": [],
-  "outlineArcs": [
+  "conflictPatterns": [
     {
-      "title": "Quyển 1: Khởi Đầu",
-      "chapterRange": "1-80",
-      "coreFocus": "Giới thiệu thế giới.",
-      "coreConflict": "Xung đột đầu tiên.",
-      "climax": "Bước ngoặt."
+      "type": "知乎短篇题材模板 (Zhihu Short Story)",
+      "source": "> **核心卖点**: 短平快 + 强冲突 + 极致反转。3000-15000字内完成起承转合，前300字定生死。 --",
+      "resolution": "> **核心卖点**: 短平快 + 强冲突 + 极致反转。3000-15000字内完成起承转合，前300字定生死。 --"
     },
     {
-      "title": "Quyển 2: Phát Triển",
-      "chapterRange": "81-200",
-      "coreFocus": "Mở rộng.",
-      "coreConflict": "Xung đột chính.",
-      "climax": "Đỉnh cao."
+      "type": "黄金300字法则",
+      "source": "**前50字**: 制造悬念或冲突 **50-150字**: 建立人物处境 **150-300字**: 抛出核心矛盾 --",
+      "resolution": "**前50字**: 制造悬念或冲突 **50-150字**: 建立人物处境 **150-300字**: 抛出核心矛盾 --"
     },
     {
-      "title": "Quyển 3: Kết Thúc",
-      "chapterRange": "201-350",
-      "coreFocus": "Giải quyết.",
-      "coreConflict": "Đối đầu cuối.",
-      "climax": "Viên mãn."
+      "type": "字数分配黄金比例",
+      "source": "开篇钩子: 5%（抓住读者） 背景铺垫: 15%（快速带入） 矛盾升级: 40%（核心内容） 高潮反转: 25%（情感爆发） 结局收尾: 15%（余韵回味）",
+      "resolution": "开篇钩子: 5%（抓住读者） 背景铺垫: 15%（快速带入） 矛盾升级: 40%（核心内容） 高潮反转: 25%（情感爆发） 结局收尾: 15%（余韵回味）"
+    },
+    {
+      "type": "三秒人设法",
+      "source": "一句话定义角色: 职业/身份 + 核心特质 + 关键矛盾 示例: \"表面隐忍的豪门媳妇，实则手握全家把柄\" \"被渣男抛弃的前妻，其实是隐藏大佬\" \"卑微追妻的霸总，三年前亲手逼走了她\"",
+      "resolution": "一句话定义角色: 职业/身份 + 核心特质 + 关键矛盾 示例: \"表面隐忍的豪门媳妇，实则手握全家把柄\" \"被渣男抛弃的前妻，其实是隐藏大佬\" \"卑微追妻的霸总，三年前亲手逼走了她\""
     }
   ],
+  "outlineArcs": [
+    {
+      "title": "篇幅定位",
+      "chapterRange": "3000-5000",
+      "coreFocus": "类型 / 字数 / 适用场景 ------ / ------ / ---------- 微短篇 / 3000-5000 / 单一反转，情绪爆发 标准短篇 / 5000-10000 / 双重反转，完整弧光 长短篇 / 10000-15000 / 多重反转，复杂情感",
+      "coreConflict": "",
+      "climax": ""
+    }
+  ],
+  "targetChapterCount": 5000,
   "pitfalls": [
     {
       "description": "Thiết lập trước sau mâu thuẫn.",

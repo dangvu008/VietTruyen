@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import type { Chapter } from '../../types/story';
-import type { EditorAiProposal, EditorMode, EditorSelection } from './editor_types';
-import { Bold, Italic, Quote, Wand2, Search, RotateCcw, Clock3, FileText, PenLine, ChevronUp, ChevronDown, X, Sparkles, Square } from 'lucide-react';
+import type { EditorAiProposal, EditorMode, EditorSelection, EditorSelectionIntent } from './editor_types';
+import { Bold, Italic, Quote, Wand2, Search, RotateCcw, Clock3, FileText, PenLine, ChevronUp, ChevronDown, X, Sparkles, Square, ArrowRight, History, Play, Pause, FastForward, ZoomIn, ZoomOut, Maximize, Minimize, Brain, MessageCircle, Scissors, Palette, PencilLine } from 'lucide-react';
 import { useGenerationStore } from '../../store/use_generation_store';
+import { useAppearanceStore } from '../../store/use_appearance_store';
+import * as versionService from '../../lib/supabase/version_service';
 
 interface Props {
   chapter: Chapter | null;
@@ -14,9 +16,11 @@ interface Props {
   wordCount: number;
   readingTimeMinutes: number;
   lastSavedAt: string | null;
+  isDirty: boolean;
   emptyStateVariant: 'ai-draft' | 'load-failure' | 'loading';
   isGeneratingFromScratch: boolean;
   isReloadingChapterContent: boolean;
+  isRestoringImportedSource: boolean;
   batchProgress: { current: number; total: number; isRunning: boolean } | null;
   emptyChapterCount: number;
   onBatchGenerateAll: () => void;
@@ -25,19 +29,61 @@ interface Props {
   onAcceptProposal: () => void;
   onRejectProposal: () => void;
   onSelectionChange: (selection: EditorSelection | null) => void;
-  onSelectionAction: (action: string) => void;
+  onSelectionAction: (action: EditorSelectionIntent) => void;
   onGenerateFromScratch: () => void;
+  onContinueGeneration?: () => void;
   onStopScratch?: () => void;
   onRetryLoadContent: () => void;
+  onRestoreImportedSource: () => void;
+  onOpenReimportFlow?: () => void;
+  onOpenVersionHistory: () => void;
   hasSelection: boolean;
   onModeChange?: (mode: EditorMode) => void;
+  onNextChapter?: () => void;
 }
 
 const MODES: Array<{ id: EditorMode; label: string }> = [
   { id: 'write', label: 'Viết' },
   { id: 'read', label: 'Đọc' },
   { id: 'review', label: 'Review' },
-  { id: 'diff', label: 'Diff' },
+];
+
+const SELECTION_INTENT_ACTIONS: Array<{
+  id: EditorSelectionIntent;
+  label: string;
+  title: string;
+  icon: React.ComponentType<{ className?: string }>;
+}> = [
+  {
+    id: 'internal_monologue',
+    label: 'Nội tâm',
+    title: 'Sửa nội tâm nhân vật trong đoạn đang chọn',
+    icon: Brain,
+  },
+  {
+    id: 'dialogue',
+    label: 'Lời thoại',
+    title: 'Sửa lời thoại và nhịp trao đổi trong đoạn đang chọn',
+    icon: MessageCircle,
+  },
+  {
+    id: 'shorten',
+    label: 'Cắt ngắn',
+    title: 'Cắt gọn đoạn đang chọn nhưng giữ ý chính',
+    icon: Scissors,
+  },
+  {
+    id: 'enhance_details',
+    label: 'Chi tiết',
+    title: 'Tăng chi tiết cảm quan và hành động nhỏ cho đoạn đang chọn',
+    icon: Palette,
+  },
+  {
+    id: 'custom',
+    label: 'Tự nhập',
+    title: 'Tự nhập yêu cầu sửa riêng cho đoạn đang chọn',
+    icon: PencilLine,
+  },
 ];
 
 export const ChapterEditorPane: React.FC<Props> = ({
@@ -50,9 +96,11 @@ export const ChapterEditorPane: React.FC<Props> = ({
   wordCount,
   readingTimeMinutes,
   lastSavedAt,
+  isDirty,
   emptyStateVariant,
   isGeneratingFromScratch,
   isReloadingChapterContent,
+  isRestoringImportedSource,
   batchProgress,
   emptyChapterCount,
   onBatchGenerateAll,
@@ -63,18 +111,156 @@ export const ChapterEditorPane: React.FC<Props> = ({
   onSelectionChange,
   onSelectionAction,
   onGenerateFromScratch,
+  onContinueGeneration,
   onStopScratch,
   onRetryLoadContent,
+  onRestoreImportedSource,
+  onOpenReimportFlow,
+  onOpenVersionHistory,
   hasSelection,
   onModeChange,
+  onNextChapter,
 }) => {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const isAiStreaming = useGenerationStore((s) => s.isStreaming);
   const scratchStreamedText = useGenerationStore((s) => s.scratchStreamedText);
+  const [versionCount, setVersionCount] = useState(0);
+  const [latestVersionNumber, setLatestVersionNumber] = useState<number | null>(null);
+  const [latestVersionCreatedAt, setLatestVersionCreatedAt] = useState<string | null>(null);
   // Word count during streaming
   const streamingWordCount = scratchStreamedText
     ? scratchStreamedText.trim().split(/\s+/).filter(Boolean).length
     : 0;
+
+  // --- Reading Mode State ---
+  const isReadingModeFullscreen = useAppearanceStore((state) => state.isReadingModeFullscreen);
+  const toggleReadingModeFullscreen = useAppearanceStore((state) => state.toggleReadingModeFullscreen);
+  const readerFontSize = useAppearanceStore((state) => state.readerFontSize);
+  const setReaderFontSize = useAppearanceStore((state) => state.setReaderFontSize);
+
+  const [isAutoScrolling, setIsAutoScrolling] = useState(false);
+  const [scrollSpeed, setScrollSpeed] = useState(1);
+  const [isAutoNextEnabled, setIsAutoNextEnabled] = useState(false);
+  const [isTransitioning, setIsTransitioning] = useState(false);
+  const isTransitioningRef = useRef(false);
+
+  // Reset scroll and transition state when chapter changes
+  useEffect(() => {
+    isTransitioningRef.current = false;
+    setIsTransitioning(false);
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTop = 0;
+    }
+  }, [chapter?.id]);
+
+  // Ensure robust textarea resizing
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+
+    const adjustHeight = () => {
+      textarea.style.height = 'auto';
+      textarea.style.height = `${textarea.scrollHeight}px`;
+    };
+
+    // Initial and on content change
+    adjustHeight();
+
+    // On font load
+    document.fonts?.ready.then(adjustHeight);
+
+    // On window resize
+    window.addEventListener('resize', adjustHeight);
+
+    // Resize observer to catch any container layout changes
+    const resizeObserver = new ResizeObserver(() => adjustHeight());
+    resizeObserver.observe(textarea);
+
+    return () => {
+      window.removeEventListener('resize', adjustHeight);
+      resizeObserver.disconnect();
+    };
+  }, [localContent, mode, readerFontSize, isReadingModeFullscreen]);
+
+  // Auto scroll effect
+  useEffect(() => {
+    if (mode !== 'read' || !isAutoScrolling || !scrollContainerRef.current) return;
+    
+    let animationFrameId: number;
+    let lastTime = performance.now();
+    let exactScrollTop = scrollContainerRef.current.scrollTop;
+    
+    let isUserInteracting = false;
+    let interactionTimeout: NodeJS.Timeout | null = null;
+    
+    const container = scrollContainerRef.current;
+
+    const handleInteraction = (e: Event) => {
+      // Bỏ qua nếu user đang click vào các nút bấm (như nút bật/tắt auto-scroll)
+      if (e.type === 'mousedown') {
+        const target = e.target as HTMLElement;
+        if (target && target.closest('button')) return;
+      }
+
+      isUserInteracting = true;
+      if (interactionTimeout) clearTimeout(interactionTimeout);
+      interactionTimeout = setTimeout(() => {
+        isUserInteracting = false;
+        if (container) exactScrollTop = container.scrollTop;
+      }, 800); // Tạm dừng auto-scroll 800ms khi user tương tác
+    };
+
+    container.addEventListener('wheel', handleInteraction, { passive: true });
+    container.addEventListener('touchmove', handleInteraction, { passive: true });
+    container.addEventListener('mousedown', handleInteraction, { passive: true });
+    container.addEventListener('keydown', handleInteraction, { passive: true });
+    
+    const scrollLoop = (time: number) => {
+      const delta = time - lastTime;
+      lastTime = time;
+      
+      if (container) {
+        // Đồng bộ nếu user scroll bằng tay
+        if (Math.abs(container.scrollTop - Math.round(exactScrollTop)) > 2) {
+          exactScrollTop = container.scrollTop;
+        }
+
+        const pixelsToScroll = (scrollSpeed * delta) / 16;
+        
+        // Only scroll if we are not waiting for the next chapter and user is not interacting
+        if (!isTransitioningRef.current && !isUserInteracting) {
+          exactScrollTop += pixelsToScroll;
+          container.scrollTop = exactScrollTop;
+        }
+        
+        if (container.scrollTop + container.clientHeight >= container.scrollHeight - 1) {
+          if (isAutoNextEnabled && !isTransitioningRef.current) {
+            isTransitioningRef.current = true;
+            setIsTransitioning(true);
+            setTimeout(() => {
+              onNextChapter?.();
+            }, 3000);
+          }
+          // Nếu không bật Auto-Next, ta cứ để nguyên trạng thái isAutoScrolling = true
+          // Vòng lặp vẫn chạy nhưng trình duyệt không cuộn thêm được. 
+          // Khi người dùng bấm Next Chapter bằng tay, scrollTop về 0, nó sẽ tự cuộn tiếp!
+        }
+      }
+      animationFrameId = requestAnimationFrame(scrollLoop);
+    };
+    
+    animationFrameId = requestAnimationFrame(scrollLoop);
+    
+    return () => {
+      cancelAnimationFrame(animationFrameId);
+      if (interactionTimeout) clearTimeout(interactionTimeout);
+      container.removeEventListener('wheel', handleInteraction);
+      container.removeEventListener('touchmove', handleInteraction);
+      container.removeEventListener('mousedown', handleInteraction);
+      container.removeEventListener('keydown', handleInteraction);
+    };
+  }, [mode, isAutoScrolling, scrollSpeed, isAutoNextEnabled, onNextChapter]);
 
   // --- Find & Replace State ---
   const [showSearch, setShowSearch] = useState(false);
@@ -124,6 +310,37 @@ export const ChapterEditorPane: React.FC<Props> = ({
       }
     }
   }, [currentMatchIndex, matches, showSearch]);
+
+  useEffect(() => {
+    if (!chapter?.id) {
+      setVersionCount(0);
+      setLatestVersionNumber(null);
+      setLatestVersionCreatedAt(null);
+      return;
+    }
+
+    let cancelled = false;
+
+    void versionService
+      .listVersions(chapter.id)
+      .then((versions) => {
+        if (cancelled) return;
+        setVersionCount(versions.length);
+        setLatestVersionNumber(versions[0]?.version_number ?? null);
+        setLatestVersionCreatedAt(versions[0]?.created_at ?? null);
+      })
+      .catch((error) => {
+        console.warn('[ChapterEditorPane] Failed to load version summary:', error);
+        if (cancelled) return;
+        setVersionCount(0);
+        setLatestVersionNumber(null);
+        setLatestVersionCreatedAt(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [chapter?.id, lastSavedAt]);
 
   const handleNextMatch = () => {
     if (matches.length > 0) {
@@ -183,10 +400,23 @@ export const ChapterEditorPane: React.FC<Props> = ({
   };
 
   const hasVisibleContent = Boolean(localContent.trim());
+  const isInterruptedGeneration =
+    Boolean(hasVisibleContent) &&
+    (chapter?.generationStatus === 'partial' || chapter?.generationStatus === 'failed');
   const saveLabel = lastSavedAt
     ? `Đã lưu lúc ${new Date(lastSavedAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}`
     : 'Chưa lưu';
   const isLoadFailureState = emptyStateVariant === 'load-failure';
+  const latestVersionTimeLabel = latestVersionCreatedAt
+    ? new Date(latestVersionCreatedAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
+    : null;
+  const versionFlowLabel = latestVersionNumber != null ? `Mốc lưu v${latestVersionNumber}` : 'Mốc lưu đầu tiên';
+  const draftFlowLabel = isDirty ? 'Nháp hiện tại' : 'Bản đang mở';
+  const versionHelperText = latestVersionNumber != null
+    ? isDirty
+      ? `Bạn đang chỉnh trên nháp chưa lưu. Có thể quay lại v${latestVersionNumber} bất cứ lúc nào.`
+      : `v${latestVersionNumber}${latestVersionTimeLabel ? ` được lưu lúc ${latestVersionTimeLabel}` : ''} là mốc khôi phục gần nhất.`
+    : 'Mỗi lần lưu chương sẽ tạo một mốc để so sánh và khôi phục.';
 
   if (!chapter) {
     return (
@@ -297,7 +527,7 @@ export const ChapterEditorPane: React.FC<Props> = ({
   return (
     <div className="flex h-full flex-col font-sans relative">
       {/* Scrollable Content */}
-      <div className="flex-1 overflow-y-auto px-10 pt-16 pb-32 flex flex-col items-center relative">
+      <div ref={scrollContainerRef} className={`flex-1 overflow-y-auto px-4 pt-2 sm:px-10 flex flex-col items-center relative ${isReadingModeFullscreen ? 'pb-6' : 'pb-16'}`}>
         
         {/* Find & Replace Floating Panel */}
         {showSearch && (
@@ -353,24 +583,24 @@ export const ChapterEditorPane: React.FC<Props> = ({
         )}
 
         {/* Title Area */}
-        <div className="w-full max-w-[680px] mb-8">
+        <div className={`w-full ${isReadingModeFullscreen ? 'max-w-[1000px]' : 'max-w-[760px]'} mb-2`}>
           {partLabel && (
-            <div className="text-[13px] uppercase tracking-[0.2em] text-[#8f7f73] mb-3">
+            <div className="mb-1 text-[11px] uppercase tracking-[0.22em] text-[#8f7f73] sm:text-[12px]">
               {partLabel}
             </div>
           )}
           <textarea
             value={localTitle}
             onChange={(e) => onTitleChange(e.target.value)}
-            className="w-full resize-none border-none bg-transparent font-serif text-[40px] font-medium leading-[1.2] text-text-primary outline-none placeholder:text-[#685c52]"
+            className="w-full resize-none border-none bg-transparent font-serif text-[26px] font-medium leading-[1.12] text-text-primary outline-none placeholder:text-[#685c52] sm:text-[28px] lg:text-[30px]"
             placeholder="Tên chương..."
             rows={1}
-            style={{ height: 'auto', minHeight: '60px' }}
+            style={{ height: 'auto', minHeight: '38px' }}
           />
         </div>
 
         {/* Floating Toolbars Container */}
-        <div className="w-full max-w-[680px] flex justify-between items-center mb-[-20px] relative z-10 gap-3">
+        <div className={`relative z-10 mb-4 flex w-full ${isReadingModeFullscreen ? 'max-w-[1000px]' : 'max-w-[760px]'} flex-wrap items-center justify-between gap-3`}>
           
           {/* Left: Mode Switcher & Search */}
           <div className="flex items-center gap-2">
@@ -379,8 +609,8 @@ export const ChapterEditorPane: React.FC<Props> = ({
                 <button
                   key={item.id}
                   onClick={() => onModeChange?.(item.id as EditorMode)}
-                  className={`rounded-full px-4 py-1.5 text-[12px] font-medium transition ${
-                    (mode === item.id || (mode === 'write' && item.id === 'write'))
+                  className={`rounded-full px-3.5 py-1.5 text-[12px] font-medium transition sm:px-4 ${
+                    (mode === item.id || ((mode === 'write' || mode === 'detail') && item.id === 'write'))
                       ? 'bg-[#2a2420] text-text-primary shadow-sm border border-white/5'
                       : 'text-[#8f7f73] hover:text-[#c8beb0]'
                   }`}
@@ -398,6 +628,34 @@ export const ChapterEditorPane: React.FC<Props> = ({
               <Search className="h-[14px] w-[14px]" />
             </button>
           </div>
+
+          {mode === 'read' && (
+            <div className="flex items-center gap-2 rounded-full bg-[#1b1715]/90 backdrop-blur-sm p-1 border border-white/5 shadow-ambient">
+              <button onClick={() => setReaderFontSize(Math.max(12, readerFontSize - 2))} className="p-1.5 text-[#8f7f73] hover:text-[#c8beb0] transition rounded-full" title="Thu nhỏ">
+                <ZoomOut className="h-[14px] w-[14px]" />
+              </button>
+              <span className="text-[12px] text-[#8f7f73] font-medium w-4 text-center">{readerFontSize}</span>
+              <button onClick={() => setReaderFontSize(Math.min(32, readerFontSize + 2))} className="p-1.5 text-[#8f7f73] hover:text-[#c8beb0] transition rounded-full" title="Phóng to">
+                <ZoomIn className="h-[14px] w-[14px]" />
+              </button>
+              <div className="w-[1px] h-3 bg-white/10 mx-1" />
+              <button onClick={() => setIsAutoScrolling(!isAutoScrolling)} className={`p-1.5 transition rounded-full ${isAutoScrolling ? 'bg-accent-amber/20 text-accent-amber' : 'text-[#8f7f73] hover:text-[#c8beb0]'}`} title={isAutoScrolling ? "Dừng cuộn" : "Tự động cuộn"}>
+                {isAutoScrolling ? <Pause className="h-[14px] w-[14px]" /> : <Play className="h-[14px] w-[14px]" />}
+              </button>
+              <button onClick={() => setScrollSpeed(s => s >= 3 ? 1 : s + 1)} className="p-1.5 text-[#8f7f73] hover:text-[#c8beb0] transition rounded-full flex items-center gap-1" title={`Tốc độ: ${scrollSpeed}x`}>
+                <FastForward className="h-[14px] w-[14px]" />
+                <span className="text-[10px]">{scrollSpeed}x</span>
+              </button>
+              <div className="w-[1px] h-3 bg-white/10 mx-1" />
+              <button onClick={() => setIsAutoNextEnabled(!isAutoNextEnabled)} className={`px-3 py-1 text-[11px] font-medium transition rounded-full ${isAutoNextEnabled ? 'bg-accent-amber/20 text-accent-amber' : 'text-[#8f7f73] hover:text-[#c8beb0]'}`} title="Tự động Next chương khi đọc xong">
+                Auto-Next
+              </button>
+              <div className="w-[1px] h-3 bg-white/10 mx-1" />
+              <button onClick={toggleReadingModeFullscreen} className={`p-1.5 transition rounded-full ${isReadingModeFullscreen ? 'bg-accent-amber/20 text-accent-amber' : 'text-[#8f7f73] hover:text-[#c8beb0]'}`} title={isReadingModeFullscreen ? "Thu nhỏ" : "Toàn màn hình"}>
+                {isReadingModeFullscreen ? <Minimize className="h-[14px] w-[14px]" /> : <Maximize className="h-[14px] w-[14px]" />}
+              </button>
+            </div>
+          )}
           
           {/* Right: Contextual Format + AI Toolbar (Visible only on select) */}
           <div className={`transition-all duration-300 ${hasSelection ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2 pointer-events-none'}`}>
@@ -417,33 +675,39 @@ export const ChapterEditorPane: React.FC<Props> = ({
               
               <div className="w-[1px] h-3 bg-white/10 mx-1" />
               
-              {/* AI Actions */}
+              {/* AI Intent Actions */}
               <div className="flex items-center gap-0.5 pr-1">
-                <div className="px-1.5 flex items-center gap-1.5 text-accent-amber/60">
+                <div className="flex items-center gap-1.5 px-1.5 text-accent-amber/60">
                    <Wand2 className="h-[11px] w-[11px]" />
                 </div>
-                {['Viết lại', 'Rút gọn', 'Phân tích'].map((action) => (
-                  <button 
-                    key={action}
-                    onClick={() => onSelectionAction(action)}
-                    className="px-2.5 py-1 text-[11px] font-medium text-[#c5b8ad] hover:text-accent-amber hover:bg-white/5 rounded-full transition whitespace-nowrap"
-                  >
-                    {action}
-                  </button>
-                ))}
+                {SELECTION_INTENT_ACTIONS.map((action) => {
+                  const Icon = action.icon;
+                  return (
+                    <button
+                      key={action.id}
+                      type="button"
+                      onClick={() => onSelectionAction(action.id)}
+                      className="inline-flex h-7 items-center gap-1.5 rounded-full px-2 py-1 text-[11px] font-medium text-[#c5b8ad] transition hover:bg-white/5 hover:text-accent-amber"
+                      title={action.title}
+                    >
+                      <Icon className="h-3 w-3" />
+                      <span className="whitespace-nowrap">{action.label}</span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
           </div>
         </div>
 
         {/* Editor Card Area */}
-        <div className="w-full max-w-[760px] bg-[#161311] rounded-[40px] px-12 pt-20 pb-16 shadow-2xl border border-white/[0.03] transition-colors duration-300">
+        <div className={`flex w-full ${isReadingModeFullscreen ? 'max-w-[1100px] min-h-[80vh]' : 'max-w-[820px]'} grow shrink-0 flex-col rounded-[28px] border border-white/[0.03] bg-[#161311] px-8 pb-6 pt-8 shadow-2xl transition-all duration-300 sm:px-10`}>
           {/* Streaming indicator — shows when AI is actively generating */}
           {isAiStreaming && !isGeneratingFromScratch && (
             <div className="mb-6 flex items-center gap-3 rounded-2xl border border-accent-amber/15 bg-accent-amber/5 px-5 py-3">
               <Sparkles className="h-4 w-4 text-accent-amber animate-pulse" />
               <span className="text-[13px] font-medium text-accent-amber/90">
-                Nàng Thơ đang viết... Bạn có thể theo dõi ở panel bên phải.
+                Trợ lý AI đang viết... Bạn có thể theo dõi ở panel bên phải.
               </span>
             </div>
           )}
@@ -477,6 +741,29 @@ export const ChapterEditorPane: React.FC<Props> = ({
               </button>
             </div>
           )}
+          {isInterruptedGeneration && !isGeneratingFromScratch && (
+            <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-500/25 bg-amber-500/10 px-5 py-3">
+              <div className="min-w-0">
+                <p className="text-[13px] font-semibold text-amber-200">
+                  Chương này đang tạo dở.
+                </p>
+                <p className="mt-0.5 text-[11px] text-amber-200/70">
+                  Nội dung hiện có mới {wordCount.toLocaleString('vi-VN')} từ. Có thể tiếp tục từ câu cuối thay vì viết lại từ đầu.
+                </p>
+              </div>
+              {onContinueGeneration && (
+                <button
+                  type="button"
+                  onClick={onContinueGeneration}
+                  disabled={batchProgress?.isRunning}
+                  className="inline-flex shrink-0 items-center justify-center gap-2 rounded-full bg-amber-300 px-4 py-2 text-[12px] font-bold text-[#2a1c14] transition hover:bg-amber-200 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <Wand2 className="h-3.5 w-3.5" />
+                  Tiếp tục
+                </button>
+              )}
+            </div>
+          )}
           {!hasVisibleContent && (
             <div className="mb-8 rounded-[28px] border border-accent-amber/15 bg-accent-amber/5 px-6 py-5">
               <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
@@ -497,7 +784,7 @@ export const ChapterEditorPane: React.FC<Props> = ({
                     {emptyStateVariant === 'loading'
                       ? 'Hệ thống đang nạp lại nội dung từ storage. Vui lòng chờ trong giây lát.'
                       : isLoadFailureState
-                      ? 'Đây là project phóng tác/upload nên không tự động dựng lại bằng AI. Hãy thử tải lại nội dung từ storage trước.'
+                      ? 'Đây là project phóng tác/upload. Hãy thử reload từ storage; nếu vẫn lỗi, có thể khôi phục lại toàn bộ chapters từ snapshot import gần nhất.'
                       : 'Bạn có thể tự viết tay hoặc yêu cầu AI dựng lại chương từ đầu dựa trên outline, canon và ngữ cảnh đã chốt.'}
                   </p>
                 </div>
@@ -508,15 +795,46 @@ export const ChapterEditorPane: React.FC<Props> = ({
                     Đang tải...
                   </div>
                 ) : isLoadFailureState ? (
-                  <button
-                    type="button"
-                    onClick={onRetryLoadContent}
-                    disabled={isReloadingChapterContent}
-                    className="inline-flex items-center justify-center gap-2 rounded-full bg-accent-amber px-5 py-3 text-[13px] font-bold text-[#2a1c14] transition hover:bg-[#ffd7ab] disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    <RotateCcw className={`h-4 w-4 ${isReloadingChapterContent ? 'animate-spin' : ''}`} />
-                    {isReloadingChapterContent ? 'Đang tải lại nội dung...' : 'Tải lại nội dung'}
-                  </button>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={onRetryLoadContent}
+                      disabled={isReloadingChapterContent}
+                      className="inline-flex items-center justify-center gap-2 rounded-full bg-accent-amber px-5 py-3 text-[13px] font-bold text-[#2a1c14] transition hover:bg-[#ffd7ab] disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      <RotateCcw className={`h-4 w-4 ${isReloadingChapterContent ? 'animate-spin' : ''}`} />
+                      {isReloadingChapterContent ? 'Đang tải lại nội dung...' : 'Tải lại nội dung'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={onRestoreImportedSource}
+                      disabled={isReloadingChapterContent || isRestoringImportedSource}
+                      className="inline-flex items-center justify-center gap-2 rounded-full border border-accent-amber/30 bg-accent-amber/10 px-5 py-3 text-[13px] font-bold text-accent-amber transition hover:bg-accent-amber/20 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      <History className={`h-4 w-4 ${isRestoringImportedSource ? 'animate-spin' : ''}`} />
+                      {isRestoringImportedSource ? 'Đang khôi phục bản import...' : 'Khôi phục bản import gần nhất'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={onGenerateFromScratch}
+                      disabled={isGeneratingFromScratch || isReloadingChapterContent || isRestoringImportedSource || batchProgress?.isRunning}
+                      className="inline-flex items-center justify-center gap-2 rounded-full border border-accent-amber/30 bg-accent-amber/10 px-5 py-3 text-[13px] font-bold text-accent-amber transition hover:bg-accent-amber/20 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      <Wand2 className={`h-4 w-4 ${isGeneratingFromScratch ? 'animate-pulse' : ''}`} />
+                      {isGeneratingFromScratch ? 'AI đang dựng chương...' : 'AI tạo lại từ đầu'}
+                    </button>
+                    {onOpenReimportFlow ? (
+                      <button
+                        type="button"
+                        onClick={onOpenReimportFlow}
+                        disabled={isReloadingChapterContent || isRestoringImportedSource}
+                        className="inline-flex items-center justify-center gap-2 rounded-full border border-white/15 bg-white/5 px-5 py-3 text-[13px] font-bold text-[#f2e7dc] transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        <ArrowRight className="h-4 w-4" />
+                        Import lại & ghi đè
+                      </button>
+                    ) : null}
+                  </div>
                 ) : (
                   <div className="flex flex-col gap-3">
                     <button
@@ -553,46 +871,83 @@ export const ChapterEditorPane: React.FC<Props> = ({
             onChange={(e) => mode === 'write' && onContentChange(e.target.value)}
             onSelect={handleSelect}
             readOnly={mode !== 'write'}
-            className={`w-full min-h-[500px] resize-none border-none bg-transparent font-serif text-[19px] leading-[2.2] outline-none placeholder:text-[#5c5249] selection:bg-accent-amber/20 selection:text-accent-amber transition-colors text-[#dcd1c6]`}
+            className={`grow shrink-0 ${isReadingModeFullscreen ? 'min-h-[75vh]' : 'min-h-[400px]'} w-full resize-none border-none bg-transparent pr-3 font-serif text-[18px] leading-[2] outline-none placeholder:text-[#5c5249] selection:bg-accent-amber/20 selection:text-accent-amber transition-colors text-[#dcd1c6] sm:text-[19px] overflow-hidden`}
+            style={{ fontSize: mode === 'read' ? `${readerFontSize}px` : undefined }}
             placeholder="Bắt đầu viết chương của bạn tại đây..."
           />
+
+          {/* Auto-Next Transition Indicator */}
+          <div className={`mt-4 flex w-full flex-col items-center justify-center overflow-hidden transition-all duration-500 ease-in-out ${isTransitioning ? 'opacity-100 max-h-[100px] py-4' : 'opacity-0 max-h-0 py-0'}`}>
+            <div className="flex items-center gap-3 rounded-full bg-[#1b1715]/90 border border-accent-amber/20 px-5 py-2.5 shadow-[0_4px_20px_rgba(240,197,154,0.1)]">
+              <RotateCcw className="h-4 w-4 animate-spin text-accent-amber" />
+              <span className="text-[13px] font-medium text-accent-amber">Đang chuẩn bị sang chương tiếp theo...</span>
+            </div>
+            <div className="mt-3 h-1 w-48 overflow-hidden rounded-full bg-white/5 relative">
+              <div 
+                className="absolute left-0 top-0 h-full bg-accent-amber/60 rounded-full" 
+                style={{ 
+                  width: isTransitioning ? '100%' : '0%',
+                  transition: isTransitioning ? 'width 3s linear' : 'none'
+                }} 
+              />
+            </div>
+          </div>
         </div>
 
       </div>
 
-      {/* Footer / Versions timeline */}
-      <div className="absolute bottom-0 w-full left-0 right-0 bg-[#0c0a09]/80 backdrop-blur-md border-t border-white/5">
-        
-        {/* Timeline Row */}
-        <div className="flex items-center justify-center py-4 border-b border-white/[0.02] gap-4 w-full">
-           <span className="text-[11px] font-semibold tracking-[0.1em] text-[#8f7f73] mr-4">PHIÊN BẢN</span>
-           {aiProposal ? (
-             <>
-               <button className="px-4 py-1.5 rounded-full text-[12px] transition bg-[#1f1a18] text-[#8f7f73] border border-white/5">
-                 Bản hiện tại
-               </button>
-               <div className="w-8 h-[1px] bg-white/10" />
-               <button className="px-4 py-1.5 rounded-full text-[12px] transition bg-[#362a22] text-accent-amber border border-accent-amber/20 shadow-[0_0_10px_rgba(240,197,154,0.1)]">
-                 AI Đề xuất
-               </button>
-             </>
-           ) : (
-             <button className="px-4 py-1.5 rounded-full text-[12px] transition bg-[#362a22] text-accent-amber border border-accent-amber/20 shadow-[0_0_10px_rgba(240,197,154,0.1)]">
-               Bản hiện tại
-             </button>
-           )}
-        </div>
+      {/* Footer / Version flow */}
+      {!isReadingModeFullscreen && (
+        <div className="shrink-0 border-t border-white/5 bg-[#0c0a09]/80 backdrop-blur-md">
+          <div className="flex flex-col gap-3 px-6 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#8f7f73]">
+                  Phiên bản
+                </span>
+                <span className="rounded-full border border-white/5 bg-[#1f1a18] px-3 py-1 text-[12px] text-[#c8beb0]">
+                  {versionFlowLabel}
+                </span>
+                <ArrowRight className="h-3.5 w-3.5 text-[#5f544b]" />
+                <span className={`rounded-full border px-3 py-1 text-[12px] ${
+                  isDirty
+                    ? 'border-accent-amber/20 bg-[#362a22] text-accent-amber'
+                    : 'border-white/5 bg-[#181412] text-[#c8beb0]'
+                }`}>
+                  {draftFlowLabel}
+                </span>
+                {aiProposal && (
+                  <>
+                    <ArrowRight className="h-3.5 w-3.5 text-[#5f544b]" />
+                    <span className="rounded-full border border-accent-amber/20 bg-[#362a22] px-3 py-1 text-[12px] text-accent-amber shadow-[0_0_10px_rgba(240,197,154,0.1)]">
+                      AI đề xuất
+                    </span>
+                  </>
+                )}
+              </div>
+              <p className="mt-1 text-[12px] text-[#8f7f73]">
+                {versionHelperText}
+              </p>
+            </div>
 
-        {/* Stats Row */}
-        <div className="flex items-center justify-between px-8 py-3 text-[12px] text-[#8f7f73]">
-           <span>{saveLabel}</span>
-           <div className="flex items-center gap-6">
-             <span>{wordCount.toLocaleString()} từ</span>
-             <span>~{readingTimeMinutes} phút đọc</span>
-           </div>
+            <div className="flex flex-wrap items-center gap-2 text-[12px] text-[#8f7f73] sm:justify-end">
+              <span>{saveLabel}</span>
+              <span className="hidden text-white/15 sm:inline">•</span>
+              <span>{wordCount.toLocaleString()} từ</span>
+              <span className="hidden text-white/15 sm:inline">•</span>
+              <span>~{readingTimeMinutes} phút đọc</span>
+              <button
+                type="button"
+                onClick={onOpenVersionHistory}
+                className="ml-0 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-[12px] font-medium text-[#c8beb0] transition hover:border-accent-amber/20 hover:text-accent-amber sm:ml-2"
+              >
+                <History className="h-3.5 w-3.5" />
+                {versionCount > 0 ? `Lịch sử (${versionCount})` : 'Lịch sử phiên bản'}
+              </button>
+            </div>
+          </div>
         </div>
-
-      </div>
+      )}
     </div>
   );
 };

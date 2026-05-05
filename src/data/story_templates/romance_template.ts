@@ -11,7 +11,7 @@ import type { StoryTemplate } from '../../types/story_template';
 export const ROMANCE_TEMPLATE: StoryTemplate = {
   id: 'romance',
   name: 'Ngôn Tình / Ngọt Sủng',
-  originalName: '青春甜宠 + 豪门总裁',
+  originalName: '青春甜宠 + CEO giàu có',
   coreSellingPoint: 'Tương tác tình cảm dẫn dắt cốt truyện, rung động + ngược luyến + HE.',
   tags: ['romance', 'sweet', 'modern', 'love'],
 
@@ -97,4 +97,66 @@ export const ROMANCE_TEMPLATE: StoryTemplate = {
   },
 
   constraintPacks: ['Pack R01', 'Pack U01'],
+
+  characterArchetypes: [
+    {
+      role: 'Chính — Nam chính',
+      narrativeFunction: 'Dẫn dắt tuyến tình cảm, tạo rung động và bảo vệ nữ chính',
+      personalityHint: 'Lạnh ngoài ấm trong, hoặc ấm áp chiều chuộng, giỏi giang nhưng có điểm yếu',
+      primaryArc: 'Quyển 1: Gặp Gỡ',
+      suggestedCount: [1, 1],
+    },
+    {
+      role: 'Chính — Nữ chính',
+      narrativeFunction: 'Cần có agency riêng, không chỉ là đối tượng tình cảm',
+      personalityHint: 'Độc lập, thông minh, có ước mơ riêng ngoài tình yêu',
+      primaryArc: 'Quyển 1: Gặp Gỡ',
+      suggestedCount: [1, 1],
+    },
+    {
+      role: 'Đồng hành — Bạn thân nữ chính/nam chính',
+      narrativeFunction: 'Tâm sự, thúc đẩy tiến triển tình cảm, comic relief',
+      personalityHint: 'Hoạt bát, nhiều chuyện, thích se duyên, trung thành',
+      suggestedCount: [1, 2],
+    },
+    {
+      role: 'Đối thủ — Tình địch',
+      narrativeFunction: 'Tạo ghen tuông, thử thách tình cảm CP, đẩy tension',
+      personalityHint: 'Hấp dẫn bên ngoài, tốt bụng hoặc thâm hiểm tùy sub-genre',
+      primaryArc: 'Quyển 2: Tiến Triển',
+      suggestedCount: [1, 2],
+    },
+    {
+      role: 'Gác cổng — Gia đình phản đối',
+      narrativeFunction: 'Tạo rào cản ngoại lực, thử thách quyết tâm CP',
+      personalityHint: 'Nghiêm khắc, có lý do riêng (bảo vệ con/gia đình)',
+      primaryArc: 'Quyển 3: Sóng Gió',
+      suggestedCount: [1, 2],
+    },
+    {
+      role: 'Hài hước — Đồng nghiệp/bạn bè',
+      narrativeFunction: 'Giảm căng thẳng, tạo tình huống hài hước, giúp đỡ CP',
+      personalityHint: 'Lém lỉnh, nhiệt tình, đôi khi gây rắc rối vô ý',
+      suggestedCount: [1, 2],
+    },
+    {
+      role: 'Chất xúc tác — Người từ quá khứ',
+      narrativeFunction: 'Kích hoạt xung đột hoặc hé lộ bí mật, thúc đẩy plot twist',
+      personalityHint: 'Bí ẩn, liên quan đến quá khứ một trong hai CP',
+      primaryArc: 'Quyển 3: Sóng Gió',
+      suggestedCount: [1, 1],
+    },
+    {
+      role: 'Nền sống động — Đồng nghiệp/hàng xóm',
+      narrativeFunction: 'Tạo bầu không khí đời thường, phản ánh xã hội',
+      personalityHint: 'Đa dạng tính cách, tạo tình huống đời thường sinh động',
+      suggestedCount: [2, 4],
+    },
+  ],
+
+  characterScaleHint: {
+    per100Chapters: 4,
+    minTotal: 8,
+    maxTotal: 20,
+  },
 };

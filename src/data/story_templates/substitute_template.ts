@@ -20,14 +20,45 @@ export const SUBSTITUTE_TEMPLATE: StoryTemplate = {
   ],
   "subGenres": [
     {
-      "name": "Thế Thân Văn / Thay Thế",
-      "description": "Thể loại đặc sắc.",
-      "coreAppeal": "Thể loại đặc sắc."
+      "name": "被动型替身",
+      "description": "被选择成为替身 内心挣扎、自我怀疑 成长线：从接受到觉醒",
+      "coreAppeal": "被选择成为替身 内心挣扎、自我怀疑 成长线：从接受到觉醒"
+    },
+    {
+      "name": "主动型替身",
+      "description": "主动成为替身（有目的） 清醒、有计划 成长线：从利用到动情",
+      "coreAppeal": "主动成为替身（有目的） 清醒、有计划 成长线：从利用到动情"
+    },
+    {
+      "name": "觉醒型替身",
+      "description": "从被动到主动的转变 关键觉醒时刻 成长线：从迷失到找回自我",
+      "coreAppeal": "从被动到主动的转变 关键觉醒时刻 成长线：从迷失到找回自我"
+    },
+    {
+      "name": "反转型替身",
+      "description": "身份反转（替身才是真正的白月光） 真相揭露的震撼 成长线：从误解到真相 --",
+      "coreAppeal": "身份反转（替身才是真正的白月光） 真相揭露的震撼 成长线：从误解到真相 --"
     }
   ],
   "worldRules": [],
   "coolPatterns": [],
-  "conflictPatterns": [],
+  "conflictPatterns": [
+    {
+      "type": "替身文本质",
+      "source": "身份认同危机 + 真假情感辨别 + 自我价值追寻",
+      "resolution": "身份认同危机 + 真假情感辨别 + 自我价值追寻"
+    },
+    {
+      "type": "核心三角关系",
+      "source": "**女主（替身）**: 身份挣扎、情感成长 **男主（执念者）**: 从执念到真爱的转变 **白月光（原型）**: 对照、冲突来源",
+      "resolution": "**女主（替身）**: 身份挣扎、情感成长 **男主（执念者）**: 从执念到真爱的转变 **白月光（原型）**: 对照、冲突来源"
+    },
+    {
+      "type": "追妻火葬场",
+      "source": "男主挽回 女主拒绝/犹豫 反复拉扯",
+      "resolution": "男主挽回 女主拒绝/犹豫 反复拉扯"
+    }
+  ],
   "outlineArcs": [
     {
       "title": "Quyển 1: Khởi Đầu",

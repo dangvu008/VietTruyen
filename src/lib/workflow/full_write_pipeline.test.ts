@@ -14,9 +14,13 @@ const {
   getProjectRules,
   getModelForTask,
   callAiModelTracked,
+  runPreSaveQualityGate,
   buildChapterContentHash,
   recordPipelineSession,
   useAiStoreGetState,
+  getActiveNarrativeStateFactsAtChapter,
+  getContinuityWarnings,
+  getOpenHooksForProject,
 } = vi.hoisted(() => ({
   buildTemporalWritingContext: vi.fn(),
   planChapterBranches: vi.fn(),
@@ -28,9 +32,13 @@ const {
   getProjectRules: vi.fn(),
   getModelForTask: vi.fn(),
   callAiModelTracked: vi.fn(),
+  runPreSaveQualityGate: vi.fn(),
   buildChapterContentHash: vi.fn(),
   recordPipelineSession: vi.fn(),
   useAiStoreGetState: vi.fn(),
+  getActiveNarrativeStateFactsAtChapter: vi.fn(),
+  getContinuityWarnings: vi.fn(),
+  getOpenHooksForProject: vi.fn(),
 }));
 
 vi.mock('../ai/context_builder', () => ({
@@ -60,6 +68,15 @@ vi.mock('../memory/memory_sync_bridge', () => ({
 
 vi.mock('../../db/narrative_db', () => ({
   getProjectRules,
+  getActiveNarrativeStateFactsAtChapter,
+}));
+
+vi.mock('../memory/memory_query', () => ({
+  getContinuityWarnings,
+}));
+
+vi.mock('../memory/pending_hooks_repository', () => ({
+  getOpenHooksForProject,
 }));
 
 vi.mock('../ai/model_router', () => ({
@@ -74,6 +91,10 @@ vi.mock('../../store/use_ai_store', () => ({
 
 vi.mock('../ai/tracked_ai_client', () => ({
   callAiModelTracked,
+}));
+
+vi.mock('../ai/pre_save_quality_gate', () => ({
+  runPreSaveQualityGate,
 }));
 
 vi.mock('../memory/memory_indexer', () => ({
@@ -150,7 +171,14 @@ function makeProject(): Project {
       { id: 'beat-1', title: 'Mở màn', summary: 'Lâm Tề bước vào hiểm địa', focus: 'Lâm Tề' },
     ],
     chapters: [],
-    foreshadowings: [],
+    foreshadowings: [
+      {
+        id: 'f-1',
+        description: 'Tăng viện đến muộn: Đội tiếp viện vẫn chưa xuất hiện',
+        isResolved: false,
+        createdAt: '2026-01-01',
+      },
+    ],
     notes: '',
     canonVersion: 1,
     storageMode: 'indexeddb',
@@ -217,6 +245,8 @@ function makeReview(pass: boolean, score: number): CombinedReviewReport {
       description: 'Hook cuối chương còn yếu',
       suggestion: 'Kết bằng lựa chọn sống còn',
     }],
+    suggestedRevisionTasks: pass ? [] : ['1. Hook cuối chương còn yếu -> Kết bằng lựa chọn sống còn'],
+    guidedRevisionPrompt: pass ? 'Chương đạt review.' : 'Vá continuity và hook cuối chương.',
     reviewedAt: '2026-01-01',
   };
 }
@@ -236,6 +266,9 @@ describe('executeFullWritePipeline', () => {
       warnings: [],
     });
     getProjectRules.mockResolvedValue([]);
+    getActiveNarrativeStateFactsAtChapter.mockResolvedValue([]);
+    getContinuityWarnings.mockResolvedValue([]);
+    getOpenHooksForProject.mockResolvedValue([]);
     planChapterBranches.mockResolvedValue({
       anchors: { endgame: [], characterTruth: [], establishedFact: [], foreshadowingPlanted: [], all: [] },
       expectation: { dominantExpectation: '', alternativeExpectations: [], setupSignals: [], confidence: 0.8 },
@@ -259,11 +292,26 @@ describe('executeFullWritePipeline', () => {
       extraction: { metadata: {}, dependencies: [], timelineFacts: [] },
       summary: { chapter_id: 'pipeline-draft-0' },
       scenes: [],
+      extractedState: [],
+      stateMutations: [],
+      summaryTiers: { chapter: '', arc: '', storySoFar: '' },
+      embeddingJobs: [],
+      activeHooks: [],
       timingReport: { durationMs: 12 },
     });
     syncProjectMemoryBridge.mockResolvedValue(undefined);
     buildChapterContentHash.mockReturnValue('content-hash');
     callAiModelTracked.mockResolvedValue('{}');
+    runPreSaveQualityGate.mockImplementation(async ({ chapterContent }: { chapterContent: string }) => ({
+      content: `${chapterContent}-presave`,
+      report: {
+        approved: true,
+        originalScore: 72,
+        revisedScore: 88,
+        issues: [],
+        appliedChanges: ['Làm câu chữ tự nhiên hơn trước khi lưu.'],
+      },
+    }));
 
     const reviewModel = { id: 'review', name: 'Review Model', provider: 'openai', modelId: 'review-model', isCustom: false, tier: 'quality', description: '' };
     const summarizeModel = { id: 'summary', name: 'Summary Model', provider: 'openai', modelId: 'summary-model', isCustom: false, tier: 'fast', description: '' };
@@ -301,7 +349,7 @@ describe('executeFullWritePipeline', () => {
       provider: 'openai',
       modelId: 'summary-model',
       chapter: expect.objectContaining({
-        content: 'draft-two',
+        content: 'draft-two-presave',
         summary: 'summary-two',
         sequenceNumber: 1,
       }),
@@ -311,7 +359,7 @@ describe('executeFullWritePipeline', () => {
       expect.objectContaining({
         chapters: expect.arrayContaining([
           expect.objectContaining({
-            content: 'draft-two',
+            content: 'draft-two-presave',
             summary: 'summary-two',
             sequenceNumber: 1,
           }),
@@ -322,7 +370,21 @@ describe('executeFullWritePipeline', () => {
       },
     );
 
-    expect(result.content).toBe('draft-two');
+    expect(runAllCheckers).toHaveBeenCalledWith(
+      expect.objectContaining({
+        activeThreads: expect.arrayContaining(['Tăng viện đến muộn: Đội tiếp viện vẫn chưa xuất hiện']),
+        chapterIntent: expect.stringContaining('Mở màn'),
+      }),
+      expect.any(Function),
+    );
+
+    expect(runPreSaveQualityGate).toHaveBeenCalledTimes(2);
+    expect(runAllCheckers).toHaveBeenLastCalledWith(
+      expect.objectContaining({ chapterText: 'draft-two-presave' }),
+      expect.any(Function),
+    );
+    expect(result.content).toBe('draft-two-presave');
+    expect(result.preSaveReport?.revisedScore).toBe(88);
     expect(result.reviewReport?.combined_score).toBe(82);
   });
 
@@ -340,10 +402,12 @@ describe('executeFullWritePipeline', () => {
 
     expect(writeChapterFromBranch).toHaveBeenCalledTimes(1);
     expect(runAllCheckers).not.toHaveBeenCalled();
+    expect(runPreSaveQualityGate).not.toHaveBeenCalled();
     expect(analyzeChapterStyle).not.toHaveBeenCalled();
     expect(executePostWritePipeline).not.toHaveBeenCalled();
     expect(syncProjectMemoryBridge).not.toHaveBeenCalled();
     expect(result.reviewReport).toBeNull();
+    expect(result.preSaveReport).toBeNull();
     expect(result.styleAnalysis).toBeNull();
     expect(result.dataResult).toBeNull();
     expect(result.stepTimings).not.toHaveProperty('data_agent');
@@ -367,10 +431,12 @@ describe('executeFullWritePipeline', () => {
 
     expect(writeChapterFromBranch).toHaveBeenCalledTimes(1);
     expect(runAllCheckers).not.toHaveBeenCalled();
+    expect(runPreSaveQualityGate).toHaveBeenCalledTimes(1);
     expect(analyzeChapterStyle).toHaveBeenCalledTimes(1);
     expect(executePostWritePipeline).toHaveBeenCalledTimes(1);
     expect(syncProjectMemoryBridge).toHaveBeenCalledTimes(1);
     expect(result.reviewReport).toBeNull();
+    expect(result.preSaveReport?.approved).toBe(true);
     expect(result.styleAnalysis?.overallScore).toBe(8);
     expect(result.dataResult?.summary.chapter_id).toBe('pipeline-draft-0');
   });

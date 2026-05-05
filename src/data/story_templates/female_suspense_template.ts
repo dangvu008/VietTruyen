@@ -20,60 +20,202 @@ export const FEMALE_SUSPENSE_TEMPLATE: StoryTemplate = {
   ],
   "subGenres": [
     {
-      "name": "Nữ Tần Huyền Nghi",
-      "description": "逻辑推理 + 人性情感 + 关系反转。在亲密关系的迷雾中，用细腻的观察揭开真相。",
-      "coreAppeal": "逻辑推理 + 人性情感 + 关系反转。在亲密关系的迷雾中，用细腻的观察揭开真相。"
+      "name": "情感悬疑流",
+      "description": "以情感关系为核心的悬疑",
+      "coreAppeal": "关系真相、信任崩塌、情感反转",
+      "referenceWorks": [
+        "消失的她",
+        "不完美受害人",
+        "回来的女儿"
+      ]
+    },
+    {
+      "name": "家庭谜案流",
+      "description": "家庭内部的秘密与谎言",
+      "coreAppeal": "家族秘密、身世之谜、亲情反转",
+      "referenceWorks": [
+        "隐秘的角落",
+        "小敏家",
+        "都挺好"
+      ]
+    },
+    {
+      "name": "职场悬疑流",
+      "description": "职场背景下的阴谋与真相",
+      "coreAppeal": "职场阴谋、真相揭露、逆袭复仇",
+      "referenceWorks": [
+        "女心理师",
+        "底线",
+        "玫瑰的故事"
+      ]
+    },
+    {
+      "name": "复仇推理流",
+      "description": "带着目的接近，揭开过去真相",
+      "coreAppeal": "复仇成功、真相大白、正义伸张",
+      "referenceWorks": [
+        "回廊亭",
+        "八角亭谜雾",
+        "江照黎明"
+      ]
     }
   ],
-  "worldRules": [],
-  "coolPatterns": [],
-  "conflictPatterns": [],
+  "worldRules": [
+    {
+      "name": "关系类型",
+      "description": "关系 / 特点 / 悬疑点 ------ / ------ / -------- 夫妻 / 最亲密 / 信任危机 亲子 / 血缘羁绊 / 身世秘密 闺蜜 / 情感依赖 / 背叛真相 婆媳 / 天然对立 / 家庭阴谋 同事 / 利益关系 / 职场陷害"
+    },
+    {
+      "name": "女性困境",
+      "description": "困境 / 表现 / 悬疑化处理 ------ / ------ / ----------- 婚姻困境 / 丈夫出轨/家暴 / 消失/复仇 职场困境 / 性骚扰/打压 / 收集证据 家庭困境 / 原生家庭伤害 / 揭开真相 身份困境 / 身世之谜 / 寻找答案"
+    },
+    {
+      "name": "线索类型",
+      "description": "类型 / 特点 / 获取方式 ------ / ------ / ---------- 物证 / 客观存在 / 搜索/发现 人证 / 主观陈述 / 对话/观察 情感线索 / 关系变化 / 细腻感知 记忆碎片 / 过去真相 / 回忆/触发 --"
+    }
+  ],
+  "coolPatterns": [
+    {
+      "name": "真相揭露",
+      "scenario": "层层迷雾后的真相大白",
+      "appeal": "恍然大悟，前后呼应",
+      "keyNote": "要有伏笔，逻辑自洽"
+    },
+    {
+      "name": "关系反转",
+      "scenario": "最信任的人原来是敌人",
+      "appeal": "震惊、心痛、愤怒",
+      "keyNote": "情感铺垫要充分"
+    },
+    {
+      "name": "复仇成功",
+      "scenario": "对伤害过自己的人复仇",
+      "appeal": "正义伸张，大快人心",
+      "keyNote": "复仇要有底线"
+    },
+    {
+      "name": "自我救赎",
+      "scenario": "从困境中走出，重获新生",
+      "appeal": "成长蜕变，独立坚强",
+      "keyNote": "要有成长过程"
+    }
+  ],
+  "conflictPatterns": [
+    {
+      "type": "夫妻",
+      "source": "最亲密",
+      "resolution": "信任危机"
+    },
+    {
+      "type": "亲子",
+      "source": "血缘羁绊",
+      "resolution": "身世秘密"
+    },
+    {
+      "type": "闺蜜",
+      "source": "情感依赖",
+      "resolution": "背叛真相"
+    },
+    {
+      "type": "婆媳",
+      "source": "天然对立",
+      "resolution": "家庭阴谋"
+    },
+    {
+      "type": "同事",
+      "source": "利益关系",
+      "resolution": "职场陷害"
+    },
+    {
+      "type": "线索埋设",
+      "source": "第一层 (表象): 表面和谐的关系 看似正常的日常 微小的违和感 第二层 (疑点): 不合理的细节 矛盾的陈述 隐藏的情绪 第三层 (真相): 关系的真实面目 隐藏的过去 真正的动机",
+      "resolution": "第一层 (表象): 表面和谐的关系 看似正常的日常 微小的违和感 第二层 (疑点): 不合理的细节 矛盾的陈述 隐藏的情绪 第三层 (真相): 关系的真实面目 隐藏的过去 真正的动机"
+    },
+    {
+      "type": "卷三：危机 (121-200章)",
+      "source": "**核心**: 真相即将揭露，危机四伏 **状态**: 紧张/对峙 **高潮**: 身份/关系反转",
+      "resolution": "**核心**: 真相即将揭露，危机四伏 **状态**: 紧张/对峙 **高潮**: 身份/关系反转"
+    },
+    {
+      "type": "反派设计",
+      "source": "类型 / 特点 / 动机 ------ / ------ / ------ 亲密敌人 / 伪装完美 / 利益/嫉妒 过去阴影 / 来自过去 / 复仇/掩盖 系统性恶 / 制度/环境 / 利益链条 --",
+      "resolution": "类型 / 特点 / 动机 ------ / ------ / ------ 亲密敌人 / 伪装完美 / 利益/嫉妒 过去阴影 / 来自过去 / 复仇/掩盖 系统性恶 / 制度/环境 / 利益链条 --"
+    },
+    {
+      "type": "情感与推理平衡",
+      "source": "情感线 (40%): 关系发展 情感冲突 内心成长 推理线 (40%): 线索收集 逻辑推理 真相揭露 氛围线 (20%): 悬疑氛围 紧张感 情绪渲染",
+      "resolution": "情感线 (40%): 关系发展 情感冲突 内心成长 推理线 (40%): 线索收集 逻辑推理 真相揭露 氛围线 (20%): 悬疑氛围 紧张感 情绪渲染"
+    }
+  ],
   "outlineArcs": [
     {
       "title": "卷一：疑云 (1-50章)",
-      "chapterRange": "1-100",
+      "chapterRange": "1-50",
       "coreFocus": "发现异常，产生怀疑",
       "coreConflict": "",
       "climax": "第一个重大发现"
     },
     {
       "title": "卷二：追查 (51-120章)",
-      "chapterRange": "1-100",
+      "chapterRange": "51-120",
       "coreFocus": "收集线索，接近真相",
       "coreConflict": "",
       "climax": "发现关键证据"
     },
     {
       "title": "卷三：危机 (121-200章)",
-      "chapterRange": "1-100",
+      "chapterRange": "121-200",
       "coreFocus": "真相即将揭露，危机四伏",
       "coreConflict": "",
       "climax": "身份/关系反转"
     },
     {
       "title": "卷四：真相 (201-280章)",
-      "chapterRange": "1-100",
+      "chapterRange": "201-280",
       "coreFocus": "真相大白，正义伸张",
       "coreConflict": "",
       "climax": "最终对决"
     },
     {
       "title": "卷五：新生 (281-350章)",
-      "chapterRange": "1-100",
+      "chapterRange": "281-350",
       "coreFocus": "走出阴影，开始新生活",
       "coreConflict": "",
       "climax": "圆满结局"
     }
   ],
+  "targetWordCount": "800.000 chữ",
+  "targetChapterCount": 350,
   "pitfalls": [
     {
-      "description": "Thiết lập trước sau mâu thuẫn.",
+      "description": "只谈感情不推理",
+      "severity": "critical"
+    },
+    {
+      "description": "线索不公平",
+      "severity": "critical"
+    },
+    {
+      "description": "反转太刻意",
+      "severity": "critical"
+    },
+    {
+      "description": "女主太傻白甜",
       "severity": "critical"
     }
   ],
   "bestPractices": [
     {
-      "description": "Thiết lập tự nhất quán."
+      "description": "情感推理双线并进"
+    },
+    {
+      "description": "线索公平可回溯"
+    },
+    {
+      "description": "反转有铺垫"
+    },
+    {
+      "description": "女主有成长有智慧"
     }
   ],
   "entityTags": [

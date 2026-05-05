@@ -1,6 +1,6 @@
 import type { MemorySearchHit, RetrievalPackItem } from '../../types/memory_embedding';
 import type { RelevantNarrativeCommunity } from './memory_query';
-import type { PropagationTask } from '../../types/narrative_memory';
+import type { NarrativeStateFact, PendingHook, PropagationTask } from '../../types/narrative_memory';
 
 function truncateText(text: string, maxLength: number): string {
   const trimmed = text.trim();
@@ -46,6 +46,47 @@ export function buildGraphPack(
         'community',
         {
           nodeIds: entry.community.memberNodeIds,
+        }
+      );
+    });
+}
+
+export function buildStatePack(
+  facts: NarrativeStateFact[],
+  limit = 4
+): RetrievalPackItem[] {
+  return facts
+    .slice(0, limit)
+    .map((fact, index) =>
+      createPackItem(
+        `state:${fact.subjectId}:${fact.predicate}:${index}`,
+        `${fact.subjectId} · ${fact.predicate}`,
+        `- ${fact.subjectId}: ${fact.predicate} = ${truncateText(fact.value, 140)} (từ Ch.${fact.validFromChapter})`,
+        Math.max(0.6, Math.min(1, fact.confidence)),
+        'state_fact',
+        {
+          chapterIndex: fact.validFromChapter,
+        }
+      )
+    );
+}
+
+export function buildHookPack(
+  hooks: PendingHook[],
+  limit = 4
+): RetrievalPackItem[] {
+  return hooks
+    .slice(0, limit)
+    .map((hook, index) => {
+      const payoff = hook.expectedPayoffBy ? ` | payoff trước Ch.${hook.expectedPayoffBy}` : '';
+      return createPackItem(
+        `hook:${hook.id}:${index}`,
+        `Hook mở từ Ch.${hook.plantedChapterIndex}`,
+        `- ${truncateText(hook.description, 160)}${payoff}`,
+        Math.max(0.6, Math.min(1, hook.confidence)),
+        'pending_hook',
+        {
+          chapterIndex: hook.plantedChapterIndex,
         }
       );
     });

@@ -21,60 +21,169 @@ export const PALACE_INTRIGUE_TEMPLATE: StoryTemplate = {
   ],
   "subGenres": [
     {
-      "name": "Cung Đấu / Trạch Đấu",
-      "description": "规则博弈 + 心机对决 + 地位跃迁。在深宅大院中步步为营，用智慧改写命运。",
-      "coreAppeal": "规则博弈 + 心机对决 + 地位跃迁。在深宅大院中步步为营，用智慧改写命运。"
+      "name": "后宫争宠流",
+      "description": "皇宫后妃争斗，争夺帝王宠爱",
+      "coreAppeal": "智斗对手、获得圣宠、地位跃升",
+      "referenceWorks": [
+        "甄嬛传",
+        "如懿传",
+        "延禧攻略"
+      ]
+    },
+    {
+      "name": "宅门内斗流",
+      "description": "大家族内部争斗，嫡庶之争",
+      "coreAppeal": "反击陷害、掌控家权、复仇成功",
+      "referenceWorks": [
+        "知否知否应是绿肥红瘦",
+        "锦心似玉"
+      ]
+    },
+    {
+      "name": "权谋宫斗流",
+      "description": "宫廷政治，权力博弈",
+      "coreAppeal": "政治布局、扳倒对手、权倾朝野",
+      "referenceWorks": [
+        "琅琊榜",
+        "庆余年"
+      ]
+    },
+    {
+      "name": "重生复仇流",
+      "description": "重生回到过去，改变悲惨命运",
+      "coreAppeal": "先知先觉、复仇打脸、逆转人生",
+      "referenceWorks": [
+        "重生之嫡女祸妃",
+        "庶女攻略"
+      ]
     }
   ],
-  "worldRules": [],
-  "coolPatterns": [],
-  "conflictPatterns": [],
+  "worldRules": [
+    {
+      "name": "后宫等级（清宫版）",
+      "description": "等级 / 称号 / 人数 / 权力 ------ / ------ / ------ / ------ 一等 / 皇后 / 1 / 统领后宫 二等 / 皇贵妃 / 1 / 副后 三等 / 贵妃 / 2 / 高位妃嫔 四等 / 妃 / 4 / 一宫主位 五等 / 嫔 / 6 / 有封号 六等 / 贵人 / 不限 / 低位 七等 / 常在/答应 / 不限 / 最低"
+    },
+    {
+      "name": "宅门等级",
+      "description": "身份 / 地位 / 权力 ------ / ------ / ------ 老太太 / 最高 / 一言九鼎 当家主母 / 管家 / 掌控内务 嫡子/嫡女 / 正统 / 继承权 庶子/庶女 / 次等 / 有限权利 姨娘/通房 / 低等 / 依附主母 丫鬟/仆从 / 最低 / 无权"
+    },
+    {
+      "name": "资源体系",
+      "description": "**宠爱**: 最核心的资源，决定地位 **银钱**: 打点关系，收买人心 **人脉**: 宫中/府中的关系网 **情报**: 知己知彼的关键 **子嗣**: 最大的筹码 --"
+    }
+  ],
+  "coolPatterns": [
+    {
+      "name": "反击陷害",
+      "scenario": "被人陷害，证据确凿",
+      "appeal": "主角早有准备，反将一军",
+      "keyNote": "要有伏笔，不能凭空翻盘"
+    },
+    {
+      "name": "智斗打脸",
+      "scenario": "对手当众刁难",
+      "appeal": "主角机智应对，让对手下不来台",
+      "keyNote": "要符合身份，不能太出格"
+    },
+    {
+      "name": "地位跃升",
+      "scenario": "从低位升到高位",
+      "appeal": "昔日看不起自己的人要行礼",
+      "keyNote": "升位要有铺垫，不能太突兀"
+    },
+    {
+      "name": "复仇成功",
+      "scenario": "对害过自己的人展开报复",
+      "appeal": "让对手尝到自己曾经的痛苦",
+      "keyNote": "复仇要有分寸，不能太残忍"
+    }
+  ],
+  "conflictPatterns": [
+    {
+      "type": "明面手段",
+      "source": "手段 / 特点 / 风险 ------ / ------ / ------ 争宠 / 直接竞争 / 树敌 告状 / 借力打力 / 反噬 联盟 / 抱团取暖 / 背叛 示弱 / 韬光养晦 / 被欺",
+      "resolution": "手段 / 特点 / 风险 ------ / ------ / ------ 争宠 / 直接竞争 / 树敌 告状 / 借力打力 / 反噬 联盟 / 抱团取暖 / 背叛 示弱 / 韬光养晦 / 被欺"
+    },
+    {
+      "type": "暗面手段",
+      "source": "手段 / 特点 / 风险 ------ / ------ / ------ 陷害 / 栽赃嫁祸 / 败露 下药 / 暗中伤害 / 查出 收买 / 策反对方人 / 双面 造谣 / 舆论攻击 / 反噬",
+      "resolution": "手段 / 特点 / 风险 ------ / ------ / ------ 陷害 / 栽赃嫁祸 / 败露 下药 / 暗中伤害 / 查出 收买 / 策反对方人 / 双面 造谣 / 舆论攻击 / 反噬"
+    },
+    {
+      "type": "防御手段",
+      "source": "**试毒**: 防止被下毒 **眼线**: 监控敌人动向 **靠山**: 寻找保护伞 **把柄**: 掌握对方弱点 --",
+      "resolution": "**试毒**: 防止被下毒 **眼线**: 监控敌人动向 **靠山**: 寻找保护伞 **把柄**: 掌握对方弱点 --"
+    }
+  ],
   "outlineArcs": [
     {
       "title": "卷一：入局 (1-50章)",
-      "chapterRange": "1-100",
+      "chapterRange": "1-50",
       "coreFocus": "主角进入宫/府，了解规则",
       "coreConflict": "低位",
       "climax": "首次化解危机，站稳脚跟"
     },
     {
       "title": "卷二：立足 (51-120章)",
-      "chapterRange": "1-100",
+      "chapterRange": "51-120",
       "coreFocus": "建立关系网，获得初步地位",
       "coreConflict": "中低位",
       "climax": "击败第一个对手，小幅晋升"
     },
     {
       "title": "卷三：崛起 (121-200章)",
-      "chapterRange": "1-100",
+      "chapterRange": "121-200",
       "coreFocus": "卷入核心争斗",
       "coreConflict": "中位",
       "climax": "扳倒主要对手，大幅晋升"
     },
     {
       "title": "卷四：巅峰 (201-280章)",
-      "chapterRange": "1-100",
+      "chapterRange": "201-280",
       "coreFocus": "争夺最高位置",
       "coreConflict": "高位",
       "climax": "成为最终赢家"
     },
     {
       "title": "卷五：收尾 (281-350章)",
-      "chapterRange": "1-100",
+      "chapterRange": "281-350",
       "coreFocus": "处理遗留问题，结局",
       "coreConflict": "最高位",
       "climax": "圆满结局"
     }
   ],
+  "targetWordCount": "1.000.000 chữ",
+  "targetChapterCount": 350,
   "pitfalls": [
     {
-      "description": "Thiết lập trước sau mâu thuẫn.",
+      "description": "对手全是蠢货",
+      "severity": "critical"
+    },
+    {
+      "description": "主角金手指太多",
+      "severity": "critical"
+    },
+    {
+      "description": "男主无脑宠女主",
+      "severity": "critical"
+    },
+    {
+      "description": "斗争手段重复",
       "severity": "critical"
     }
   ],
   "bestPractices": [
     {
-      "description": "Thiết lập tự nhất quán."
+      "description": "对手要有智商"
+    },
+    {
+      "description": "主角靠智慧取胜"
+    },
+    {
+      "description": "感情线要有波折"
+    },
+    {
+      "description": "斗争手段多样化"
     }
   ],
   "entityTags": [
@@ -118,6 +227,10 @@ export const PALACE_INTRIGUE_TEMPLATE: StoryTemplate = {
         "usage"
       ]
     }
+  ],
+  "constraintPacks": [
+    "Pack F05",
+    "Pack U01"
   ],
   "languageRegister": {
     "eraLabel": "cổ đại / cung đình / trạch đấu",
@@ -178,9 +291,5 @@ export const PALACE_INTRIGUE_TEMPLATE: StoryTemplate = {
         "note": "Khoảng cách địa vị phải thể hiện ngay từ cách xưng hô."
       }
     ]
-  },
-  "constraintPacks": [
-    "Pack F05",
-    "Pack U01"
-  ]
+  }
 };

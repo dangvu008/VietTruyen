@@ -1,18 +1,21 @@
 /**
  * File: StoryMapPage.tsx
- * Purpose: Bản đồ trực quan toàn bộ câu chuyện — Timeline, Nhân vật, Foreshadowing, Tension
+ * Purpose: Bản đồ trực quan toàn bộ câu chuyện — Timeline, Foreshadowing, Tension
  * Layer: UI Page
  * Domain: StoryMap → [visualization, read-only]
- * Deps: Project, Chapter, Character, Foreshadowing, MasterOutline
+ * Deps: Project, Chapter, Foreshadowing, MasterOutline
  */
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useCallback } from 'react';
 import {
   BarChart3,
   BookOpen,
   CheckCircle2,
   Clock,
+  Database,
   EyeOff,
   Lightbulb,
+  Loader2,
+  RefreshCw,
   TrendingUp,
   Users,
   Zap,
@@ -20,10 +23,17 @@ import {
 import type { Project, Chapter } from '../../types/story';
 import type { ProjectTabId } from '../../types/navigation';
 import PageHeader from '../layout/PageHeader';
+import {
+  useStoryTimelineData,
+  MUTATION_LABELS,
+  MUTATION_ICONS,
+  type TimelineMutation,
+} from '../../hooks/use_story_timeline_data';
+import { backfillProjectMemory } from '../../lib/memory/memory_indexer';
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
-type MapView = 'timeline' | 'characters' | 'foreshadowing' | 'tension';
+type MapView = 'timeline' | 'foreshadowing' | 'tension';
 
 interface StoryMapPageProps {
   project: Project;
@@ -53,32 +63,152 @@ const STATUS_LABEL: Record<Chapter['status'], string> = {
 
 // ─── Sub-views ──────────────────────────────────────────────────────────────
 
-// [STEP 1] Timeline: chapters grouped by arc / act
+// ─── Timeline helpers ───────────────────────────────────────────────────────
+
+const TENSION_COLORS: Record<string, string> = {
+  low: '#5dbf72', medium: '#6ea4d8', high: '#f0c59a', very_high: '#e67e22', climax: '#e05050',
+  'rất thấp': '#5dbf72', 'thấp': '#5dbf72', 'trung bình': '#6ea4d8', 'cao': '#f0c59a', 'rất cao': '#e67e22',
+};
+const TENSION_LABELS: Record<string, string> = {
+  low: 'Thấp', medium: 'Trung bình', high: 'Cao', very_high: 'Rất cao', climax: 'Đỉnh điểm',
+  'rất thấp': 'Rất thấp', 'thấp': 'Thấp', 'trung bình': 'Trung bình', 'cao': 'Cao', 'rất cao': 'Rất cao',
+};
+
+
+
+// [STEP 1] Timeline: real data-driven vertical timeline
 const TimelineView: React.FC<{ project: Project; onNavigate: (tab: ProjectTabId) => void }> = ({
   project,
   onNavigate,
 }) => {
-  const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [isExtracting, setIsExtracting] = useState(false);
+  const [extractProgress, setExtractProgress] = useState<string | null>(null);
   const chapters = project.chapters;
   const master = project.masterOutline;
+  const foreshadowings = project.foreshadowings || [];
 
+  // [Domain:StoryMap] STEP 1 — Load real data from IndexedDB
+  const timeline = useStoryTimelineData(project.id);
+
+  // [Domain:StoryMap] STEP 2 — Derive act structure
   const actBreaks = useMemo(() => {
     if (!master) return null;
     const { act1End, act2Midpoint, act2End } = master.threeActStructure;
     return { act1End, act2Midpoint, act2End, total: master.totalChapters };
   }, [master]);
 
+  const getActInfo = (chapterNum: number): { label: string; color: string; isStart: boolean } => {
+    if (!actBreaks) return { label: '', color: '', isStart: false };
+    if (chapterNum <= actBreaks.act1End) {
+      return { label: 'Hồi 1 · Giới thiệu', color: '#2d4a8a', isStart: chapterNum === 1 };
+    }
+    if (chapterNum <= actBreaks.act2End) {
+      const isMidpoint = chapterNum === actBreaks.act2Midpoint;
+      return {
+        label: isMidpoint ? 'Hồi 2 · Điểm giữa' : 'Hồi 2 · Phát triển',
+        color: '#8a5a2d',
+        isStart: chapterNum === actBreaks.act1End + 1,
+      };
+    }
+    return { label: 'Hồi 3 · Cao trào', color: '#2d8a4a', isStart: chapterNum === actBreaks.act2End + 1 };
+  };
+
+  // [Domain:StoryMap] STEP 3 — Build enriched timeline nodes
+  const timelineNodes = useMemo(() => {
+    return chapters.map((ch, idx) => {
+      const chapterNum = ch.sequenceNumber ?? idx + 1;
+      const meta = ch.meta;
+      const actInfo = getActInfo(chapterNum);
+      const dbData = timeline.chaptersData.get(ch.id);
+
+      // Time anchor from chapter meta
+      const timeAnchor = meta?.timeConstraint?.timeAnchor || meta?.ending?.time || null;
+
+      // Plot summary: prioritize meta summary, fallback to chapter summary
+      const plotSummary = meta?.summary?.plotSummary || ch.summary || null;
+
+      // Characters: merge from meta + IndexedDB appearances
+      const metaCharacters = meta?.summary?.characters || [];
+      const dbCharacters = dbData?.entityAppearances
+        .filter((e) => e.type === 'character')
+        .map((e) => e.name) || [];
+      const characters = Array.from(new Set([...metaCharacters, ...dbCharacters]));
+
+      // State changes from meta
+      const stateChanges = meta?.summary?.stateChanges || [];
+
+      // Foreshadowing from meta
+      const foreshadowingPlanted = (meta?.summary?.foreshadowing || [])
+        .filter((f) => f.action === 'planted')
+        .map((f) => f.content);
+      const foreshadowingResolved = (meta?.summary?.foreshadowing || [])
+        .filter((f) => f.action === 'resolved')
+        .map((f) => f.content);
+
+      // Real mutations from IndexedDB
+      const mutations = dbData?.mutations || [];
+
+      // Tension level
+      const rawTension = ch.aiMeta?.tensionLevel as string | undefined;
+      const tensionLevel = rawTension?.toLowerCase() || null;
+      const tensionColor = tensionLevel ? (TENSION_COLORS[tensionLevel] ?? '#6e6257') : '#3d3028';
+
+      return {
+        chapter: ch,
+        idx,
+        chapterNum,
+        timeAnchor,
+        plotSummary,
+        characters,
+        stateChanges,
+        foreshadowingPlanted,
+        foreshadowingResolved,
+        mutations,
+        tensionLevel,
+        tensionColor,
+        actLabel: actInfo.label,
+        actColor: actInfo.color,
+        isActStart: actInfo.isStart,
+        hasRichData: Boolean(plotSummary || characters.length > 0 || mutations.length > 0 || timeAnchor),
+      };
+    });
+  }, [chapters, actBreaks, timeline.chaptersData]);
+
+  // Stats
   const statusCounts = useMemo(() => {
     const counts = { draft: 0, revised: 0, final: 0, published: 0 };
     chapters.forEach((c) => { counts[c.status] = (counts[c.status] || 0) + 1; });
     return counts;
   }, [chapters]);
 
+  const hasAnyRichData = timelineNodes.some((n) => n.hasRichData);
+
+  // [Domain:StoryMap] STEP 4 — Extraction handler
+  const handleExtract = useCallback(async () => {
+    setIsExtracting(true);
+    setExtractProgress('Đang chuẩn bị...');
+    try {
+      await backfillProjectMemory(project, {
+        onProgress: (processed, total) => {
+          setExtractProgress(`Đang quét ${processed}/${total} chương...`);
+        },
+      });
+      setExtractProgress(null);
+      timeline.reload();
+    } catch (err) {
+      console.error('[Timeline] Extract error:', err);
+      setExtractProgress('Lỗi khi quét dữ liệu');
+    } finally {
+      setIsExtracting(false);
+    }
+  }, [project, timeline.reload]);
+
   if (chapters.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-20 gap-4 text-center">
-        <BookOpen size={48} className="text-[#3d3028]" />
-        <p className="text-[#6e6257] text-sm">Chưa có chương nào. Hãy bắt đầu viết!</p>
+        <Clock size={48} className="text-[#3d3028]" />
+        <p className="text-[#6e6257] text-sm">Chưa có chương nào. Hãy bắt đầu viết để tạo dòng thời gian!</p>
         <button onClick={() => onNavigate('writer')} className="btn-primary">
           Bắt đầu viết
         </button>
@@ -101,71 +231,336 @@ const TimelineView: React.FC<{ project: Project; onNavigate: (tab: ProjectTabId)
         ))}
       </div>
 
-      {/* Act bands */}
-      {actBreaks && (
-        <div className="rounded-xl border border-[#2a2420] bg-[#100d0b] p-4">
-          <p className="text-[11px] uppercase tracking-widest text-[#6e6257] mb-3">Cấu trúc 3 hồi</p>
-          <div className="flex gap-1 h-3 rounded-full overflow-hidden">
-            {actBreaks.total > 0 && (
-              <>
-                <div
-                  className="bg-[#2d4a8a]/60 rounded-l-full"
-                  style={{ width: `${(actBreaks.act1End / actBreaks.total) * 100}%` }}
-                  title={`Hồi 1: Ch.1–${actBreaks.act1End}`}
-                />
-                <div
-                  className="bg-[#8a5a2d]/60"
-                  style={{ width: `${((actBreaks.act2End - actBreaks.act1End) / actBreaks.total) * 100}%` }}
-                  title={`Hồi 2: Ch.${actBreaks.act1End + 1}–${actBreaks.act2End}`}
-                />
-                <div
-                  className="bg-[#2d8a4a]/60 rounded-r-full flex-1"
-                  title={`Hồi 3: Ch.${actBreaks.act2End + 1}–${actBreaks.total}`}
-                />
-              </>
-            )}
+      {/* Data richness stats from IndexedDB */}
+      {timeline.hasData && (
+        <div className="grid grid-cols-3 gap-3">
+          <div className="rounded-xl border border-[#2a2420] bg-[#100d0b] p-3 flex items-center gap-3">
+            <Users size={16} className="text-[#6ea4d8] shrink-0" />
+            <div>
+              <p className="text-lg font-bold text-[#f5ede4]">{timeline.entityCount}</p>
+              <p className="text-[10px] text-[#6e6257]">Thực thể</p>
+            </div>
           </div>
-          <div className="flex justify-between text-[10px] text-[#6e6257] mt-1 px-0.5">
-            <span>Hồi 1 (Ch.1–{actBreaks.act1End})</span>
-            <span>Hồi 2 (Ch.{actBreaks.act1End + 1}–{actBreaks.act2End})</span>
-            <span>Hồi 3 (Ch.{actBreaks.act2End + 1}–{actBreaks.total})</span>
+          <div className="rounded-xl border border-[#2a2420] bg-[#100d0b] p-3 flex items-center gap-3">
+            <Zap size={16} className="text-[#f0c59a] shrink-0" />
+            <div>
+              <p className="text-lg font-bold text-[#f5ede4]">{timeline.mutationCount}</p>
+              <p className="text-[10px] text-[#6e6257]">Sự kiện</p>
+            </div>
+          </div>
+          <div className="rounded-xl border border-[#2a2420] bg-[#100d0b] p-3 flex items-center gap-3">
+            <Database size={16} className="text-[#5dbf72] shrink-0" />
+            <div>
+              <p className="text-lg font-bold text-[#f5ede4]">{timeline.factSpans.length}</p>
+              <p className="text-[10px] text-[#6e6257]">Dữ kiện</p>
+            </div>
           </div>
         </div>
       )}
 
-      {/* Chapter grid */}
-      <div>
-        <p className="text-[11px] uppercase tracking-widest text-[#6e6257] mb-3">
-          Các chương ({chapters.length})
-        </p>
-        <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))' }}>
-          {chapters.map((ch, idx) => {
-            const isHovered = hoveredId === ch.id;
-            return (
-              <button
-                key={ch.id}
-                className={`relative text-left rounded-xl p-3 transition-all cursor-pointer ${STATUS_COLOR[ch.status]} ${isHovered ? 'scale-[1.02] shadow-lg shadow-black/30' : ''}`}
-                onMouseEnter={() => setHoveredId(ch.id)}
-                onMouseLeave={() => setHoveredId(null)}
-                onClick={() => onNavigate('chapters')}
-                title={ch.summary || ch.title}
-              >
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-[10px] font-mono text-[#6e6257]">Ch.{(ch.sequenceNumber ?? idx + 1).toString().padStart(3, '0')}</span>
-                  <span className={`w-1.5 h-1.5 rounded-full ${STATUS_DOT[ch.status]}`} />
-                </div>
-                <p className="text-xs font-medium text-[#f5ede4] line-clamp-2 leading-snug">
-                  {ch.title || `Chương ${idx + 1}`}
-                </p>
-                {isHovered && ch.summary && (
-                  <p className="mt-1.5 text-[10px] text-[#8f7867] line-clamp-3 leading-relaxed">
-                    {ch.summary}
-                  </p>
-                )}
-              </button>
-            );
-          })}
+      {/* Extract data CTA when no rich data */}
+      {!timeline.isLoading && !hasAnyRichData && (
+        <div className="rounded-xl border border-[#f0c59a]/20 bg-gradient-to-r from-[#2d2410]/60 to-[#1a1510] p-5 flex items-center gap-4">
+          <Database size={24} className="text-[#f0c59a] shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-[#f5ede4]">Dòng thời gian chưa có dữ liệu</p>
+            <p className="text-xs text-[#8f7867] mt-0.5">
+              Quét các chương để trích xuất nhân vật, sự kiện, thay đổi trạng thái tự động.
+            </p>
+          </div>
+          <button
+            onClick={handleExtract}
+            disabled={isExtracting}
+            className="shrink-0 flex items-center gap-2 px-4 py-2 rounded-lg bg-[#f0c59a]/15 text-[#f0c59a] text-xs font-medium border border-[#f0c59a]/20 hover:bg-[#f0c59a]/25 transition-all disabled:opacity-50 cursor-pointer"
+          >
+            {isExtracting ? (
+              <><Loader2 size={14} className="animate-spin" /> {extractProgress}</>
+            ) : (
+              <><RefreshCw size={14} /> Quét dữ liệu</>
+            )}
+          </button>
         </div>
+      )}
+
+      {/* Last indexed info */}
+      {timeline.lastIndexedAt && (
+        <div className="flex items-center justify-between text-[10px] text-[#4d4039] px-1">
+          <span>Dữ liệu cập nhật: {new Date(timeline.lastIndexedAt).toLocaleString('vi-VN')}</span>
+          <button
+            onClick={handleExtract}
+            disabled={isExtracting}
+            className="flex items-center gap-1 text-[#6e6257] hover:text-[#f0c59a] transition-colors cursor-pointer"
+          >
+            {isExtracting ? <Loader2 size={10} className="animate-spin" /> : <RefreshCw size={10} />}
+            Quét lại
+          </button>
+        </div>
+      )}
+
+      {/* Vertical Timeline */}
+      <div className="relative">
+        {timelineNodes.map((node, i) => {
+          const isExpanded = expandedId === node.chapter.id;
+          const isLast = i === timelineNodes.length - 1;
+          const hasForeshadowing = node.foreshadowingPlanted.length > 0 || node.foreshadowingResolved.length > 0;
+          const hasMutations = node.mutations.length > 0;
+
+          return (
+            <div key={node.chapter.id} className="relative flex gap-0">
+              {/* Left: Act indicator strip */}
+              <div className="w-16 shrink-0 flex flex-col items-end pr-3 pt-1">
+                {node.isActStart && node.actLabel && (
+                  <span
+                    className="text-[9px] font-semibold uppercase tracking-wider whitespace-nowrap"
+                    style={{ color: node.actColor }}
+                  >
+                    {node.actLabel.split(' · ')[0]}
+                  </span>
+                )}
+                {node.timeAnchor && (
+                  <span className="text-[10px] text-[#8f7867] mt-0.5 truncate max-w-[60px]" title={node.timeAnchor}>
+                    {node.timeAnchor}
+                  </span>
+                )}
+              </div>
+
+              {/* Center: Spine + node dot */}
+              <div className="flex flex-col items-center shrink-0 w-8">
+                <div className="relative z-10">
+                  <div
+                    className="w-4 h-4 rounded-full border-2 transition-all"
+                    style={{
+                      borderColor: node.tensionColor,
+                      backgroundColor: isExpanded ? node.tensionColor : '#100d0b',
+                      boxShadow: isExpanded ? `0 0 8px ${node.tensionColor}40` : 'none',
+                    }}
+                  />
+                  {node.actColor && (
+                    <div
+                      className="absolute -inset-1 rounded-full border opacity-30"
+                      style={{ borderColor: node.actColor }}
+                    />
+                  )}
+                </div>
+                {!isLast && (
+                  <div
+                    className="w-0.5 flex-1 min-h-[20px]"
+                    style={{
+                      background: `linear-gradient(to bottom, ${node.tensionColor}40, ${timelineNodes[i + 1]?.tensionColor ?? '#3d3028'}40)`,
+                    }}
+                  />
+                )}
+              </div>
+
+              {/* Right: Chapter card */}
+              <div className="flex-1 pb-4 pl-3 min-w-0">
+                <button
+                  className={`w-full text-left rounded-xl transition-all cursor-pointer ${STATUS_COLOR[node.chapter.status]} ${
+                    isExpanded ? 'ring-1 ring-[#f0c59a]/30 shadow-lg shadow-black/20' : 'hover:brightness-110'
+                  }`}
+                  onClick={() => setExpandedId(isExpanded ? null : node.chapter.id)}
+                >
+                  {/* Header */}
+                  <div className="p-3">
+                    <div className="flex items-center justify-between gap-2 mb-1">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="text-[10px] font-mono text-[#6e6257] shrink-0">
+                          Ch.{node.chapterNum.toString().padStart(3, '0')}
+                        </span>
+                        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${STATUS_DOT[node.chapter.status]}`} />
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {node.tensionLevel && (
+                          <span
+                            className="text-[9px] px-1.5 py-0.5 rounded-full font-medium"
+                            style={{
+                              backgroundColor: `${node.tensionColor}20`,
+                              color: node.tensionColor,
+                            }}
+                          >
+                            {TENSION_LABELS[node.tensionLevel] ?? node.tensionLevel}
+                          </span>
+                        )}
+                        {hasForeshadowing && <Lightbulb size={12} className="text-[#f59e0b]" />}
+                        {hasMutations && <Zap size={12} className="text-[#f0c59a]" />}
+                      </div>
+                    </div>
+                    <p className="text-sm font-medium text-[#f5ede4] leading-snug">
+                      {node.chapter.title || `Chương ${node.chapterNum}`}
+                    </p>
+
+                    {/* Plot summary */}
+                    {node.plotSummary && (
+                      <p className={`mt-1.5 text-[11px] text-[#8f7867] leading-relaxed ${isExpanded ? '' : 'line-clamp-2'}`}>
+                        {node.plotSummary}
+                      </p>
+                    )}
+
+                    {/* Mutations preview (compact, always visible if available) */}
+                    {node.mutations.length > 0 && !isExpanded && (
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        {node.mutations.slice(0, 3).map((mut, mi) => (
+                          <span
+                            key={mi}
+                            className="text-[10px] px-1.5 py-0.5 rounded-md bg-[#f0c59a]/10 text-[#f0c59a]/80 border border-[#f0c59a]/10"
+                          >
+                            {MUTATION_ICONS[mut.mutationType]} {mut.entityName}
+                          </span>
+                        ))}
+                        {node.mutations.length > 3 && (
+                          <span className="text-[10px] px-1.5 py-0.5 text-[#6e6257]">
+                            +{node.mutations.length - 3}
+                          </span>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Character chips */}
+                    {node.characters.length > 0 && !hasMutations && (
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        {node.characters.slice(0, isExpanded ? undefined : 4).map((name, ci) => (
+                          <span
+                            key={ci}
+                            className="text-[10px] px-1.5 py-0.5 rounded-md bg-white/5 text-[#c5b5a8] border border-white/5"
+                          >
+                            {name}
+                          </span>
+                        ))}
+                        {!isExpanded && node.characters.length > 4 && (
+                          <span className="text-[10px] px-1.5 py-0.5 text-[#6e6257]">
+                            +{node.characters.length - 4}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Expanded details */}
+                  {isExpanded && (
+                    <div className="border-t border-white/5 px-3 pb-3 pt-2 space-y-2.5">
+                      {/* Real mutations from IndexedDB */}
+                      {node.mutations.length > 0 && (
+                        <div>
+                          <p className="text-[9px] uppercase tracking-wider text-[#6e6257] mb-1 flex items-center gap-1">
+                            <Zap size={10} /> Sự kiện trong chương
+                          </p>
+                          <ul className="space-y-1">
+                            {node.mutations.map((mut, mi) => (
+                              <li key={mi} className="text-[10px] text-[#c5b5a8] flex items-start gap-1.5 rounded-lg bg-white/[0.02] px-2 py-1.5">
+                                <span className="text-[#f0c59a] mt-0.5 shrink-0 text-xs">
+                                  {MUTATION_ICONS[mut.mutationType]}
+                                </span>
+                                <div className="min-w-0">
+                                  <span className="font-medium text-[#f5ede4]">{mut.entityName}</span>
+                                  <span className="text-[#6e6257] mx-1">·</span>
+                                  <span className="text-[#8f7867]">{MUTATION_LABELS[mut.mutationType]}</span>
+                                  {mut.predicate && (
+                                    <span className="text-[#6e6257]"> ({mut.predicate})</span>
+                                  )}
+                                  {mut.beforeValue && mut.afterValue && (
+                                    <span className="text-[#8f7867]">
+                                      : {mut.beforeValue} → <span className="text-[#f0c59a]">{mut.afterValue}</span>
+                                    </span>
+                                  )}
+                                  {!mut.beforeValue && mut.afterValue && (
+                                    <span className="text-[#f0c59a]">: {mut.afterValue}</span>
+                                  )}
+                                  {mut.evidenceText && (
+                                    <p className="text-[9px] text-[#4d4039] mt-0.5 line-clamp-1 italic">
+                                      "{mut.evidenceText}"
+                                    </p>
+                                  )}
+                                </div>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      {/* Characters (expanded view) */}
+                      {node.characters.length > 0 && (
+                        <div>
+                          <p className="text-[9px] uppercase tracking-wider text-[#6e6257] mb-1 flex items-center gap-1">
+                            <Users size={10} /> Nhân vật
+                          </p>
+                          <div className="flex flex-wrap gap-1">
+                            {node.characters.map((name, ci) => (
+                              <span
+                                key={ci}
+                                className="text-[10px] px-1.5 py-0.5 rounded-md bg-white/5 text-[#c5b5a8] border border-white/5"
+                              >
+                                {name}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* State changes */}
+                      {node.stateChanges.length > 0 && (
+                        <div>
+                          <p className="text-[9px] uppercase tracking-wider text-[#6e6257] mb-1 flex items-center gap-1">
+                            <Zap size={10} /> Thay đổi trạng thái
+                          </p>
+                          <ul className="space-y-0.5">
+                            {node.stateChanges.map((change, ci) => (
+                              <li key={ci} className="text-[10px] text-[#8f7867] flex items-start gap-1.5">
+                                <span className="text-[#f0c59a] mt-0.5 shrink-0">→</span>
+                                {change}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      {/* Foreshadowing planted */}
+                      {node.foreshadowingPlanted.length > 0 && (
+                        <div>
+                          <p className="text-[9px] uppercase tracking-wider text-[#6e6257] mb-1 flex items-center gap-1">
+                            <EyeOff size={10} /> Phục bút đặt ra
+                          </p>
+                          <ul className="space-y-0.5">
+                            {node.foreshadowingPlanted.map((f, fi) => (
+                              <li key={fi} className="text-[10px] text-[#f59e0b]/80 flex items-start gap-1.5">
+                                <Lightbulb size={10} className="shrink-0 mt-0.5" />
+                                {f}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      {/* Foreshadowing resolved */}
+                      {node.foreshadowingResolved.length > 0 && (
+                        <div>
+                          <p className="text-[9px] uppercase tracking-wider text-[#6e6257] mb-1 flex items-center gap-1">
+                            <CheckCircle2 size={10} /> Phục bút giải quyết
+                          </p>
+                          <ul className="space-y-0.5">
+                            {node.foreshadowingResolved.map((f, fi) => (
+                              <li key={fi} className="text-[10px] text-[#5dbf72]/80 flex items-start gap-1.5">
+                                <CheckCircle2 size={10} className="shrink-0 mt-0.5" />
+                                {f}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      {/* Navigate to chapter */}
+                      <button
+                        className="text-[10px] text-[#f0c59a] hover:text-[#f5ede4] transition-colors flex items-center gap-1 mt-1"
+                        onClick={(e) => { e.stopPropagation(); onNavigate('chapters'); }}
+                      >
+                        <BookOpen size={10} /> Mở chương này
+                      </button>
+                    </div>
+                  )}
+                </button>
+              </div>
+            </div>
+          );
+        })}
       </div>
 
       {/* Progress bar */}
@@ -192,79 +587,7 @@ const TimelineView: React.FC<{ project: Project; onNavigate: (tab: ProjectTabId)
   );
 };
 
-// [STEP 2] Characters overview
-const CharactersView: React.FC<{ project: Project; onNavigate: (tab: ProjectTabId) => void }> = ({
-  project,
-  onNavigate,
-}) => {
-  const characters = project.characters || [];
-
-  if (characters.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center py-20 gap-4 text-center">
-        <Users size={48} className="text-[#3d3028]" />
-        <p className="text-[#6e6257] text-sm">Chưa có nhân vật nào được tạo.</p>
-        <button onClick={() => onNavigate('characters')} className="btn-primary">
-          Thêm nhân vật
-        </button>
-      </div>
-    );
-  }
-
-  const roleColors: Record<string, string> = {
-    main: 'border-l-[#f0c59a] bg-[#2d2410]/60',
-    protagonist: 'border-l-[#f0c59a] bg-[#2d2410]/60',
-    antagonist: 'border-l-[#e05050] bg-[#2d1010]/60',
-    supporting: 'border-l-[#6ea4d8] bg-[#102040]/60',
-    love: 'border-l-[#d87cac] bg-[#2a1030]/60',
-  };
-
-  const getRoleColor = (role: string) => {
-    const key = Object.keys(roleColors).find((k) => role.toLowerCase().includes(k));
-    return key ? roleColors[key] : 'border-l-[#6e6257] bg-[#1a1714]/60';
-  };
-
-  return (
-    <div className="space-y-4">
-      <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))' }}>
-        {characters.map((char) => (
-          <div
-            key={char.id}
-            className={`rounded-xl border border-[#2a2420] border-l-4 p-4 ${getRoleColor(char.role)} transition-all hover:brightness-110 cursor-pointer`}
-            onClick={() => onNavigate('characters')}
-          >
-            <div className="flex items-start justify-between gap-2 mb-2">
-              <h3 className="font-semibold text-[#f5ede4] text-sm">{char.name}</h3>
-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/5 text-[#8f7867] shrink-0">
-                {char.role}
-              </span>
-            </div>
-            {char.currentStage && (
-              <div className="flex items-center gap-1.5 mb-2">
-                <Zap size={11} className="text-[#f0c59a]" />
-                <span className="text-[11px] text-[#c5b5a8]">{char.currentStage}</span>
-              </div>
-            )}
-            {char.arc && (
-              <p className="text-[11px] text-[#8f7867] line-clamp-2 leading-relaxed">{char.arc}</p>
-            )}
-            {char.traits && (
-              <div className="mt-2 flex flex-wrap gap-1">
-                {char.traits.split(/[,，]/).slice(0, 3).map((t, i) => (
-                  <span key={i} className="text-[10px] px-1.5 py-0.5 rounded bg-white/5 text-[#6e6257]">
-                    {t.trim()}
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-};
-
-// [STEP 3] Foreshadowing tracker
+// [STEP 2] Foreshadowing tracker
 const ForeshadowingView: React.FC<{ project: Project }> = ({ project }) => {
   const items = project.foreshadowings || [];
   const open = items.filter((f) => !f.isResolved);
@@ -344,7 +667,7 @@ const ForeshadowingView: React.FC<{ project: Project }> = ({ project }) => {
   );
 };
 
-// [STEP 4] Tension curve — SVG line chart from chapter aiMeta.tensionLevel
+// [STEP 3] Tension curve — SVG line chart from chapter aiMeta.tensionLevel
 const TENSION_MAP: Record<string, number> = {
   low: 20, medium: 50, high: 80, very_high: 95, climax: 100,
   'rất thấp': 10, 'thấp': 20, 'trung bình': 50, 'cao': 75, 'rất cao': 90,
@@ -467,7 +790,6 @@ const TensionView: React.FC<{ project: Project }> = ({ project }) => {
 
 const VIEWS: { id: MapView; label: string; icon: React.ReactNode }[] = [
   { id: 'timeline',      label: 'Dòng thời gian', icon: <BarChart3 size={15} /> },
-  { id: 'characters',   label: 'Nhân vật',        icon: <Users size={15} /> },
   { id: 'tension',      label: 'Tension',          icon: <TrendingUp size={15} /> },
   { id: 'foreshadowing', label: 'Phục bút',       icon: <Lightbulb size={15} /> },
 ];
@@ -482,7 +804,7 @@ const StoryMapPage: React.FC<StoryMapPageProps> = ({ project, onNavigate }) => {
     <div className="animate-fade-in">
       <PageHeader
         title="Bản đồ truyện"
-        subtitle={`${totalChapters} chương · ${project.characters.length} nhân vật · ${openForeshadowings} phục bút đang ẩn`}
+        subtitle={`${totalChapters} chương · ${openForeshadowings} phục bút đang ẩn`}
         action={
           <div className="flex items-center gap-1 p-1 rounded-xl border border-[#2a2420] bg-[#100d0b]">
             {VIEWS.map((v) => (
@@ -505,7 +827,6 @@ const StoryMapPage: React.FC<StoryMapPageProps> = ({ project, onNavigate }) => {
 
       <div className="mt-2">
         {activeView === 'timeline'      && <TimelineView project={project} onNavigate={onNavigate} />}
-        {activeView === 'characters'    && <CharactersView project={project} onNavigate={onNavigate} />}
         {activeView === 'tension'       && <TensionView project={project} />}
         {activeView === 'foreshadowing' && <ForeshadowingView project={project} />}
       </div>

@@ -6,14 +6,18 @@ const {
   buildWritingContext,
   getModelForTask,
   callAiModelTracked,
+  callAiStreaming,
   useAiStoreGetState,
+  markModelUnavailable,
 } = vi.hoisted(() => ({
   getProjectRules: vi.fn(),
   buildSurpriseContext: vi.fn(),
   buildWritingContext: vi.fn(),
   getModelForTask: vi.fn(),
   callAiModelTracked: vi.fn(),
+  callAiStreaming: vi.fn(),
   useAiStoreGetState: vi.fn(),
+  markModelUnavailable: vi.fn(),
 }));
 
 vi.mock('../../db/narrative_db', () => ({
@@ -34,7 +38,7 @@ vi.mock('./tracked_ai_client', () => ({
 }));
 
 vi.mock('./streaming_ai_client', () => ({
-  callAiStreaming: vi.fn(),
+  callAiStreaming,
 }));
 
 vi.mock('../../store/use_ai_store', () => ({
@@ -68,7 +72,13 @@ vi.mock('./surprise_engine', async () => {
   };
 });
 
-import { parsePlannerResponse, parseWriterResponse, writeChapterFromBranch } from './chapter_writer_ai';
+import {
+  parsePlannerResponse,
+  parseWriterResponse,
+  resolveChapterWriteTitle,
+  writeChapterFromBranch,
+} from './chapter_writer_ai';
+import { extractWriterVisibleContent } from './writer_response_content';
 import type { Project, AiModel } from '../../types/story';
 import type { SurpriseBranch } from '../../types/surprise';
 
@@ -156,7 +166,9 @@ describe('chapter_writer_ai parsers', () => {
     buildWritingContext.mockReset();
     getModelForTask.mockReset();
     callAiModelTracked.mockReset();
+    callAiStreaming.mockReset();
     useAiStoreGetState.mockReset();
+    markModelUnavailable.mockReset();
 
     getProjectRules.mockResolvedValue([]);
     buildSurpriseContext.mockResolvedValue({
@@ -184,6 +196,9 @@ describe('chapter_writer_ai parsers', () => {
       models: [MODEL],
       activeModelId: MODEL.id,
       taskModelOverrides: {},
+      modelHealth: {},
+      preferredProvider: undefined,
+      markModelUnavailable,
     });
     callAiModelTracked.mockResolvedValue(`@@LEDGER@@
 {"summary":"Lâm Tề bước qua cổng đá.","beatStatus":"hit","usedCharacterNames":["Lâm Tề"],"introducedEntities":[],"foreshadowPlanted":[],"preservedAnchorIds":[]}
@@ -275,6 +290,64 @@ Lâm Tề đứng trước mật thất, nghe tiếng đá cũ rạn ra trong b�
     expect(parsed.content).toContain('mật thất');
   });
 
+  it('keeps prose and removes a trailing ledger block when the model reverses the marker order', () => {
+    const response = `Ma Y đứng từ xa, trên một ngọn núi hẻo lánh.
+
+Dưới chân Thiên Dương, bóng của cậu không còn là hình người.
+
+@@LEDGER@@
+{"summary":"Thiên Dương nhận ra bản chất của Thiên Hình Ấn.","beatStatus":"hit","usedCharacterNames":["Thiên Dương"],"introducedEntities":[],"foreshadowPlanted":[],"preservedAnchorIds":[]}
+"""`;
+
+    expect(extractWriterVisibleContent(response)).toBe(
+      'Ma Y đứng từ xa, trên một ngọn núi hẻo lánh.\n\nDưới chân Thiên Dương, bóng của cậu không còn là hình người.',
+    );
+
+    const parsed = parseWriterResponse(response);
+    expect(parsed.content).toContain('Dưới chân Thiên Dương');
+    expect(parsed.content).not.toContain('@@LEDGER@@');
+    expect(parsed.content).not.toContain('beatStatus');
+  });
+
+  it('does not mistake ECOT analysis for prose when content marker is missing', () => {
+    const response = `@@ECOT_ANALYSIS@@
+Đây là phân tích nội bộ, không phải văn xuôi.
+@@LEDGER@@
+{"summary":"Lâm Tề vượt qua cổng đá.","beatStatus":"hit","usedCharacterNames":["Lâm Tề"],"introducedEntities":[],"foreshadowPlanted":[],"preservedAnchorIds":[]}
+Lâm Tề bước qua cổng đá, để mặc hơi lạnh bò dọc sống lưng. Phía sau hắn, tiếng đá khép lại như một lời phán quyết không thể rút về.`;
+
+    expect(extractWriterVisibleContent(response)).toBe(
+      'Lâm Tề bước qua cổng đá, để mặc hơi lạnh bò dọc sống lưng. Phía sau hắn, tiếng đá khép lại như một lời phán quyết không thể rút về.',
+    );
+  });
+
+  it('refuses metadata-only writer payloads instead of leaking them into chapter content', () => {
+    const response = `@@LEDGER@@
+{"summary":"Lâm Tề vượt qua cổng đá.","beatStatus":"hit","usedCharacterNames":["Lâm Tề"],"introducedEntities":[],"foreshadowPlanted":[],"preservedAnchorIds":[]}`;
+
+    expect(() => parseWriterResponse(response)).toThrow(/sentinel contract/i);
+  });
+
+  it('extracts only prose when the model returns a serialized chapter JSON object', () => {
+    const response = `{"chapter":1,"title":"Linh Gia Cứu Hoang Thần Tố","content":"Sóng xiên thành vách bạc, cuốn từ chân trời trào đến bìa rừng dừa nước. Chiếc thuyền nan buồm dệt lỗ chỗ, trôi lững lờ giữa vùng biển lạ."}`;
+
+    const parsed = parseWriterResponse(response);
+
+    expect(parsed.content).toBe(
+      'Sóng xiên thành vách bạc, cuốn từ chân trời trào đến bìa rừng dừa nước. Chiếc thuyền nan buồm dệt lỗ chỗ, trôi lững lờ giữa vùng biển lạ.',
+    );
+  });
+
+  it('removes trailing quote-brace artifacts from fallback prose', () => {
+    const response = 'Lục Phong nhìn la bàn rung lên giữa lòng bàn tay. Cuộc trò chuyện sẽ đến sau."}';
+
+    const parsed = parseWriterResponse(response);
+
+    expect(parsed.content).toBe(
+      'Lục Phong nhìn la bàn rung lên giữa lòng bàn tay. Cuộc trò chuyện sẽ đến sau.',
+    );
+  });
+
   it('injects ghostwriter runtime context into the actual chapter-writing prompt', async () => {
     await writeChapterFromBranch({
       project: makeProject(),
@@ -286,11 +359,47 @@ Lâm Tề đứng trước mật thất, nghe tiếng đá cũ rạn ra trong b�
 
     expect(buildWritingContext).toHaveBeenCalled();
     expect(callAiModelTracked).toHaveBeenCalledWith(expect.objectContaining({
-      userPrompt: expect.stringContaining('## GHOSTWRITER RUNTIME CONTEXT'),
+      userPrompt: expect.stringContaining('## NGỮ CẢNH VIẾT BỔ SUNG'),
     }));
     const prompt = callAiModelTracked.mock.calls[0][0].userPrompt as string;
     expect(prompt).toContain('## BẢN ĐỒ TÂM LÝ CẢNH');
     expect(prompt).toContain('## KẾ HOẠCH CẢNH GHOSTWRITER');
     expect(prompt).toContain('## RÀNG BUỘC GIỌNG VĂN');
+  });
+
+  it('falls back from weak generated chapter titles to outline or chapter number', () => {
+    const project = makeProject();
+
+    expect(resolveChapterWriteTitle(project, 0, { ...BRANCH, suggestedTitle: 'Trống' })).toBe('Tiến vào cấm địa');
+    expect(resolveChapterWriteTitle({ ...project, outline: [{ ...project.outline[0], title: '' }] }, 0, {
+      ...BRANCH,
+      suggestedTitle: 'Tên chương',
+    })).toBe('Chương 1');
+  });
+
+  it('auto-continues an interrupted streaming chapter response before parsing content', async () => {
+    callAiStreaming.mockResolvedValue({
+      text: `@@LEDGER@@
+{"summary":"Lâm Tề mở cổng đá.","beatStatus":"hit","usedCharacterNames":["Lâm Tề"],"introducedEntities":[],"foreshadowPlanted":[],"preservedAnchorIds":[]}
+@@CONTENT@@
+Lâm Tề nâng tay,`,
+      completed: false,
+      usage: { inputTokens: 100, outputTokens: 50 },
+    });
+    callAiModelTracked.mockResolvedValue(' để chạm vào khe nứt lạnh buốt trên cổng đá.\n\nTiếng đá thức dậy trong bóng tối.');
+
+    const result = await writeChapterFromBranch({
+      project: makeProject(),
+      targetChapterIndex: 0,
+      mode: 'create',
+      tensionLevel: 'nudge',
+      branch: BRANCH,
+      onChunk: vi.fn(),
+    });
+
+    expect(callAiModelTracked).toHaveBeenCalledWith(expect.objectContaining({
+      userPrompt: expect.stringContaining('PHẢN HỒI TRƯỚC BỊ CẮT GIỮA CHỪNG'),
+    }));
+    expect(result.content).toContain('Lâm Tề nâng tay, để chạm vào khe nứt');
   });
 });

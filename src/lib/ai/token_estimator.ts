@@ -62,9 +62,9 @@ const FALLBACK_COST_ALIASES: Array<{
     outputRate: 0.60,
   },
   {
-    match: (modelId) => modelId === 'mistralai/mistral-small-creative',
-    inputRate: 0.10,
-    outputRate: 0.30,
+    match: (modelId) => modelId === 'mistralai/mistral-small-creative' || modelId === 'mistralai/mistral-small-2603',
+    inputRate: 0.15,
+    outputRate: 0.60,
   },
   {
     match: (modelId) => modelId === 'gryphe/mythomax-l2-13b',

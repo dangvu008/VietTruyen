@@ -6,7 +6,7 @@
  */
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import { Plus, Sparkles, User, Trash2, X, RotateCcw, GitPullRequestArrow, Users as UsersIcon, ChevronRight } from 'lucide-react';
-import type { Character } from '../../types/story';
+import type { Character, CharacterPsychology } from '../../types/story';
 import { createId } from '../../core/id';
 import { useRetconStore } from '../../store/use_retcon_store';
 import { buildSmartCharacterPrompt } from '../../lib/ai/smart_prompts';
@@ -27,7 +27,14 @@ interface CharactersPageProps {
   onOpenAi: () => void;
 }
 
-const ROLES = ['Chính', 'Phụ', 'Phản diện', 'Mentor', 'Đồng hành', 'Bí ẩn'];
+const ROLE_GROUPS: Record<string, string[]> = {
+  'Cốt lõi': ['Chính', 'Phản diện chính'],
+  'Hỗ trợ': ['Phụ quan trọng', 'Đồng hành', 'Tình yêu', 'Đối thủ'],
+  'Chức năng': ['Mentor', 'Hài hước', 'Kẻ phản bội', 'Gác cổng'],
+  'Bầu không khí': ['Bí ẩn', 'Nền sống động', 'Nhân chứng', 'Chất xúc tác'],
+  'Động': ['Biến chuyển', 'Ẩn boss'],
+};
+const ROLES = Object.values(ROLE_GROUPS).flat();
 
 function serializeCharacter(character: Character) {
   const normalized = normalizeCharacter(character);
@@ -37,11 +44,28 @@ function serializeCharacter(character: Character) {
   });
 }
 
+function createEmptyPsychology(): Required<CharacterPsychology> {
+  return {
+    coreWound: '',
+    deepFear: '',
+    hiddenDesire: '',
+    selfDeception: '',
+    bodyLanguage: '',
+  };
+}
+
 const CharactersPage: React.FC<CharactersPageProps> = ({
   characters, projectId, onAddCharacter, onUpdateCharacter, onRemoveCharacter, onOpenAi,
 }) => {
   const [showModal, setShowModal] = useState(false);
-  const [form, setForm] = useState({ name: '', role: 'Chính', arc: '', currentStage: '', traits: '' });
+  const [form, setForm] = useState({
+    name: '',
+    role: 'Chính',
+    arc: '',
+    currentStage: '',
+    traits: '',
+    psychology: createEmptyPsychology(),
+  });
   const [drafts, setDrafts] = useState<Record<string, Character>>({});
   const [handoffBrief, setHandoffBrief] = useState<string | null>(null);
 
@@ -65,13 +89,18 @@ const CharactersPage: React.FC<CharactersPageProps> = ({
       const { payload, brief } = handoff;
       if (brief) setHandoffBrief(brief);
 
-      if (payload.name || payload.role || payload.traits || payload.arc) {
+      if (payload.name || payload.role || payload.traits || payload.arc || payload.psychology) {
         setForm((current) => ({
           ...current,
           name: payload.name || current.name,
           role: (payload.role as typeof current.role) || current.role,
           traits: payload.traits || current.traits,
           arc: payload.arc || current.arc,
+          currentStage: payload.currentStage || current.currentStage,
+          psychology: {
+            ...current.psychology,
+            ...(payload.psychology || {}),
+          },
         }));
         setShowModal(true);
         useNotificationStore.getState().push({
@@ -92,10 +121,11 @@ const CharactersPage: React.FC<CharactersPageProps> = ({
       arc: form.arc,
       currentStage: form.currentStage || 'Khởi đầu',
       traits: form.traits,
+      psychology: form.psychology,
       aliases: [],
       facts: [],
     }));
-    setForm({ name: '', role: 'Chính', arc: '', currentStage: '', traits: '' });
+    setForm({ name: '', role: 'Chính', arc: '', currentStage: '', traits: '', psychology: createEmptyPsychology() });
     setShowModal(false);
   };
 
@@ -110,6 +140,7 @@ const CharactersPage: React.FC<CharactersPageProps> = ({
           arc: raw.arc || '',
           currentStage: raw.currentStage || 'Khởi đầu',
           traits: raw.traits || '',
+          psychology: raw.psychology,
           aliases: raw.aliases || [],
           facts: raw.facts || [],
         }));
@@ -154,7 +185,7 @@ const CharactersPage: React.FC<CharactersPageProps> = ({
   return (
     <div className="animate-fade-in flex flex-col h-full bg-[#0A0C10] text-[#E2E8F0]">
       {/* Header */}
-      <header className="flex-none flex items-center justify-between px-8 py-6 border-b border-[#1E232B] bg-[#0A0C10]/80 backdrop-blur-md z-10 sticky top-0">
+      <header className="flex-none flex items-center justify-between px-8 py-6 border-b border-[#1E232B] bg-[#0A0C10]/80 backdrop-blur-md z-40 sticky top-0">
         <div>
           <h1 className="text-2xl font-display font-medium text-[#F8FAFC]">Nhân vật</h1>
           <p className="text-sm text-[#94A3B8] mt-1">{characters.length} nhân vật đã tạo</p>
@@ -311,6 +342,60 @@ const CharactersPage: React.FC<CharactersPageProps> = ({
                         />
                       </div>
 
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-xs font-medium text-[#94A3B8] mb-1.5 px-1 uppercase tracking-wide">Vết thương gốc</label>
+                          <textarea
+                            rows={2}
+                            className="w-full px-3 py-2 rounded-xl bg-[#0A0C10] border border-[#1E232B] text-[#E2E8F0] text-sm focus:outline-none focus:border-[#2DD4BF] transition-colors resize-none"
+                            value={draft.psychology?.coreWound || ''}
+                            onChange={(event) => updateDraft(character.id, { psychology: { ...draft.psychology, coreWound: event.target.value } })}
+                            placeholder="Biến cố nào khiến họ phản ứng như hiện tại?"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-[#94A3B8] mb-1.5 px-1 uppercase tracking-wide">Nỗi sợ sâu nhất</label>
+                          <textarea
+                            rows={2}
+                            className="w-full px-3 py-2 rounded-xl bg-[#0A0C10] border border-[#1E232B] text-[#E2E8F0] text-sm focus:outline-none focus:border-[#2DD4BF] transition-colors resize-none"
+                            value={draft.psychology?.deepFear || ''}
+                            onChange={(event) => updateDraft(character.id, { psychology: { ...draft.psychology, deepFear: event.target.value } })}
+                            placeholder="Điều họ sợ bị lộ, bị mất, hoặc phải đối diện"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-[#94A3B8] mb-1.5 px-1 uppercase tracking-wide">Mong muốn ẩn</label>
+                          <textarea
+                            rows={2}
+                            className="w-full px-3 py-2 rounded-xl bg-[#0A0C10] border border-[#1E232B] text-[#E2E8F0] text-sm focus:outline-none focus:border-[#2DD4BF] transition-colors resize-none"
+                            value={draft.psychology?.hiddenDesire || ''}
+                            onChange={(event) => updateDraft(character.id, { psychology: { ...draft.psychology, hiddenDesire: event.target.value } })}
+                            placeholder="Thứ họ muốn thật nhưng không nói ra"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-[#94A3B8] mb-1.5 px-1 uppercase tracking-wide">Tự lừa mình</label>
+                          <textarea
+                            rows={2}
+                            className="w-full px-3 py-2 rounded-xl bg-[#0A0C10] border border-[#1E232B] text-[#E2E8F0] text-sm focus:outline-none focus:border-[#2DD4BF] transition-colors resize-none"
+                            value={draft.psychology?.selfDeception || ''}
+                            onChange={(event) => updateDraft(character.id, { psychology: { ...draft.psychology, selfDeception: event.target.value } })}
+                            placeholder="Niềm tin sai mà họ bám vào để tự vệ"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-medium text-[#94A3B8] mb-1.5 px-1 uppercase tracking-wide">Biểu hiện khi stress</label>
+                        <textarea
+                          rows={2}
+                          className="w-full px-3 py-2 rounded-xl bg-[#0A0C10] border border-[#1E232B] text-[#E2E8F0] text-sm focus:outline-none focus:border-[#2DD4BF] transition-colors resize-none"
+                          value={draft.psychology?.bodyLanguage || ''}
+                          onChange={(event) => updateDraft(character.id, { psychology: { ...draft.psychology, bodyLanguage: event.target.value } })}
+                          placeholder="Dấu hiệu cơ thể, nhịp thở, tay chân, ánh mắt..."
+                        />
+                      </div>
+
                       <div className="pt-2">
                         <StoryFactsEditor
                           aliases={draft.aliases || []}
@@ -391,19 +476,26 @@ const CharactersPage: React.FC<CharactersPageProps> = ({
               
               <div>
                 <label className="block text-xs font-semibold text-[#94A3B8] mb-2 uppercase tracking-wide">Vai trò</label>
-                <div className="flex flex-wrap gap-2">
-                  {ROLES.map((role) => (
-                    <button
-                      key={role}
-                      onClick={() => setForm((current) => ({ ...current, role }))}
-                      className={`px-4 py-2 rounded-full text-xs font-medium transition-all ${
-                        form.role === role
-                          ? 'bg-[#2DD4BF] text-[#0A0C10] shadow-[0_2px_10px_rgba(45,212,191,0.2)]'
-                          : 'bg-[#1E232B] text-[#94A3B8] hover:bg-[#334155] hover:text-[#E2E8F0]'
-                      }`}
-                    >
-                      {role}
-                    </button>
+                <div className="space-y-3 max-h-48 overflow-y-auto pr-1">
+                  {Object.entries(ROLE_GROUPS).map(([group, roles]) => (
+                    <div key={group}>
+                      <span className="text-[10px] font-medium text-[#64748B] uppercase tracking-wider">{group}</span>
+                      <div className="flex flex-wrap gap-1.5 mt-1">
+                        {roles.map((role) => (
+                          <button
+                            key={role}
+                            onClick={() => setForm((current) => ({ ...current, role }))}
+                            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                              form.role === role
+                                ? 'bg-[#2DD4BF] text-[#0A0C10] shadow-[0_2px_10px_rgba(45,212,191,0.2)]'
+                                : 'bg-[#1E232B] text-[#94A3B8] hover:bg-[#334155] hover:text-[#E2E8F0]'
+                            }`}
+                          >
+                            {role}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                   ))}
                 </div>
               </div>
@@ -427,6 +519,61 @@ const CharactersPage: React.FC<CharactersPageProps> = ({
                   onChange={(event) => setForm((current) => ({ ...current, arc: event.target.value }))}
                   placeholder="Character arc..."
                 />
+              </div>
+
+              <div className="grid grid-cols-1 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-[#94A3B8] mb-2 uppercase tracking-wide">Vết thương gốc</label>
+                  <textarea
+                    className="w-full px-4 py-3 rounded-xl bg-[#0A0C10] border border-[#1E232B] text-[#F8FAFC] focus:outline-none focus:border-[#2DD4BF] transition-all resize-none"
+                    rows={2}
+                    value={form.psychology.coreWound}
+                    onChange={(event) => setForm((current) => ({ ...current, psychology: { ...current.psychology, coreWound: event.target.value } }))}
+                    placeholder="Biến cố khiến nhân vật phòng thủ hoặc méo mó khi yêu"
+                  />
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-[#94A3B8] mb-2 uppercase tracking-wide">Nỗi sợ sâu nhất</label>
+                    <textarea
+                      className="w-full px-4 py-3 rounded-xl bg-[#0A0C10] border border-[#1E232B] text-[#F8FAFC] focus:outline-none focus:border-[#2DD4BF] transition-all resize-none"
+                      rows={2}
+                      value={form.psychology.deepFear}
+                      onChange={(event) => setForm((current) => ({ ...current, psychology: { ...current.psychology, deepFear: event.target.value } }))}
+                      placeholder="Sợ bị bỏ rơi, sợ yếu thế, sợ bị nhìn thấu..."
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-[#94A3B8] mb-2 uppercase tracking-wide">Mong muốn ẩn</label>
+                    <textarea
+                      className="w-full px-4 py-3 rounded-xl bg-[#0A0C10] border border-[#1E232B] text-[#F8FAFC] focus:outline-none focus:border-[#2DD4BF] transition-all resize-none"
+                      rows={2}
+                      value={form.psychology.hiddenDesire}
+                      onChange={(event) => setForm((current) => ({ ...current, psychology: { ...current.psychology, hiddenDesire: event.target.value } }))}
+                      placeholder="Thứ họ thèm được nhận nhưng không dám xin"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-[#94A3B8] mb-2 uppercase tracking-wide">Tự lừa mình</label>
+                    <textarea
+                      className="w-full px-4 py-3 rounded-xl bg-[#0A0C10] border border-[#1E232B] text-[#F8FAFC] focus:outline-none focus:border-[#2DD4BF] transition-all resize-none"
+                      rows={2}
+                      value={form.psychology.selfDeception}
+                      onChange={(event) => setForm((current) => ({ ...current, psychology: { ...current.psychology, selfDeception: event.target.value } }))}
+                      placeholder="Luận điệu nội tâm giúp họ né sự thật"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-[#94A3B8] mb-2 uppercase tracking-wide">Biểu hiện khi stress</label>
+                    <textarea
+                      className="w-full px-4 py-3 rounded-xl bg-[#0A0C10] border border-[#1E232B] text-[#F8FAFC] focus:outline-none focus:border-[#2DD4BF] transition-all resize-none"
+                      rows={2}
+                      value={form.psychology.bodyLanguage}
+                      onChange={(event) => setForm((current) => ({ ...current, psychology: { ...current.psychology, bodyLanguage: event.target.value } }))}
+                      placeholder="Dấu hiệu cơ thể cần show trong cảnh"
+                    />
+                  </div>
+                </div>
               </div>
             </div>
             

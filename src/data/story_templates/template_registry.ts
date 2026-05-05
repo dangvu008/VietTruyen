@@ -55,6 +55,15 @@ import { URBAN_DAILY_TEMPLATE } from './urban_daily_template';
 import { SWEET_YOUTH_TEMPLATE } from './sweet_youth_template';
 import { DARK_THEME_TEMPLATE } from './dark_theme_template';
 
+// ─── Imports: tinix-story ports (6 new templates) ───────────
+import { DAM_MY_TEMPLATE } from './dam_my_template';
+import { HONG_HOANG_TEMPLATE } from './hong_hoang_template';
+import { THAM_HIEM_LANG_MO_TEMPLATE } from './tham_hiem_lang_mo_template';
+import { NU_CUONG_TEMPLATE } from './nu_cuong_template';
+import { VONG_DU_NGON_TINH_TEMPLATE } from './vong_du_ngon_tinh_template';
+import { GIA_DAU_TEMPLATE } from './gia_dau_template';
+import { DONG_NHAN_TEMPLATE } from './dong_nhan_template';
+
 // ─── Registry ───────────────────────────────────────────────
 
 const TEMPLATE_MAP: Map<string, StoryTemplate> = new Map();
@@ -104,6 +113,15 @@ register(URBAN_SUPERPOWER_TEMPLATE);
 register(URBAN_DAILY_TEMPLATE);
 register(SWEET_YOUTH_TEMPLATE);
 register(DARK_THEME_TEMPLATE);
+
+// tinix-story ports (7 new templates)
+register(DAM_MY_TEMPLATE);
+register(HONG_HOANG_TEMPLATE);
+register(THAM_HIEM_LANG_MO_TEMPLATE);
+register(NU_CUONG_TEMPLATE);
+register(VONG_DU_NGON_TINH_TEMPLATE);
+register(GIA_DAU_TEMPLATE);
+register(DONG_NHAN_TEMPLATE);
 
 // ─── Lookup Functions ───────────────────────────────────────
 
@@ -159,7 +177,7 @@ export function findTemplateByKeywords(
     'tu luyện': 'xianxia', 'dị giới đại lục': 'xianxia', 'sảng văn': 'xianxia',
     // ═══ Romance (generic) ═══
     'ngôn tình': 'romance', 'romance': 'romance', 'cưới trước yêu sau': 'romance',
-    'đam mỹ': 'romance', 'bách hợp': 'romance', 'đô thị ngôn tình': 'romance',
+    'đô thị ngôn tình': 'romance',
     // ═══ Rules Mystery ═══
     'trinh thám': 'rules-mystery', 'quái đàm': 'rules-mystery',
     'quy tắc': 'rules-mystery', 'mystery': 'rules-mystery', 'detective': 'rules-mystery',
@@ -262,6 +280,27 @@ export function findTemplateByKeywords(
     // ═══ Dark Theme ═══
     'hắc ám': 'dark-theme', 'phản diện': 'dark-theme',
     'anti-hero': 'dark-theme', 'villain': 'dark-theme', 'tàn khốc': 'dark-theme',
+    // ═══ Đam Mỹ (BL) ═══
+    'đam mỹ': 'dam-my', 'bl': 'dam-my', 'nam-nam': 'dam-my', 'yaoi': 'dam-my',
+    // ═══ Hồng Hoang ═══
+    'hồng hoang': 'hong-hoang', 'phong thần': 'hong-hoang', 'hồng mông': 'hong-hoang',
+    'thánh nhân': 'hong-hoang', 'chuẩn thánh': 'hong-hoang', 'thần thoại trung hoa': 'hong-hoang',
+    // ═══ Thám Hiểm Lăng Mộ ═══
+    'thám hiểm lăng mộ': 'tham-hiem-lang-mo', 'đạo mộ': 'tham-hiem-lang-mo',
+    'trộm mộ': 'tham-hiem-lang-mo', 'cương thi': 'tham-hiem-lang-mo',
+    'ma thổi đèn': 'tham-hiem-lang-mo', 'lăng mộ': 'tham-hiem-lang-mo',
+    // ═══ Nữ Cường ═══
+    'nữ cường': 'nu-cuong', 'nữ chủ mạnh': 'nu-cuong', 'nữ đế': 'nu-cuong',
+    'nữ vương': 'nu-cuong', 'strong female': 'nu-cuong',
+    // ═══ Võng Du Ngôn Tình ═══
+    'võng du': 'vong-du-ngon-tinh', 'ngôn tình võng du': 'vong-du-ngon-tinh',
+    'mmorpg': 'vong-du-ngon-tinh', 'game online romance': 'vong-du-ngon-tinh',
+    // ═══ Gia Đấu ═══
+    'gia đấu': 'gia-dau', 'mẹ chồng nàng dâu': 'gia-dau',
+    'tranh gia sản': 'gia-dau', 'nội đấu gia tộc': 'gia-dau',
+    // ═══ Đồng Nhân ═══
+    'đồng nhân': 'dong-nhan', 'fanfiction': 'dong-nhan', 'xuyên vào truyện': 'dong-nhan',
+    'fanfic': 'dong-nhan', 'đồng nhân anime': 'dong-nhan',
     // ═══ Catch-all urban ═══
     'đô thị': 'urban-brainwave', 'urban': 'urban-brainwave', 'hiện đại': 'urban-brainwave',
   };
@@ -321,6 +360,12 @@ export function buildTemplatePromptSlice(template: StoryTemplate): StoryTemplate
       ? `${template.powerSystem.name}: ${template.powerSystem.tiers.map((t) => t.name).join(' → ')}`
       : undefined,
 
+    opportunityArcSummary: template.opportunityArc && template.opportunityArc.length > 0
+      ? template.opportunityArc
+        .map((step, index) => `${index + 1}. ${step.name}: ${step.description}`)
+        .join('\n')
+      : undefined,
+
     outlineStructure: template.outlineArcs
       .map((arc) => `${arc.title} (Ch.${arc.chapterRange}, ${arc.percentageOfTotal ?? '?'}%): ${arc.coreFocus}`)
       .join('\n'),
@@ -333,6 +378,17 @@ export function buildTemplatePromptSlice(template: StoryTemplate): StoryTemplate
       .filter((p) => p.severity === 'critical')
       .map((p) => `⛔ ${p.description}`)
       .join('\n'),
+
+    bestPracticesSummary: template.bestPractices.length > 0
+      ? template.bestPractices
+        .slice(0, 4)
+        .map((practice) => `✅ ${practice.description}`)
+        .join('\n')
+      : undefined,
+
+    constraintPacksSummary: template.constraintPacks && template.constraintPacks.length > 0
+      ? template.constraintPacks.join(', ')
+      : undefined,
 
     entityTagHints: template.entityTags
       .map((et) => `${et.nameVi} [${et.attributes.join(', ')}]`)
@@ -360,6 +416,10 @@ export function serializeTemplateForPrompt(slice: StoryTemplatePromptSlice): str
     parts.push('', '⚔️ Hệ thống sức mạnh:', slice.powerSystemSummary);
   }
 
+  if (slice.opportunityArcSummary) {
+    parts.push('', '🧭 Nhịp triển khai / opportunity arc:', slice.opportunityArcSummary);
+  }
+
   parts.push(
     '',
     '📐 Cấu trúc dàn ý mẫu:',
@@ -368,11 +428,19 @@ export function serializeTemplateForPrompt(slice: StoryTemplatePromptSlice): str
     '✨ Sảng điểm cốt lõi:',
     slice.coolPatternsSummary,
     '',
-    '🚫 LỖI CẦN TRÁNH:',
-    slice.pitfallsSummary,
-    '',
-    '🏷️ Entity types: ' + slice.entityTagHints,
   );
+
+  if (slice.bestPracticesSummary) {
+    parts.push('', '✅ Thực hành tốt:', slice.bestPracticesSummary);
+  }
+
+  parts.push('', '🚫 LỖI CẦN TRÁNH:', slice.pitfallsSummary);
+
+  if (slice.constraintPacksSummary) {
+    parts.push('', `🧩 Constraint packs: ${slice.constraintPacksSummary}`);
+  }
+
+  parts.push('', '🏷️ Entity types: ' + slice.entityTagHints);
 
   return parts.join('\n');
 }

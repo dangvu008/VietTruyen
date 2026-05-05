@@ -167,7 +167,16 @@ function parseJsonSafe<T>(text: string, fallback: T): T {
 
 function resolveExtractionModel(): { provider: string; modelId: string; modelName: string } {
   const aiState = useAiStore.getState();
-  const model = getModelForTask('extract_metadata', aiState.models, {}, aiState.activeModelId, aiState.taskModelOverrides);
+  const model = getModelForTask(
+    'extract_metadata',
+    aiState.models,
+    {},
+    aiState.activeModelId,
+    aiState.taskModelOverrides,
+    aiState.modelHealth,
+    [],
+    aiState.preferredProvider
+  );
 
   return {
     provider: model?.provider ?? 'gemini',

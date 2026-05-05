@@ -5,6 +5,7 @@
  * Domain: CreationChat → [chapter display, user actions]
  */
 import React, { useState } from 'react';
+import { ExternalLink } from 'lucide-react';
 
 interface ChapterDraftCardProps {
   chapterIndex: number;
@@ -14,6 +15,7 @@ interface ChapterDraftCardProps {
   onAccept: () => void;
   onRewrite: () => void;
   onEdit: (newContent: string) => void;
+  onGoToEditor?: () => void;
   disabled?: boolean;
 }
 
@@ -97,6 +99,21 @@ const S = {
     cursor: 'pointer',
     fontFamily: 'Manrope, system-ui, sans-serif',
   },
+  btnEditor: {
+    padding: '8px 16px',
+    borderRadius: 9999,
+    border: '1px solid rgba(104,211,145,0.4)',
+    background: 'rgba(104,211,145,0.1)',
+    color: '#68d391',
+    fontSize: 13,
+    fontWeight: 700,
+    cursor: 'pointer',
+    fontFamily: 'Manrope, system-ui, sans-serif',
+    display: 'flex',
+    alignItems: 'center' as const,
+    gap: 6,
+    transition: 'all 0.2s',
+  },
 };
 
 export default function ChapterDraftCard({
@@ -107,6 +124,7 @@ export default function ChapterDraftCard({
   onAccept,
   onRewrite,
   onEdit,
+  onGoToEditor,
   disabled = false,
 }: ChapterDraftCardProps) {
   const [isEditing, setIsEditing] = useState(false);
@@ -173,6 +191,17 @@ export default function ChapterDraftCard({
             <button style={S.btnSecondary} onClick={() => setIsEditing(true)} disabled={disabled}>
               ✏️ Sửa thủ công
             </button>
+            {onGoToEditor && (
+              <button
+                style={S.btnEditor}
+                onClick={onGoToEditor}
+                disabled={disabled}
+                title="Chấp nhận chương và chuyển sang trang chỉnh sửa"
+              >
+                <ExternalLink size={13} />
+                Sang Editor
+              </button>
+            )}
           </>
         )}
       </div>

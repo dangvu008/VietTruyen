@@ -5,7 +5,7 @@
  * Domain: AI → [debug, error diagnostics, connection status]
  * Deps: lucide-react, use_ai_store, use_auth_store
  */
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
   ChevronDown,
@@ -23,6 +23,8 @@ import {
 } from 'lucide-react';
 import { useAiStore } from '../../store/use_ai_store';
 import { useAuthStore } from '../../store/use_auth_store';
+import { getConfiguredLocalAiProxyUrl } from '../../lib/ai/local_proxy_runtime';
+import type { AiModel, AiModelHealth } from '../../types/story';
 
 // ─── Error classification ───────────────────────────────────
 
@@ -44,7 +46,7 @@ interface DiagResult {
 
 function classifyError(errorMessage: string): DiagResult {
   const msg = errorMessage.toLowerCase();
-  const localProxyUrl = import.meta.env.VITE_LOCAL_AI_PROXY_URL || 'http://localhost:3030';
+  const localProxyUrl = getConfiguredLocalAiProxyUrl();
 
   // [Domain:AI] STEP 1 — Classify error type
   if (
@@ -167,6 +169,39 @@ function classifyError(errorMessage: string): DiagResult {
   };
 }
 
+function isTransientAiErrorCategory(category: ErrorCategory): boolean {
+  return category === 'network' || category === 'provider' || category === 'rate_limit';
+}
+
+function isModelHealthy(model: AiModel, modelHealth: Record<string, AiModelHealth>): boolean {
+  const providerPrefix = model.modelId.includes('/')
+    ? `${model.provider}-${model.modelId.split('/')[0]}`
+    : undefined;
+  const healthEntries = [
+    modelHealth[model.id],
+    providerPrefix ? modelHealth[providerPrefix] : undefined,
+  ].filter(Boolean) as AiModelHealth[];
+
+  if (healthEntries.length === 0) return true;
+
+  return healthEntries.every((health) => {
+    if (health.status === 'available') return true;
+    if (health.status === 'cooldown' && health.unavailableUntil) {
+      return new Date(health.unavailableUntil).getTime() <= Date.now();
+    }
+    return false;
+  });
+}
+
+function hasAutomaticFallbackChoice(): boolean {
+  const aiState = useAiStore.getState();
+  const activeModelId = aiState.activeModelId === 'auto' ? aiState.manualModelId : aiState.activeModelId;
+
+  return aiState.models.some((model) => (
+    model.id !== activeModelId && isModelHealthy(model, aiState.modelHealth)
+  ));
+}
+
 // ─── Config Status Checker ──────────────────────────────────
 
 interface ConfigStatus {
@@ -187,7 +222,7 @@ function getConfigStatus(): ConfigStatus {
 
   const activeModel = aiState.models.find((m) => m.id === aiState.activeModelId);
   const localProxyEnabled = import.meta.env.VITE_USE_LOCAL_AI_PROXY === 'true';
-  const localProxyUrl = import.meta.env.VITE_LOCAL_AI_PROXY_URL || 'http://localhost:3030';
+  const localProxyUrl = getConfiguredLocalAiProxyUrl();
 
   const directKeys: string[] = [];
   if (import.meta.env.VITE_GEMINI_API_KEY?.trim()) directKeys.push('Gemini');
@@ -235,6 +270,10 @@ export const AiConnectionDebugPanel: React.FC<AiConnectionDebugPanelProps> = ({
   const [networkOk, setNetworkOk] = useState<boolean | null>(null);
 
   const diag = classifyError(error);
+  const shouldShowRetry = useMemo(() => (
+    Boolean(onRetry)
+    && (!isTransientAiErrorCategory(diag.category) || !hasAutomaticFallbackChoice())
+  ), [diag.category, onRetry, error]);
 
   // [Domain:AI] STEP 1 — Load config status on expand
   useEffect(() => {
@@ -348,9 +387,9 @@ export const AiConnectionDebugPanel: React.FC<AiConnectionDebugPanelProps> = ({
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          {onRetry && (
+          {shouldShowRetry && (
             <button
-              onClick={(e) => { e.stopPropagation(); onRetry(); }}
+              onClick={(e) => { e.stopPropagation(); onRetry?.(); }}
               style={{
                 display: 'flex',
                 alignItems: 'center',

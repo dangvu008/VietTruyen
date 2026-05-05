@@ -29,6 +29,14 @@ export interface CharacterSpeechProfile {
   situationalRules?: CharacterSpeechRule[];
 }
 
+export interface CharacterPsychology {
+  coreWound?: string;
+  deepFear?: string;
+  hiddenDesire?: string;
+  selfDeception?: string;
+  bodyLanguage?: string;
+}
+
 export interface Character {
   id: string;
   name: string;
@@ -38,6 +46,7 @@ export interface Character {
   traits: string;
   aliases?: string[];
   facts?: StoryFact[];
+  psychology?: CharacterPsychology;
   speechProfile?: CharacterSpeechProfile;
 }
 
@@ -56,6 +65,15 @@ export interface OutlineBeat {
   title: string;
   summary: string;
   focus: string;
+  // P2a — Chapter narrative metadata (from AI_NovelGenerator pattern)
+  /** Narrative function of this chapter in the story arc */
+  chapterRole?: 'opening' | 'rising' | 'pivot' | 'climax' | 'falling' | 'resolution';
+  /** Reader tension level 1 (calm) → 5 (peak suspense) */
+  suspenseLevel?: 1 | 2 | 3 | 4 | 5;
+  /** Degree of expectation subversion 1 (predictable) → 5 (major twist) */
+  plotTwistLevel?: 1 | 2 | 3 | 4 | 5;
+  /** Specific foreshadowing seed to plant in this chapter */
+  foreshadowingHint?: string;
 }
 
 export interface Arc {
@@ -81,12 +99,13 @@ export interface Arc {
  * Tracks the lifecycle of AI generation for a chapter.
  * - 'idle'       — No generation in progress or ever attempted
  * - 'generating' — AI is actively writing (stream in progress)
+ * - 'partial'    — Generation was stopped/interrupted after producing usable partial text
  * - 'done'       — Generation completed and content persisted
- * - 'failed'     — Generation errored out or was interrupted without saving
+ * - 'failed'     — Generation errored out; partial text may exist and can be resumed
  *
  * Used for: UI indicators, crash recovery detection, stale job cleanup.
  */
-export type ChapterGenerationStatus = 'idle' | 'generating' | 'done' | 'failed';
+export type ChapterGenerationStatus = 'idle' | 'generating' | 'partial' | 'done' | 'failed';
 
 export interface Chapter {
   id: string;
@@ -103,6 +122,9 @@ export interface Chapter {
   updatedAt: string;
   aiMeta?: ChapterAiMeta;
   meta?: ChapterMeta; // Extended chapter metadata
+  isFavorite?: boolean; // Bookmark/favorite flag
+  /** Story System strand classification for pacing analysis */
+  strand_classification?: 'quest' | 'fire' | 'constellation';
 }
 
 export interface ChapterAiMeta {
@@ -203,6 +225,11 @@ export interface Project {
   strandTracker?: StrandTracker;   // Theo dõi nhịp độ cốt truyện
   masterOutline?: MasterOutline;   // Hệ thống dàn ý 3 tầng (总纲 → 卷纲 → 章纲)
   storyPreview?: string;           // Dữ liệu nội dung gốc/tóm tắt mồi (caching cho AI)
+  // P3b — Input Governance: separate long-term intent from current-chapter focus
+  /** Long-term author vision — rarely changes, injected as [ĐỊNH HƯỚNG DÀI HẠN] */
+  authorIntent?: string;
+  /** Short-term focus for the current writing batch — injected as [TRỌNG TÂM HIỆN TẠI] */
+  currentFocus?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -234,4 +261,13 @@ export interface AiModel {
   outputCostPer1M?: number;
   contextWindow?: number;
   capabilities?: AiModelCapability[];
+}
+
+export type AiModelHealthStatus = 'available' | 'cooldown' | 'unavailable';
+
+export interface AiModelHealth {
+  status: AiModelHealthStatus;
+  unavailableUntil?: string;
+  lastError?: string;
+  updatedAt: string;
 }

@@ -1,10 +1,11 @@
 import { describe, it, expect, vi } from 'vitest';
-import { runAllCheckers, CheckerContext } from '../../src/core/checkers/run_all_checkers';
+import { runAllCheckers } from '../../src/core/checkers/run_all_checkers';
+import type { CheckerContext } from '../../src/core/checkers/checker_types';
 
 // @legacy — rune-safeguard 2026-05-01 — do not refactor without characterization tests passing
 
 describe('runAllCheckers — characterization', () => {
-  it('existing behavior: gracefully handles a successful run of all 7 checkers', async () => {
+  it('existing behavior: gracefully handles a successful run of all 8 checkers', async () => {
     const mockContext: CheckerContext = {
       chapterId: 'ch-1',
       chapterNumber: 1,
@@ -17,7 +18,7 @@ describe('runAllCheckers — characterization', () => {
     };
 
     let callCount = 0;
-    const agents = ['high_point', 'ooc', 'pacing', 'reader_pull', 'consistency', 'continuity', 'golden_three'];
+    const agents = ['high_point', 'ooc', 'pacing', 'reader_pull', 'consistency', 'continuity', 'discourse_depth', 'golden_three'];
     const mockCallAi = vi.fn().mockImplementation(async () => {
       const agent = agents[callCount++];
       return JSON.stringify({
@@ -32,9 +33,9 @@ describe('runAllCheckers — characterization', () => {
 
     const result = await runAllCheckers(mockContext, mockCallAi);
 
-    expect(mockCallAi).toHaveBeenCalledTimes(7); // 7 Checkers
+    expect(mockCallAi).toHaveBeenCalledTimes(8);
     expect(result.pass).toBe(true);
-    expect(result.reports.length).toBe(7);
+    expect(result.reports.length).toBe(8);
     expect(result.reports.every(r => r.pass === true)).toBe(true);
     expect(result.reports.map(r => r.agent)).toEqual([
       'high_point',
@@ -43,6 +44,7 @@ describe('runAllCheckers — characterization', () => {
       'reader_pull',
       'consistency',
       'continuity',
+      'discourse_depth',
       'golden_three'
     ]);
   });
@@ -60,7 +62,7 @@ describe('runAllCheckers — characterization', () => {
     };
 
     let callCount = 0;
-    const agents = ['high_point', 'ooc', 'pacing', 'reader_pull', 'consistency', 'continuity', 'golden_three'];
+    const agents = ['high_point', 'ooc', 'pacing', 'reader_pull', 'consistency', 'continuity', 'discourse_depth', 'golden_three'];
     const mockCallAi = vi.fn().mockImplementation(async () => {
       callCount++;
       if (callCount === 3) {
@@ -80,7 +82,7 @@ describe('runAllCheckers — characterization', () => {
     const result = await runAllCheckers(mockContext, mockCallAi);
 
     expect(result.pass).toBe(false); // Because one failed
-    expect(result.reports.length).toBe(7);
+    expect(result.reports.length).toBe(8);
     
     // The 3rd agent is "pacing"
     const pacingReport = result.reports.find(r => r.agent === 'pacing');

@@ -1,20 +1,20 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { mockCustomTemplateStore } = vi.hoisted(() => {
-  let templates: any[] = [];
+const { mockTemplateStore } = vi.hoisted(() => {
+  let customTemplates: any[] = [];
 
   return {
-    mockCustomTemplateStore: {
-      getState: () => ({ templates }),
-      setState: (next: { templates: any[] }) => {
-        templates = next.templates;
+    mockTemplateStore: {
+      getState: () => ({ customTemplates }),
+      setState: (next: { customTemplates: any[] }) => {
+        customTemplates = next.customTemplates;
       },
     },
   };
 });
 
-vi.mock('../../store/use_custom_template_store', () => ({
-  useCustomTemplateStore: mockCustomTemplateStore,
+vi.mock('../../store/use_template_store', () => ({
+  useTemplateStore: mockTemplateStore,
 }));
 
 import {
@@ -24,7 +24,7 @@ import {
 
 describe('template_injector', () => {
   beforeEach(() => {
-    mockCustomTemplateStore.setState({ templates: [] });
+    mockTemplateStore.setState({ customTemplates: [] });
   });
 
   it('adds ancient register guidance and warns against modern vocabulary for ancient genres', () => {
@@ -41,7 +41,7 @@ describe('template_injector', () => {
     expect(prompt).toContain('giữ khoảng cách, thị uy, hoặc đối đầu');
   });
 
-  it('parses fallback ranges from arc titles when converted templates have stale chapterRange values', () => {
+  it('selects the matching arc from regenerated converted templates by chapter range', () => {
     const prompt = injectTemplateToWriterPrompt('Cổ đại ngôn tình', [], 150);
 
     expect(prompt).toContain('[ARC: 卷二：步步为营 (81-180章, 25%)]');
@@ -60,9 +60,27 @@ describe('template_injector', () => {
     expect(prompt).toContain('anh');
   });
 
+  it('injects opportunity arc, best practices, and constraint packs into framework prompts', () => {
+    const prompt = injectTemplateToFrameworkPrompt('Tiên hiệp', []);
+
+    expect(prompt).toContain('🧭 Nhịp triển khai / opportunity arc:');
+    expect(prompt).toContain('1. Tin đồn');
+    expect(prompt).toContain('✅ Thực hành tốt:');
+    expect(prompt).toContain('🧩 Constraint packs: Pack M01, Pack M02, Pack U03');
+  });
+
+  it('uses regenerated genre data instead of empty fallback slices for cthulhu templates', () => {
+    const prompt = injectTemplateToFrameworkPrompt('Cthulhu', ['lovecraft']);
+
+    expect(prompt).toContain('调查档案流');
+    expect(prompt).toContain('真相层级');
+    expect(prompt).toContain('规则破译');
+    expect(prompt).toContain('Pack M21, Pack U04');
+  });
+
   it('prefers explicit template pronoun rules over generic fallback inference', () => {
-    mockCustomTemplateStore.setState({
-      templates: [
+    mockTemplateStore.setState({
+      customTemplates: [
         {
           id: 'custom-ancient',
           name: 'Custom Cổ Phong',

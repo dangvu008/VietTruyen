@@ -21,60 +21,161 @@ export const SUPERNATURAL_MYSTERY_TEMPLATE: StoryTemplate = {
   ],
   "subGenres": [
     {
-      "name": "Huyền Nghi Linh Dị",
-      "description": "氛围压迫 + 诡异规则 + 逻辑自洽。在恐惧与理性的边缘，探索未知的真相。",
-      "coreAppeal": "氛围压迫 + 诡异规则 + 逻辑自洽。在恐惧与理性的边缘，探索未知的真相。"
+      "name": "灵异探险流",
+      "description": "探索灵异地点，揭开诡异真相",
+      "coreAppeal": "恐怖氛围、真相揭露、绝境逃生",
+      "referenceWorks": [
+        "我有一座恐怖屋",
+        "民调局异闻录",
+        "盗墓笔记"
+      ]
+    },
+    {
+      "name": "都市传说流",
+      "description": "现代都市中的灵异事件",
+      "coreAppeal": "身边恐怖、规则发现、智斗诡异",
+      "referenceWorks": [
+        "我在精神病院学斩神",
+        "诡秘之主"
+      ]
+    },
+    {
+      "name": "驱魔除灵流",
+      "description": "主角有特殊能力，专门处理灵异事件",
+      "coreAppeal": "能力成长、除灵战斗、拯救他人",
+      "referenceWorks": [
+        "茅山后裔",
+        "我当道士那些年"
+      ]
+    },
+    {
+      "name": "规则怪谈流",
+      "description": "遵守规则才能生存",
+      "coreAppeal": "规则发现、规则利用、规则反杀",
+      "referenceWorks": [
+        "深渊归途",
+        "规则怪谈"
+      ]
     }
   ],
-  "worldRules": [],
-  "coolPatterns": [],
-  "conflictPatterns": [],
+  "worldRules": [
+    {
+      "name": "规则怪谈流",
+      "description": "**特点**: 遵守规则才能生存 **核心爽点**: 规则发现、规则利用、规则反杀 **代表作**: 《深渊归途》《规则怪谈》 --"
+    }
+  ],
+  "coolPatterns": [
+    {
+      "name": "规则破解",
+      "scenario": "发现诡异的规则",
+      "appeal": "利用规则漏洞逃生/反杀",
+      "keyNote": "规则要自洽，破解要合理"
+    },
+    {
+      "name": "真相揭露",
+      "scenario": "层层迷雾后的真相",
+      "appeal": "恍然大悟，前后呼应",
+      "keyNote": "要有伏笔，不能凭空"
+    },
+    {
+      "name": "绝境逃生",
+      "scenario": "被困在灵异空间",
+      "appeal": "九死一生，惊险刺激",
+      "keyNote": "要有代价，不能太轻松"
+    },
+    {
+      "name": "能力觉醒",
+      "scenario": "生死关头觉醒特殊能力",
+      "appeal": "反杀灵异，扭转局面",
+      "keyNote": "能力要有限制"
+    }
+  ],
+  "conflictPatterns": [
+    {
+      "type": "悬疑灵异题材模板 (Suspense & Supernatural)",
+      "source": "> **核心卖点**: 氛围压迫 + 诡异规则 + 逻辑自洽。在恐惧与理性的边缘，探索未知的真相。 --",
+      "resolution": "> **核心卖点**: 氛围压迫 + 诡异规则 + 逻辑自洽。在恐惧与理性的边缘，探索未知的真相。 --"
+    },
+    {
+      "type": "规则设计原则",
+      "source": "**自洽**: 规则内部不矛盾 **可验证**: 违反规则有明确后果 **有漏洞**: 可以被利用 **有来源**: 规则的形成有原因 --",
+      "resolution": "**自洽**: 规则内部不矛盾 **可验证**: 违反规则有明确后果 **有漏洞**: 可以被利用 **有来源**: 规则的形成有原因 --"
+    },
+    {
+      "type": "必须避免",
+      "source": "❌ 恐怖堆砌无逻辑 ❌ 规则漏洞随意 ❌ 主角开挂破坏压迫感 ❌ 灵异设定前后矛盾",
+      "resolution": "❌ 恐怖堆砌无逻辑 ❌ 规则漏洞随意 ❌ 主角开挂破坏压迫感 ❌ 灵异设定前后矛盾"
+    }
+  ],
   "outlineArcs": [
     {
       "title": "卷一：入门 (1-50章)",
-      "chapterRange": "1-100",
+      "chapterRange": "1-50",
       "coreFocus": "主角接触灵异世界",
       "coreConflict": "初步觉醒",
       "climax": "首次解决灵异事件"
     },
     {
       "title": "卷二：成长 (51-150章)",
-      "chapterRange": "1-100",
+      "chapterRange": "51-150",
       "coreFocus": "能力提升，接触更多灵异",
       "coreConflict": "稳步提升",
       "climax": "解决重大灵异事件"
     },
     {
       "title": "卷三：深入 (151-250章)",
-      "chapterRange": "1-100",
+      "chapterRange": "151-250",
       "coreFocus": "探索灵异世界的真相",
       "coreConflict": "质变",
       "climax": "揭露部分真相"
     },
     {
       "title": "卷四：对抗 (251-350章)",
-      "chapterRange": "1-100",
+      "chapterRange": "251-350",
       "coreFocus": "与高级灵异对抗",
       "coreConflict": "接近巅峰",
       "climax": "击败主要敌人"
     },
     {
       "title": "卷五：终局 (351-400章)",
-      "chapterRange": "1-100",
+      "chapterRange": "351-400",
       "coreFocus": "最终真相，终极对决",
       "coreConflict": "巅峰",
       "climax": "圆满结局"
     }
   ],
+  "targetWordCount": "1.000.000 chữ",
+  "targetChapterCount": 400,
   "pitfalls": [
     {
-      "description": "Thiết lập trước sau mâu thuẫn.",
+      "description": "恐怖堆砌无逻辑",
+      "severity": "critical"
+    },
+    {
+      "description": "规则漏洞随意",
+      "severity": "critical"
+    },
+    {
+      "description": "主角开挂破坏压迫感",
+      "severity": "critical"
+    },
+    {
+      "description": "灵异设定前后矛盾",
       "severity": "critical"
     }
   ],
   "bestPractices": [
     {
-      "description": "Thiết lập tự nhất quán."
+      "description": "恐怖有逻辑有铺垫"
+    },
+    {
+      "description": "规则自洽可验证"
+    },
+    {
+      "description": "主角有代价有限制"
+    },
+    {
+      "description": "设定详细且一致"
     }
   ],
   "entityTags": [

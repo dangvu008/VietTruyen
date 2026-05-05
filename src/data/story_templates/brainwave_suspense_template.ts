@@ -20,60 +20,154 @@ export const BRAINWAVE_SUSPENSE_TEMPLATE: StoryTemplate = {
   ],
   "subGenres": [
     {
-      "name": "Huyền Nghi Não Động",
-      "description": "逻辑推理 + 规则博弈 + 高智商反转。在规则与推理的交织中，揭开层层迷雾背后的真相。",
-      "coreAppeal": "逻辑推理 + 规则博弈 + 高智商反转。在规则与推理的交织中，揭开层层迷雾背后的真相。"
+      "name": "规则推理流",
+      "description": "在特定规则下进行推理",
+      "coreAppeal": "规则发现、逻辑推演、规则反杀",
+      "referenceWorks": [
+        "诡秘之主",
+        "死亡万花筒",
+        "全球高考"
+      ]
+    },
+    {
+      "name": "密室逃脱流",
+      "description": "被困特定空间，需要解谜逃脱",
+      "coreAppeal": "线索发现、谜题破解、绝境逃生",
+      "referenceWorks": [
+        "十宗罪",
+        "心理罪",
+        "无证之罪"
+      ]
+    },
+    {
+      "name": "信息博弈流",
+      "description": "信息不对称下的智力对决",
+      "coreAppeal": "信息差利用、心理博弈、反转揭露",
+      "referenceWorks": [
+        "欺诈游戏",
+        "赌博默示录",
+        "狼人杀"
+      ]
+    },
+    {
+      "name": "时空诡计流",
+      "description": "利用时间/空间的诡计",
+      "coreAppeal": "诡计揭露、逻辑自洽、认知颠覆",
+      "referenceWorks": [
+        "嫌疑人X的献身",
+        "白夜行",
+        "恶意"
+      ]
     }
   ],
-  "worldRules": [],
-  "coolPatterns": [],
-  "conflictPatterns": [],
+  "worldRules": [
+    {
+      "name": "规则推理流",
+      "description": "**特点**: 在特定规则下进行推理 **核心爽点**: 规则发现、逻辑推演、规则反杀 **代表作**: 《诡秘之主》《死亡万花筒》《全球高考》"
+    }
+  ],
+  "coolPatterns": [
+    {
+      "name": "规则破解",
+      "scenario": "发现规则的漏洞或真相",
+      "appeal": "利用规则反杀/逃生",
+      "keyNote": "规则要自洽，破解要合理"
+    },
+    {
+      "name": "推理对决",
+      "scenario": "与对手进行推理对决",
+      "appeal": "智力碾压，对手落败",
+      "keyNote": "双方都要有智商"
+    },
+    {
+      "name": "真相揭露",
+      "scenario": "层层迷雾后的真相大白",
+      "appeal": "恍然大悟，前后呼应",
+      "keyNote": "要有伏笔，逻辑自洽"
+    },
+    {
+      "name": "绝境逆转",
+      "scenario": "看似必死的局面逆转",
+      "appeal": "惊险刺激，化险为夷",
+      "keyNote": "逆转要有铺垫"
+    }
+  ],
+  "conflictPatterns": [
+    {
+      "type": "对手设计",
+      "source": "类型 / 特点 / 威胁 ------ / ------ / ------ 高智商罪犯 / 计划周密 / 难以破解 规则制定者 / 掌控规则 / 信息优势 同类竞争者 / 能力相当 / 互相博弈 隐藏敌人 / 身份不明 / 防不胜防",
+      "resolution": "类型 / 特点 / 威胁 ------ / ------ / ------ 高智商罪犯 / 计划周密 / 难以破解 规则制定者 / 掌控规则 / 信息优势 同类竞争者 / 能力相当 / 互相博弈 隐藏敌人 / 身份不明 / 防不胜防"
+    }
+  ],
   "outlineArcs": [
     {
       "title": "卷一：入局 (1-50章)",
-      "chapterRange": "1-100",
+      "chapterRange": "1-50",
       "coreFocus": "进入悬疑世界，了解规则",
       "coreConflict": "",
       "climax": "首次破解谜题"
     },
     {
       "title": "卷二：成长 (51-120章)",
-      "chapterRange": "1-100",
+      "chapterRange": "51-120",
       "coreFocus": "推理能力提升",
       "coreConflict": "",
       "climax": "解决重大案件"
     },
     {
       "title": "卷三：深入 (121-200章)",
-      "chapterRange": "1-100",
+      "chapterRange": "121-200",
       "coreFocus": "接触核心谜题",
       "coreConflict": "",
       "climax": "发现关键线索"
     },
     {
       "title": "卷四：对决 (201-280章)",
-      "chapterRange": "1-100",
+      "chapterRange": "201-280",
       "coreFocus": "与幕后黑手对决",
       "coreConflict": "",
       "climax": "揭露幕后黑手"
     },
     {
       "title": "卷五：终局 (281-350章)",
-      "chapterRange": "1-100",
+      "chapterRange": "281-350",
       "coreFocus": "最终真相，终极对决",
       "coreConflict": "",
       "climax": "圆满结局"
     }
   ],
+  "targetWordCount": "1.000.000 chữ",
+  "targetChapterCount": 350,
   "pitfalls": [
     {
-      "description": "Thiết lập trước sau mâu thuẫn.",
+      "description": "线索不公平",
+      "severity": "critical"
+    },
+    {
+      "description": "推理跳跃",
+      "severity": "critical"
+    },
+    {
+      "description": "结尾解释不足",
+      "severity": "critical"
+    },
+    {
+      "description": "规则自相矛盾",
       "severity": "critical"
     }
   ],
   "bestPractices": [
     {
-      "description": "Thiết lập tự nhất quán."
+      "description": "线索公平可回溯"
+    },
+    {
+      "description": "推理逻辑严密"
+    },
+    {
+      "description": "真相揭露完整"
+    },
+    {
+      "description": "规则自洽一致"
     }
   ],
   "entityTags": [

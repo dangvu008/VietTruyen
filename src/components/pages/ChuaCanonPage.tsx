@@ -25,10 +25,12 @@ import {
   Sparkles,
 } from 'lucide-react';
 import PageHeader from '../layout/PageHeader';
+import PlotDirectionPreview from '../shared/PlotDirectionPreview';
 import { useSurgeryStore } from '../../store/use_surgery_store';
 import { createId } from '../../core/id';
 import type { Project } from '../../types/story';
 import type { RemovalDirective, RewriteTask, SurgeryPolicy, SurgeryTargetType } from '../../types/surgery';
+import type { PlotDirectionOption } from '../../types/plot_direction';
 
 interface ChuaCanonPageProps {
   project: Project;
@@ -308,6 +310,21 @@ const QuetAnhHuongTab: React.FC<{ project: Project; onGoToQueue: () => void }> =
     onGoToQueue();
   };
 
+  const handleConfirmPlotDirection = async (direction: PlotDirectionOption) => {
+    if (!activeSpec) return;
+    await surgeryStore.saveSpec({
+      ...activeSpec,
+      selectedPlotDirection: {
+        ...direction,
+        selectedAt: new Date().toISOString(),
+      },
+    });
+  };
+
+  const canBuildQueue = Boolean(
+    latestScan && (latestScan.status !== 'blocked' || activeSpec?.selectedPlotDirection)
+  );
+
   return (
     <div className="grid grid-cols-12 gap-5">
       <div className="col-span-4 space-y-3">
@@ -350,42 +367,62 @@ const QuetAnhHuongTab: React.FC<{ project: Project; onGoToQueue: () => void }> =
           <button onClick={handleFreezeCanon} disabled={!activeSpec || !latestScan || latestScan.status === 'blocked'} className="btn-secondary w-full">
             Khoá Canon
           </button>
-          <button onClick={handleBuildQueue} disabled={!latestScan || latestScan.status === 'blocked'} className="btn-primary w-full">
+          <button onClick={handleBuildQueue} disabled={!canBuildQueue} className="btn-primary w-full">
             Tạo hàng chờ viết lại →
           </button>
+          {latestScan?.status === 'blocked' && !activeSpec?.selectedPlotDirection && (
+            <p className="text-xs text-[#F59E0B] leading-5">
+              Scan đang bị chặn. Hãy chọn một hướng cốt truyện trước khi tạo hàng chờ.
+            </p>
+          )}
         </div>
       </div>
 
       <div className="col-span-8">
         {latestScan ? (
-          <div className="bg-[#0F1115] rounded-2xl border border-[#1E232B] p-6">
-            <div className="grid grid-cols-4 gap-3 mb-4">
-              {[
-                { label: 'Bản ghi', value: latestScan.summary.totalRecords },
-                { label: 'Trực tiếp / Nhân quả', value: latestScan.summary.directHits },
-                { label: 'Critical', value: latestScan.summary.criticalHits },
-                { label: 'Arc bị ảnh hưởng', value: latestScan.summary.impactedArcCount },
-              ].map((item) => (
-                <div key={item.label} className="bg-[#0F1115] bg-[#0F1115] rounded-xl p-3">
-                  <p className="text-xs text-[#94A3B8]">{item.label}</p>
-                  <p className="text-lg font-display font-bold text-[#F8FAFC] mt-1">{item.value}</p>
-                </div>
-              ))}
-            </div>
-            <div className="space-y-2 max-h-[calc(100vh-340px)] overflow-y-auto pr-1">
-              {latestScan.records.map((record) => (
-                <div key={record.id} className="bg-[#0F1115] bg-[#0F1115] rounded-xl p-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-semibold text-[#F8FAFC]">Chương {record.chapterIndex} · {record.targetLabel}</p>
-                      <p className="text-xs text-[#94A3B8] mt-1">{record.reasonType} · {record.severity} · {record.arcId || 'Không xác định arc'}</p>
-                    </div>
-                    <span className={`badge ${record.severity === 'critical' ? 'badge-amber' : 'badge'}`}>{record.severity}</span>
+          <div className="space-y-4">
+            {activeSpec && (
+              <PlotDirectionPreview
+                project={project}
+                spec={activeSpec}
+                scan={latestScan}
+                arcs={arcs}
+                onConfirm={handleConfirmPlotDirection}
+              />
+            )}
+
+            <div className="bg-[#0F1115] rounded-2xl border border-[#1E232B] p-6">
+              <div className="grid grid-cols-4 gap-3 mb-4">
+                {[
+                  { label: 'Bản ghi', value: latestScan.summary.totalRecords },
+                  { label: 'Trực tiếp / Nhân quả', value: latestScan.summary.directHits },
+                  { label: 'Critical', value: latestScan.summary.criticalHits },
+                  { label: 'Arc bị ảnh hưởng', value: latestScan.summary.impactedArcCount },
+                ].map((item) => (
+                  <div key={item.label} className="bg-[#0F1115] bg-[#0F1115] rounded-xl p-3">
+                    <p className="text-xs text-[#94A3B8]">{item.label}</p>
+                    <p className="text-lg font-display font-bold text-[#F8FAFC] mt-1">{item.value}</p>
                   </div>
-                  <p className="text-sm text-[#E2E8F0] mt-2">{record.reason}</p>
-                  <p className="text-xs text-[#94A3B8] mt-2">{record.recommendedAction}</p>
-                </div>
-              ))}
+                ))}
+              </div>
+              <div className="space-y-2 max-h-[calc(100vh-520px)] overflow-y-auto pr-1">
+                {latestScan.records.map((record) => (
+                  <div key={record.id} className="bg-[#0F1115] bg-[#0F1115] rounded-xl p-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold text-[#F8FAFC]">Chương {record.chapterIndex} · {record.targetLabel}</p>
+                        <p className="text-xs text-[#94A3B8] mt-1">{record.reasonType} · {record.severity} · {record.arcId || 'Không xác định arc'}</p>
+                      </div>
+                      <span className={`badge ${record.severity === 'critical' ? 'badge-amber' : 'badge'}`}>{record.severity}</span>
+                    </div>
+                    <p className="text-sm text-[#E2E8F0] mt-2">{record.reason}</p>
+                    <p className="text-xs text-[#94A3B8] mt-2">{record.recommendedAction}</p>
+                  </div>
+                ))}
+                {latestScan.records.length === 0 && (
+                  <p className="text-sm text-[#94A3B8]">Không có bản ghi ảnh hưởng nào cho scan này.</p>
+                )}
+              </div>
             </div>
           </div>
         ) : (

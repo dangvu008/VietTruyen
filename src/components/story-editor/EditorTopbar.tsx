@@ -6,9 +6,11 @@
  * Deps: editor_types, lucide-react
  */
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { Zap, ChevronDown, FileText, CheckCircle2, Pencil, CircleDot, Circle, Globe, MessageSquareQuote, FileClock } from 'lucide-react';
+import { Zap, ChevronDown, FileText, CheckCircle2, Pencil, CircleDot, Circle, Globe, MessageSquareQuote, FileClock, ChevronLeft, ChevronRight, AlertTriangle, Loader2 } from 'lucide-react';
 import type { Chapter } from '../../types/story';
 import type { ProjectInfo, ChapterUIStatus } from './editor_types';
+import { getChapterCompletionAction, isProbablyInterruptedChapter } from './editor_types';
+import type { QualityMode } from '../../types/workflow';
 
 interface CreationProgressSummary {
   badge: string;
@@ -36,6 +38,13 @@ interface Props {
   emptyChapterCount?: number;
   batchProgress?: { current: number; total: number; isRunning: boolean } | null;
   onBatchGenerateAll?: () => void;
+  qualityMode?: QualityMode;
+  onQualityModeChange?: (mode: QualityMode) => void;
+  onSaveAsTemplate?: () => void | Promise<void>;
+  hasSavedAsTemplate?: boolean;
+  isSavingTemplate?: boolean;
+  templateSaveLabel?: string;
+  onCompleteChapter?: (chapterId: string) => void;
 }
 
 /** [Domain:StoryEditor] STEP 1 — Format token count for display */
@@ -69,6 +78,12 @@ function formatWordCount(count: number): string {
 /** [Domain:StoryEditor] STEP 4 — Map Chapter status to display label + style */
 function getStatusLabel(chapter: Chapter | null): { label: string; className: string } {
   if (!chapter) return { label: '', className: '' };
+  if (chapter.generationStatus === 'generating') {
+    return { label: 'Đang tạo', className: 'border-[#f0c59a]/20 bg-[#f0c59a]/10 text-[#f0c59a]' };
+  }
+  if (isProbablyInterruptedChapter(chapter)) {
+    return { label: 'Tạo dở', className: 'border-amber-500/25 bg-amber-500/10 text-amber-300' };
+  }
   if (!chapter.content?.trim()) {
     return { label: 'Trống', className: 'border-white/10 bg-white/[0.03] text-[#8f7f73]' };
   }
@@ -109,6 +124,18 @@ function getChapterStatusIndicator(uiStatus: ChapterUIStatus): {
         color: 'text-[#f0c59a]',
         label: 'Đã sửa',
       };
+    case 'interrupted':
+      return {
+        icon: <AlertTriangle className="h-3 w-3" />,
+        color: 'text-amber-300',
+        label: 'Tạo dở',
+      };
+    case 'generating':
+      return {
+        icon: <Loader2 className="h-3 w-3 animate-spin" />,
+        color: 'text-[#f0c59a]',
+        label: 'Đang tạo',
+      };
     case 'reviewing':
       return {
         icon: <CircleDot className="h-3 w-3" />,
@@ -148,10 +175,28 @@ export const EditorTopbar: React.FC<Props> = ({
   emptyChapterCount = 0,
   batchProgress,
   onBatchGenerateAll,
+  qualityMode = 'quality',
+  onQualityModeChange,
+  onSaveAsTemplate,
+  hasSavedAsTemplate = false,
+  isSavingTemplate = false,
+  templateSaveLabel,
+  onCompleteChapter,
 }) => {
   const status = getStatusLabel(chapter);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const currentIndex = chapters.findIndex(c => c.id === chapter?.id);
+  const hasPrev = currentIndex > 0;
+  const hasNext = currentIndex >= 0 && currentIndex < chapters.length - 1;
+
+  const handlePrev = () => {
+    if (hasPrev) onSelectChapter(chapters[currentIndex - 1].id);
+  };
+  const handleNext = () => {
+    if (hasNext) onSelectChapter(chapters[currentIndex + 1].id);
+  };
 
   // [Domain:StoryEditor] STEP 6 — Close dropdown on outside click
   useEffect(() => {
@@ -207,15 +252,13 @@ export const EditorTopbar: React.FC<Props> = ({
   }, [creationProgressSummary?.tone]);
 
   return (
-    <div className="flex h-[52px] items-center justify-between border-b border-[#241c17] bg-[#110f0e] px-6 shrink-0 font-sans">
+    <div className="flex min-h-[68px] shrink-0 flex-wrap items-center gap-x-4 gap-y-2 border-b border-[#241c17] bg-[#110f0e] px-4 py-3 font-sans xl:flex-nowrap xl:px-6">
       {/* Left: Logo */}
-      <div className="flex items-center gap-3">
-        <span className="text-[15px] font-bold tracking-wide text-accent-amber">
-          The Nocturnal Editor
-        </span>
+      <div className="flex min-w-0 items-center gap-2.5">
+        {/* Removed redundant 'The Nocturnal Editor' text to reduce clutter */}
         {creationProgressSummary && (
           <span
-            className={`hidden rounded-full border px-2.5 py-1 text-[10px] font-semibold lg:inline-flex ${creationToneClass}`}
+            className={`hidden max-w-[220px] truncate rounded-full border px-3 py-1.5 text-[11px] font-semibold lg:inline-flex ${creationToneClass}`}
             title={creationProgressSummary.detail}
           >
             {creationProgressSummary.badge}
@@ -224,7 +267,7 @@ export const EditorTopbar: React.FC<Props> = ({
         {onOpenCreationChat && (
           <button
             onClick={onOpenCreationChat}
-            className="inline-flex items-center gap-2 rounded-full border border-[#f0c59a]/20 bg-[#f0c59a]/8 px-3 py-1.5 text-[11px] font-semibold text-[#f0c59a] transition hover:bg-[#f0c59a]/14"
+            className="inline-flex h-9 shrink-0 items-center gap-2 whitespace-nowrap rounded-full border border-[#f0c59a]/20 bg-[#f0c59a]/8 px-3 text-[11px] font-semibold text-[#f0c59a] transition hover:bg-[#f0c59a]/14"
             title={creationProgressSummary?.detail || 'Quay lại trang thảo luận khung truyện'}
           >
             <MessageSquareQuote className="h-3.5 w-3.5" />
@@ -234,19 +277,28 @@ export const EditorTopbar: React.FC<Props> = ({
       </div>
 
       {/* Center: Active chapter context + Dropdown trigger */}
-      <div className="relative" ref={dropdownRef}>
+      <div className="relative min-w-[260px] flex-1 xl:max-w-[520px] flex items-center gap-1.5" ref={dropdownRef}>
+        <button
+          onClick={handlePrev}
+          disabled={!hasPrev}
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/[0.06] bg-white/[0.025] text-[#8f7f73] transition-colors hover:bg-white/[0.05] hover:text-[#dcd1c6] disabled:opacity-30 disabled:hover:bg-white/[0.025] disabled:hover:text-[#8f7f73]"
+          title="Chương trước"
+        >
+          <ChevronLeft className="h-4 w-4" />
+        </button>
+
         <button
           onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-          className="flex items-center gap-2.5 text-[13px] rounded-lg px-3 py-1.5 transition-colors hover:bg-white/[0.04] group"
+          className="group flex h-10 flex-1 items-center gap-2.5 rounded-full border border-white/[0.06] bg-white/[0.025] px-3 text-[13px] transition-colors hover:bg-white/[0.05]"
           id="chapter-dropdown-trigger"
         >
           {chapter ? (
             <>
-              <span className="font-medium text-[#dcd1c6] truncate max-w-[280px] group-hover:text-accent-amber transition-colors">
+              <span className="min-w-0 flex-1 truncate text-left font-medium text-[#dcd1c6] transition-colors group-hover:text-accent-amber">
                 {chapter.title || 'Chương không tên'}
               </span>
               {status.label && (
-                <span className={`rounded-full border px-2.5 py-0.5 text-[10px] font-semibold ${status.className}`}>
+                <span className={`hidden rounded-full border px-2.5 py-0.5 text-[10px] font-semibold sm:inline-flex ${status.className}`}>
                   {status.label}
                 </span>
               )}
@@ -258,6 +310,15 @@ export const EditorTopbar: React.FC<Props> = ({
           ) : (
             <span className="text-[#8f7f73]">Chưa chọn chương</span>
           )}
+        </button>
+
+        <button
+          onClick={handleNext}
+          disabled={!hasNext}
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/[0.06] bg-white/[0.025] text-[#8f7f73] transition-colors hover:bg-white/[0.05] hover:text-[#dcd1c6] disabled:opacity-30 disabled:hover:bg-white/[0.025] disabled:hover:text-[#8f7f73]"
+          title="Chương sau"
+        >
+          <ChevronRight className="h-4 w-4" />
         </button>
 
         {/* Chapter List Dropdown */}
@@ -318,12 +379,12 @@ export const EditorTopbar: React.FC<Props> = ({
                 const isActive = ch.id === chapter?.id;
                 const uiStatus = statusMap[ch.id] || 'empty';
                 const indicator = getChapterStatusIndicator(uiStatus);
+                const completionAction = getChapterCompletionAction(ch, uiStatus);
                 const words = wordCounts[ch.id] || 0;
 
                 return (
-                  <button
+                  <div
                     key={ch.id}
-                    onClick={() => handleSelectChapter(ch.id)}
                     className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors group/item focus:outline-none focus:bg-white/[0.05] ${
                       isActive
                         ? 'bg-accent-amber/[0.08] border-l-2 border-accent-amber'
@@ -331,42 +392,57 @@ export const EditorTopbar: React.FC<Props> = ({
                     }`}
                     id={`chapter-item-${ch.id}`}
                   >
-                    {/* Chapter number */}
-                    <span className={`text-[11px] font-mono w-5 text-center shrink-0 ${
-                      isActive ? 'text-accent-amber' : 'text-[#5c5249]'
-                    }`}>
-                      {index + 1}
-                    </span>
-
-                    {/* Title + meta */}
-                    <div className="flex-1 min-w-0">
-                      <div className={`text-[13px] font-medium truncate transition-colors ${
-                        isActive
-                          ? 'text-accent-amber'
-                          : 'text-[#c5b8ad] group-hover/item:text-[#dcd1c6]'
+                    <button
+                      type="button"
+                      onClick={() => handleSelectChapter(ch.id)}
+                      className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                    >
+                      <span className={`text-[11px] font-mono w-5 text-center shrink-0 ${
+                        isActive ? 'text-accent-amber' : 'text-[#5c5249]'
                       }`}>
-                        {ch.title || 'Chương không tên'}
+                        {index + 1}
+                      </span>
+
+                      <div className="flex-1 min-w-0">
+                        <div className={`text-[13px] font-medium truncate transition-colors ${
+                          isActive
+                            ? 'text-accent-amber'
+                            : 'text-[#c5b8ad] group-hover/item:text-[#dcd1c6]'
+                        }`}>
+                          {ch.title || 'Chương không tên'}
+                        </div>
                       </div>
-                    </div>
 
-                    {/* Word count */}
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <FileText className="h-3 w-3 text-[#5c5249]" />
-                      <span className={`text-[11px] font-medium tabular-nums ${
-                        words > 0 ? 'text-[#8f7f73]' : 'text-[#3d3630]'
-                      }`}>
-                        {words > 0 ? `${formatWordCount(words)} chữ` : '—'}
-                      </span>
-                    </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <FileText className="h-3 w-3 text-[#5c5249]" />
+                        <span className={`text-[11px] font-medium tabular-nums ${
+                          words > 0 ? 'text-[#8f7f73]' : 'text-[#3d3630]'
+                        }`}>
+                          {words > 0 ? `${formatWordCount(words)} chữ` : '—'}
+                        </span>
+                      </div>
 
-                    {/* Status indicator */}
-                    <div className={`flex items-center gap-1 shrink-0 ${indicator.color}`} title={indicator.label}>
-                      {indicator.icon}
-                      <span className="text-[10px] font-medium hidden sm:inline">
-                        {indicator.label}
-                      </span>
-                    </div>
-                  </button>
+                      <div className={`flex items-center gap-1 shrink-0 ${indicator.color}`} title={indicator.label}>
+                        {indicator.icon}
+                        <span className="text-[10px] font-medium hidden sm:inline">
+                          {indicator.label}
+                        </span>
+                      </div>
+                    </button>
+                    {completionAction && onCompleteChapter && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsDropdownOpen(false);
+                          onCompleteChapter(ch.id);
+                        }}
+                        className="shrink-0 rounded-full border border-amber-300/30 bg-amber-300/12 px-2.5 py-1 text-[10px] font-bold text-amber-200 transition hover:bg-amber-300/20"
+                        title={completionAction.title}
+                      >
+                        {completionAction.label}
+                      </button>
+                    )}
+                  </div>
                 );
               })
             )}
@@ -374,41 +450,63 @@ export const EditorTopbar: React.FC<Props> = ({
         )}
       </div>
 
-      {creationProgressSummary && (
-        <div className="hidden min-w-[240px] items-center justify-end gap-2 xl:flex">
-          <div className="min-w-0 text-right">
-            <div className="truncate text-[11px] font-semibold text-[#d8cabd]">
-              {creationProgressSummary.headline}
-            </div>
-            <div className="truncate text-[10px] text-[#7f7064]">
-              {creationProgressSummary.draftSavedAt
-                ? `Nháp lưu ${new Date(creationProgressSummary.draftSavedAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}`
-                : 'Nháp chưa được lưu'}
-            </div>
-          </div>
-          <span className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold ${creationToneClass}`}>
-            <FileClock className="mr-1 inline h-3 w-3" />
-            Trạng thái truyện
-          </span>
-        </div>
-      )}
+      {/* Removed the redundant creation progress right-side block to simplify UI */}
 
       {/* Right: Token count + Export */}
-      <div className="flex items-center gap-4">
+      <div className="ml-auto flex min-w-0 shrink-0 items-center gap-2">
+        {onQualityModeChange ? (
+          <label className="flex h-9 items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] px-3 text-[11px] text-[#c8beb0]">
+            <span className="hidden font-semibold text-[#8f7f73] 2xl:inline">Chất lượng</span>
+            <select
+              value={qualityMode}
+              onChange={(event) => onQualityModeChange(event.target.value as QualityMode)}
+              className="bg-transparent font-semibold text-[#f3e6d6] outline-none"
+              aria-label="Chất lượng sinh nội dung"
+            >
+              <option value="fast" className="bg-[#110f0e] text-[#f3e6d6]">Nhanh</option>
+              <option value="balanced" className="bg-[#110f0e] text-[#f3e6d6]">Cân bằng</option>
+              <option value="quality" className="bg-[#110f0e] text-[#f3e6d6]">Sâu</option>
+            </select>
+          </label>
+        ) : null}
         {sessionTokens > 0 && (
-          <div className="flex items-center gap-1.5 text-[12px] font-medium text-accent-amber/80">
+          <div className="hidden h-9 items-center gap-1.5 rounded-full border border-white/[0.06] px-3 text-[12px] font-medium text-accent-amber/80 xl:flex">
             <Zap className="h-3 w-3" />
             <span>{formatTokenCount(sessionTokens)} token</span>
           </div>
         )}
 
-        <button className="rounded-full bg-[#E2B182] px-5 py-1.5 text-[13px] font-semibold text-[#1B140F] transition hover:bg-[#F0C59A] active:scale-[0.98]">
-          Xuất file
+        {onSaveAsTemplate && !hasSavedAsTemplate && (
+          <button
+            onClick={onSaveAsTemplate}
+            disabled={isSavingTemplate}
+            className={`flex h-9 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-full border border-[#c6a6ff]/30 bg-[#c6a6ff]/10 px-4 text-[13px] font-semibold text-[#c6a6ff] transition active:scale-[0.98] ${
+              isSavingTemplate ? 'cursor-wait opacity-70' : 'hover:bg-[#c6a6ff]/20'
+            }`}
+            title={templateSaveLabel || 'Lưu toàn bộ cốt truyện và nhân vật hiện tại thành một Template dùng chung'}
+          >
+            {isSavingTemplate ? 'Đang phân tích...' : 'Lưu thành Template'}
+          </button>
+        )}
+
+        <button
+          onClick={onSave}
+          disabled={!chapter || (!isDirty && !isSaving)}
+          className={`flex h-9 min-w-[88px] shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-full px-4 text-[13px] font-semibold transition active:scale-[0.98] ${
+            isSaving 
+              ? 'bg-accent-amber/50 text-[#1B140F] cursor-wait' 
+              : isDirty 
+                ? 'bg-accent-amber text-[#1B140F] hover:bg-[#FFDFBA] shadow-[0_0_15px_rgba(240,197,154,0.3)]' 
+                : 'bg-[#2a2420] text-[#8f7f73] cursor-not-allowed border border-white/5'
+          }`}
+        >
+          {isSaving ? 'Đang lưu...' : isDirty ? 'Lưu thay đổi' : 'Đã lưu'}
         </button>
+
+        {/* Removed redundant Xuất file button */}
         
         {/* Hidden controls to trigger saves */}
         <div className="hidden">
-          <button onClick={onSave} disabled={!chapter || (!isDirty && !isSaving)}>Lưu</button>
           <button onClick={onApprove} disabled={!chapter}>Duyệt</button>
         </div>
       </div>

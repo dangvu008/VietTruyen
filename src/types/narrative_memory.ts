@@ -24,6 +24,34 @@ export type MemorySourceType = 'project' | 'chapter_extract' | 'canonical_edit' 
 export type DependencyStatus = 'fresh' | 'stale';
 export type TaskStatus = 'pending' | 'in_progress' | 'done' | 'dismissed';
 export type JobStatus = 'queued' | 'running' | 'completed' | 'failed';
+export type NarrativeStateDomain =
+  | 'character'
+  | 'relationship'
+  | 'item'
+  | 'location'
+  | 'plot'
+  | 'world'
+  | 'faction';
+export type NarrativeStateValueType =
+  | 'string'
+  | 'number'
+  | 'boolean'
+  | 'enum'
+  | 'entity_ref'
+  | 'chapter_ref'
+  | 'json';
+export type NarrativeStateMergePolicy = 'overwrite' | 'append' | 'timeline' | 'review_required';
+export type NarrativeStateSubjectType = EntityType | 'relationship' | 'plot_thread' | 'secret' | 'foreshadowing';
+export type NarrativeStateFactStatus = 'active' | 'superseded' | 'disputed' | 'retired';
+export type NarrativeStateMutationType =
+  | 'create'
+  | 'update'
+  | 'reveal'
+  | 'conceal'
+  | 'transfer'
+  | 'resolve'
+  | 'invalidate';
+export type NarrativeStateReviewStatus = 'auto_accepted' | 'needs_review' | 'rejected';
 
 // ═══════════════════════════════════════════════════════════
 // Layer 1: Entity Timeline
@@ -248,6 +276,75 @@ export interface ProjectIndexState {
 }
 
 // ═══════════════════════════════════════════════════════════
+// Layer 4: Continuity State
+// ═══════════════════════════════════════════════════════════
+
+export interface NarrativePredicateDefinition {
+  id: string;
+  projectId?: string;
+  predicate: string;
+  label: string;
+  domain: NarrativeStateDomain;
+  valueType: NarrativeStateValueType;
+  allowedValues?: string[];
+  aliases: string[];
+  mergePolicy: NarrativeStateMergePolicy;
+  isCore: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface NarrativeStateEvidence {
+  id: string;
+  projectId: string;
+  chapterId: string;
+  sceneId?: string;
+  sourceText: string;
+  sourceHash: string;
+  extractorVersion: string;
+  confidence: number;
+  createdAt: string;
+}
+
+export interface NarrativeStateMutation {
+  id: string;
+  projectId: string;
+  chapterId: string;
+  sceneId?: string;
+  mutationType: NarrativeStateMutationType;
+  subjectId: string;
+  subjectType: NarrativeStateSubjectType;
+  predicate: string;
+  objectId?: string;
+  beforeValue?: string;
+  afterValue: string;
+  confidence: number;
+  evidenceId?: string;
+  evidenceText: string;
+  reviewStatus: NarrativeStateReviewStatus;
+  conflictReason?: string;
+  createdAt: string;
+}
+
+export interface NarrativeStateFact {
+  id: string;
+  projectId: string;
+  subjectId: string;
+  subjectType: NarrativeStateSubjectType;
+  predicate: string;
+  objectId?: string;
+  value: string;
+  valueType: NarrativeStateValueType;
+  status: NarrativeStateFactStatus;
+  validFromChapter: number;
+  validToChapter?: number;
+  confidence: number;
+  evidenceIds: string[];
+  mutationIds: string[];
+  updatedAt: string;
+}
+
+// ═══════════════════════════════════════════════════════════
 // Brainstorm Flow
 // ═══════════════════════════════════════════════════════════
 
@@ -278,6 +375,13 @@ export interface BrainstormResult {
     traits: string;
     arc: string;
     currentStage: string;
+    psychology?: {
+      coreWound: string;
+      deepFear: string;
+      hiddenDesire: string;
+      selfDeception: string;
+      bodyLanguage: string;
+    };
   }>;
   world: {
     geography: string;
@@ -301,4 +405,44 @@ export interface BrainstormResult {
   foreshadowings: Array<{
     description: string;
   }>;
+}
+
+// ═══════════════════════════════════════════════════════════
+// Layer 5: Pending Hooks — Plot Continuity Registry (P1)
+// ═══════════════════════════════════════════════════════════
+
+/** Lifecycle status of a foreshadowing/plot hook */
+export type PendingHookStatus = 'open' | 'resolved' | 'dropped';
+
+/** Source of a hook — AI detection or explicit author definition */
+export type PendingHookSource = 'ai_detected' | 'user_defined';
+
+/**
+ * PendingHook — a single foreshadowing thread tracked across chapters.
+ * Planted at one chapter, expected to pay off at a future chapter.
+ * AI-detected hooks have confidence < 1; user-defined have confidence = 1.
+ */
+export interface PendingHook {
+  id: string;
+  projectId: string;
+  /** Chapter where the hook was planted */
+  plantedChapterId: string;
+  plantedChapterIndex: number;
+  /** Human-readable description: "Vết thương bí ẩn trên tay trái Lý Thiên" */
+  description: string;
+  /** Optional verbatim evidence from chapter text */
+  evidence?: string;
+  /** Entity IDs (character, item, location) this hook involves */
+  relatedEntityIds: string[];
+  /** Expected chapter index where this hook should pay off */
+  expectedPayoffBy?: number;
+  status: PendingHookStatus;
+  /** Filled when status → 'resolved' */
+  resolvedChapterId?: string;
+  resolvedAt?: string;
+  /** 0-1: AI confidence. User-defined hooks always = 1 */
+  confidence: number;
+  source: PendingHookSource;
+  createdAt: string;
+  updatedAt: string;
 }

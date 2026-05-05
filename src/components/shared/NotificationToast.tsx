@@ -7,11 +7,14 @@
 import React, { useEffect, useCallback } from 'react';
 import { CheckCircle2, AlertTriangle, XCircle, Info, Bell, X } from 'lucide-react';
 import { useNotificationStore } from '../../store/use_notification_store';
+import {
+  DEFAULT_NOTIFICATION_DURATION,
+  shouldDisplayNotificationToast,
+} from '../../store/use_notification_store';
 import type { Notification, NotifType } from '../../store/use_notification_store';
 
 // ── Config ────────────────────────────────────────────────────────────────────
 const MAX_VISIBLE = 5;
-const DEFAULT_DURATION = 4000;
 
 const TYPE_STYLES: Record<NotifType, { icon: React.ReactNode; bar: string; bg: string; border: string; title: string }> = {
   success: {
@@ -59,7 +62,7 @@ interface ToastProps {
 
 const Toast: React.FC<ToastProps> = ({ notif, onDismiss }) => {
   const style = TYPE_STYLES[notif.type];
-  const duration = notif.duration ?? DEFAULT_DURATION;
+  const duration = notif.duration ?? DEFAULT_NOTIFICATION_DURATION;
 
   useEffect(() => {
     if (duration === 0) return;
@@ -128,9 +131,8 @@ const NotificationToast: React.FC = () => {
 
   const handleDismiss = useCallback((id: string) => dismiss(id), [dismiss]);
 
-  // Only show most recent MAX_VISIBLE items that are short-duration (not center-only)
   const visible = notifications
-    .filter((n) => (n.duration ?? DEFAULT_DURATION) !== 0 || n.duration === undefined)
+    .filter(shouldDisplayNotificationToast)
     .slice(0, MAX_VISIBLE);
 
   return (

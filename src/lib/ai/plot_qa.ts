@@ -3,6 +3,7 @@ import { callAiModelTracked } from './tracked_ai_client';
 import { estimateTokens, quickTruncate, truncateToTokenLimit } from './token_estimator';
 import { retrieveForPlotQa } from '../memory/hybrid_memory_query';
 import { extractPackBodies } from '../memory/retrieval_pack_builder';
+import { buildVietnameseTextSystem } from './prompt_standard';
 
 const PLOT_KEYWORDS = [
   'cot truyen',
@@ -76,18 +77,48 @@ interface CharacterMatch {
   normalizedName: string;
 }
 
-const PLOT_QA_SYSTEM = `Bạn là trợ lý trả lời câu hỏi cốt truyện cho người viết truyện.
+const PLOT_QA_SYSTEM = buildVietnameseTextSystem(
+  'Plot QA assistant',
+  'Answer the writer’s plot question using only the supplied context',
+  [
+    'Use only facts present in the context.',
+    'Keep the answer direct and concise.',
+    'Reference chapter numbers like "Ch.X" when available.',
+    'If evidence is insufficient, state what is missing.',
+    'Do not invent events or canon.',
+  ],
+);
 
-QUY TẮC:
-1. Chỉ dùng dữ liệu có trong context được cung cấp.
-2. Trả lời ngắn gọn, trực diện, bằng tiếng Việt.
-3. Nếu có thể, dẫn chiếu số chương dạng "Ch.X".
-4. Nếu dữ liệu chưa đủ chắc chắn, nói rõ phần nào đang thiếu.
-5. Không bịa thêm tình tiết ngoài context.`;
+/**
+ * Writing action verbs that indicate a creative/editing instruction, NOT a question.
+ * When these appear, the text should not be routed to Plot Q&A.
+ */
+const WRITING_ACTION_EXCLUDES = [
+  'viet tiep',
+  'mo rong canh',
+  'mo rong',
+  'viet lai',
+  'sang tac',
+  'tiep tuc viet',
+  'them chi tiet',
+  'them cam xuc',
+  'them hanh dong',
+  'viet chuong',
+  'viet noi dung',
+  'giu dung giong van',
+  'nhip ke tu nhien',
+  'trau chuot',
+  'chinh sua van phong',
+];
 
 export function isPlotQuestion(question: string, project?: Project): boolean {
   const normalized = normalizeText(question);
   if (!normalized) return false;
+
+  // [Domain:PlotQA] STEP — Exclude creative writing instructions from question detection
+  if (WRITING_ACTION_EXCLUDES.some((action) => normalized.includes(action))) {
+    return false;
+  }
 
   if (PLOT_KEYWORDS.some((keyword) => normalized.includes(keyword))) {
     return true;
@@ -109,6 +140,19 @@ export async function answerPlotQuestion({
   model,
   apiKey,
 }: PlotQuestionParams): Promise<PlotAnswerResult> {
+  const normalizedQuestion = normalizeText(question);
+  const prefersWholeStorySummary = isWholeStoryReviewQuestion(normalizedQuestion);
+  const prefersChapterContinuityReview = isChapterContinuityReviewQuestion(normalizedQuestion);
+
+  if (prefersWholeStorySummary || prefersChapterContinuityReview) {
+    const localSummaryAnswer = prefersChapterContinuityReview
+      ? buildChapterContinuityReview(project)
+      : buildLocalPlotAnswer(project, question);
+    if (localSummaryAnswer) {
+      return { answer: localSummaryAnswer, source: 'local' };
+    }
+  }
+
   const localMemoryAnswer = await buildLocalMemoryPlotAnswer(project, question);
   if (localMemoryAnswer) {
     return { answer: localMemoryAnswer, source: 'local' };
@@ -324,7 +368,10 @@ function buildLocalPlotAnswer(project: Project, question: string): string | null
     }
   }
 
-  if (matchesAny(normalizedQuestion, ['tom tat tu dau', 'tong quan tu dau', 'den hien tai', 'review cot truyen'])) {
+  if (
+    isWholeStoryReviewQuestion(normalizedQuestion)
+    || matchesAny(normalizedQuestion, ['tom tat tu dau', 'tong quan tu dau', 'den hien tai', 'review cot truyen'])
+  ) {
     const summary = buildStoryProgressSummary(project, chapters);
     if (summary) return summary;
   }
@@ -469,6 +516,68 @@ function buildStoryProgressSummary(project: Project, chapters: ChapterRecord[]):
   );
 
   return segments.join(' ');
+}
+
+function buildChapterContinuityReview(project: Project): string | null {
+  const chapters = buildChapterRecords(project);
+  if (chapters.length === 0) {
+    return 'Đánh giá liên kết chương: dự án hiện chưa có chương nào để đối chiếu.';
+  }
+
+  if (chapters.length === 1) {
+    return `Đánh giá liên kết chương: mới có ${formatChapterLabel(chapters[0])}, chưa đủ dữ liệu để kiểm tra nối tiếp giữa các chương.`;
+  }
+
+  const chapterFlow = chapters
+    .map((chapter) => `${formatChapterLabel(chapter)}: ${chapter.snippet}`)
+    .join(' ');
+  const transitions = chapters
+    .slice(1)
+    .map((chapter, index) => `${formatChapterLabel(chapters[index])} -> ${formatChapterLabel(chapter)}`)
+    .join(' | ');
+  const fallbackNote = chapters.some((chapter) => !chapter.hasSummary)
+    ? ' Một số chương chưa có tóm tắt riêng, nên đánh giá này đang dựa thêm trên trích đoạn nội dung.'
+    : '';
+
+  return `Đánh giá liên kết chương: ${chapterFlow} Các cặp chuyển tiếp cần đối chiếu: ${transitions}.${fallbackNote}`;
+}
+
+function isWholeStoryReviewQuestion(normalizedQuestion: string): boolean {
+  return matchesAny(normalizedQuestion, [
+    'tom tat truyen',
+    'tom tat cot truyen',
+    'tom tat mach truyen',
+    'review toan bo truyen',
+    'review toan truyen',
+    'review tong the truyen',
+    'review truyen',
+    'review cot truyen',
+    'tong quan truyen',
+    'tong quan cot truyen',
+    'tong quan toan bo truyen',
+    'tom tat toan bo truyen',
+    'truyen den hien tai',
+    'toan bo truyen den hien tai',
+    'toan truyen den hien tai',
+  ]);
+}
+
+function isChapterContinuityReviewQuestion(normalizedQuestion: string): boolean {
+  const asksChapterScope = matchesAny(normalizedQuestion, ['giua cac chuong', 'cac chuong', 'lien chuong']);
+  const asksContinuity = matchesAny(normalizedQuestion, [
+    'lien ket',
+    'tinh lien ket',
+    'mach lien ket',
+    'mach truyen',
+    'mach logic',
+    'noi tiep',
+    'tiep noi',
+    'continuity',
+    'nhat quan',
+  ]);
+  const asksReview = matchesAny(normalizedQuestion, ['kiem tra', 'review', 'ra soat', 'danh gia', 'doi chieu']);
+
+  return asksChapterScope && asksContinuity && asksReview;
 }
 
 function buildOutlineAnswer(outline: OutlineBeat[], writtenChapterCount: number, normalizedQuestion: string): string | null {

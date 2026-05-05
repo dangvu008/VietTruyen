@@ -5,11 +5,18 @@ import type { Project } from '../types/story';
 
 declare const self: DedicatedWorkerGlobalScope;
 
-self.onmessage = async (event: MessageEvent<{ type: 'backfill'; project: Project }>) => {
+self.onmessage = async (
+  event: MessageEvent<{
+    type: 'backfill';
+    project: Project;
+    mirrorEmbeddings?: boolean;
+  }>,
+) => {
   if (event.data.type !== 'backfill') return;
 
   try {
     await backfillProjectMemory(event.data.project, {
+      mirrorEmbeddings: event.data.mirrorEmbeddings,
       onProgress: (processed, total) => {
         self.postMessage({ type: 'progress', processed, total });
       },

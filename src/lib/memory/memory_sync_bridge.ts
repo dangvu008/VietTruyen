@@ -9,7 +9,13 @@ type SyncEvent =
 
 const syncTimers = new Map<string, number>();
 
-async function runWorkerBackfill(project: Project, onProgress?: (processed: number, total: number) => void) {
+async function runWorkerBackfill(
+  project: Project,
+  options?: {
+    onProgress?: (processed: number, total: number) => void;
+    mirrorEmbeddings?: boolean;
+  },
+) {
   const worker = new Worker(new URL('../../workers/memory_indexer.worker.ts', import.meta.url), {
     type: 'module',
   });
@@ -18,7 +24,7 @@ async function runWorkerBackfill(project: Project, onProgress?: (processed: numb
     worker.onmessage = (event: MessageEvent<SyncEvent>) => {
       const payload = event.data;
       if (payload.type === 'progress') {
-        onProgress?.(payload.processed, payload.total);
+        options?.onProgress?.(payload.processed, payload.total);
         return;
       }
 
@@ -39,7 +45,11 @@ async function runWorkerBackfill(project: Project, onProgress?: (processed: numb
       reject(error instanceof ErrorEvent ? error.error || new Error(error.message) : new Error('Worker backfill failed'));
     };
 
-    worker.postMessage({ type: 'backfill', project });
+    worker.postMessage({
+      type: 'backfill',
+      project,
+      mirrorEmbeddings: options?.mirrorEmbeddings,
+    });
   });
 }
 
@@ -48,6 +58,7 @@ export async function syncProjectMemoryBridge(
   opts?: {
     model?: AiModel;
     onProgress?: (processed: number, total: number) => void;
+    mirrorEmbeddings?: boolean;
   }
 ): Promise<void> {
   const state = await getProjectIndexState(project.id);
@@ -55,7 +66,10 @@ export async function syncProjectMemoryBridge(
 
   if (shouldUseWorker) {
     try {
-      await runWorkerBackfill(project, opts?.onProgress);
+      await runWorkerBackfill(project, {
+        onProgress: opts?.onProgress,
+        mirrorEmbeddings: opts?.mirrorEmbeddings,
+      });
       return;
     } catch (error) {
       console.error('[MemorySyncBridge] Worker backfill failed, falling back to main thread.', error);
@@ -71,6 +85,7 @@ export function scheduleProjectMemorySync(
     model?: AiModel;
     onProgress?: (processed: number, total: number) => void;
     delayMs?: number;
+    mirrorEmbeddings?: boolean;
   }
 ): Promise<void> {
   const delay = opts?.delayMs ?? 700;
@@ -99,6 +114,7 @@ export async function forceBackfillProjectMemory(
   opts?: {
     model?: AiModel;
     onProgress?: (processed: number, total: number) => void;
+    mirrorEmbeddings?: boolean;
   }
 ): Promise<void> {
   await backfillProjectMemory(project, opts);

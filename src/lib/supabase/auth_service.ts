@@ -13,12 +13,19 @@
 import { supabase } from './supabase_client';
 import type { User, Session, AuthChangeEvent } from '@supabase/supabase-js';
 
+const DESKTOP_GOOGLE_AUTH_UNSUPPORTED_MESSAGE =
+  'Đăng nhập Google hiện chưa được hỗ trợ trong ứng dụng desktop. Hãy dùng đăng nhập email, chế độ khách, hoặc mở bản web để dùng Google OAuth.';
+
 function getBrowserOrigin(): string | null {
   if (typeof window === 'undefined' || !window.location?.origin) {
     return null;
   }
 
   return window.location.origin;
+}
+
+function isTauriRuntime(): boolean {
+  return typeof window !== 'undefined' && ('__TAURI_INTERNALS__' in window || window.location?.protocol === 'tauri:');
 }
 
 function isHttpOrigin(value: string | null | undefined): value is string {
@@ -55,6 +62,12 @@ function shouldRetrySignUpWithoutRedirect(error: Error): boolean {
 
 // ─── Sign in with Google OAuth ─────────────────────────────
 export async function signInWithGoogle(): Promise<{ error: Error | null }> {
+  if (isTauriRuntime()) {
+    return {
+      error: new Error(DESKTOP_GOOGLE_AUTH_UNSUPPORTED_MESSAGE),
+    };
+  }
+
   const redirectTo = getConfiguredAuthRedirectTo();
   const origin = getBrowserOrigin();
 

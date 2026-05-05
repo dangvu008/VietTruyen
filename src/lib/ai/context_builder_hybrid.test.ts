@@ -92,6 +92,8 @@ describe('buildWritingContext hybrid retrieval', () => {
   it('injects hard canon and semantic prose recall into the writing context', async () => {
     retrieveForWriting.mockResolvedValue({
       canonPack: [{ id: 'canon-1', title: 'Lâm Tề', body: '- Lâm Tề đang ở cảnh giới Trúc Cơ', score: 1, sourceType: 'canon_fact' }],
+      statePack: [{ id: 'state-1', title: 'Lâm Tề · current_stage', body: '- Lâm Tề: current_stage = Trúc Cơ (từ Ch.1)', score: 1, sourceType: 'state_fact' }],
+      hookPack: [{ id: 'hook-1', title: 'Hook mở từ Ch.1', body: '- Bí cảnh có cấm chế chưa lộ mặt', score: 0.9, sourceType: 'pending_hook' }],
       graphPack: [{ id: 'graph-1', title: 'Lâm Tề / Bí cảnh', body: '- Trọng tâm: Lâm Tề (character) | Bí cảnh (chapter)', score: 1, sourceType: 'community' }],
       semanticPack: [{ id: 'semantic-1', title: 'scene', body: '- Sương mù dày đặc bao phủ lối đi vào cửa đá.', score: 1, sourceType: 'scene' }],
       riskPack: [],
@@ -111,6 +113,8 @@ describe('buildWritingContext hybrid retrieval', () => {
     expect(retrieveForWriting).toHaveBeenCalled();
     expect(context.contextText).toContain('## CANON ƯU TIÊN');
     expect(context.contextText).toContain('Trúc Cơ');
+    expect(context.contextText).toContain('## SNAPSHOT TRẠNG THÁI');
+    expect(context.contextText).toContain('## HOOK CHƯA THANH TOÁN');
     expect(context.contextText).toContain('## BẢN ĐỒ TÂM LÝ CẢNH');
     expect(context.contextText).toContain('## KẾ HOẠCH CẢNH GHOSTWRITER');
     expect(context.contextText).toContain('## RÀNG BUỘC GIỌNG VĂN');

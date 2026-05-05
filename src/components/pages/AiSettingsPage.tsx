@@ -6,14 +6,15 @@
  */
 import React, { useState } from 'react';
 import {
-  Key, Plus, Trash2, Cpu, Check, Eye, EyeOff, Sparkles, Download, Upload
+  Key, Plus, Trash2, Cpu, Check, Eye, EyeOff, Sparkles, Download, Upload, RefreshCw, Server, Activity
 } from 'lucide-react';
 import { useAiStore } from '../../store/use_ai_store';
+import { DEFAULT_LOCAL_AI_PROXY_URL } from '../../lib/ai/local_proxy_runtime';
 import { AI_TASK_LABELS, type AiTaskType } from '../../lib/ai/model_router';
+import { NINE_ROUTER_PROVIDER_ID } from '../../lib/ai/nine_router_catalog';
 import { resolveModelCostRates } from '../../lib/ai/token_estimator';
 import type { AiModel, AiProvider, WorkflowEngineType } from '../../types/story';
 import TokenDashboard from '../shared/TokenDashboard';
-import TokenOptimizationTaskTracker from '../shared/TokenOptimizationTaskTracker';
 import {
   useAppearanceStore,
   type AppearanceTheme,
@@ -57,6 +58,28 @@ const WORKFLOW_ENGINE_OPTIONS: Array<{
   },
 ];
 
+const DEFAULT_SOURCE_OPTIONS: Array<{
+  provider: string;
+  label: string;
+  description: string;
+}> = [
+  {
+    provider: 'openrouter',
+    label: 'OpenRouter',
+    description: 'Nguồn mặc định. Phù hợp khi dùng universal key và nhiều model public.',
+  },
+  {
+    provider: NINE_ROUTER_PROVIDER_ID,
+    label: '9router',
+    description: 'Dùng local proxy 9router, tự xoay theo credential đang active trong máy.',
+  },
+  {
+    provider: 'hocai',
+    label: 'HOCAI',
+    description: 'Dùng universal key HOCAI cho các model đã cấu hình trong VietTruyen.',
+  },
+];
+
 type ProviderInfo = {
   id: string;
   label: string;
@@ -87,6 +110,7 @@ const AiSettingsPage: React.FC<AiSettingsPageProps> = ({ activeTab }) => {
   const [notifToken, setNotifToken] = useState(true);
   const [showAddProviderForm, setShowAddProviderForm] = useState(false);
   const [newProvider, setNewProvider] = useState({ id: '', name: '', baseUrl: '' });
+  const [nineRouterMessage, setNineRouterMessage] = useState('');
 
   const [showAddForm, setShowAddForm] = useState(false);
   const [newModel, setNewModel] = useState({
@@ -113,6 +137,44 @@ const AiSettingsPage: React.FC<AiSettingsPageProps> = ({ activeTab }) => {
     ...store.customProviders.map(p => ({ value: p.id, label: p.name }))
   ];
   const smartRoutingEnabled = store.activeModelId === 'auto';
+  const nineRouterModelCount = store.models.filter((model) => model.provider === NINE_ROUTER_PROVIDER_ID).length;
+  const getProviderModelCount = (provider: string) => store.models.filter((model) => model.provider === provider).length;
+
+  const resolveModelHealthStatus = (modelId: string): 'available' | 'cooldown' | 'unavailable' | 'unknown' => {
+    const health = store.modelHealth[modelId];
+    if (!health) return 'unknown';
+    if (health.status === 'available') return 'available';
+    if (health.status === 'cooldown' && health.unavailableUntil) {
+      return new Date(health.unavailableUntil).getTime() <= Date.now() ? 'available' : 'cooldown';
+    }
+    return health.status;
+  };
+
+  const healthDotStyle = (status: ReturnType<typeof resolveModelHealthStatus>): React.CSSProperties => {
+    const colors: Record<typeof status, string> = {
+      available: '#10B981',
+      cooldown: '#F59E0B',
+      unavailable: '#EF4444',
+      unknown: '#6B7280',
+    };
+    return {
+      width: 8,
+      height: 8,
+      borderRadius: '50%',
+      backgroundColor: colors[status],
+      flexShrink: 0,
+    };
+  };
+
+  const healthStatusLabel = (status: ReturnType<typeof resolveModelHealthStatus>): string => {
+    const labels: Record<typeof status, string> = {
+      available: 'Khả dụng',
+      cooldown: 'Đang nghỉ',
+      unavailable: 'Không khả dụng',
+      unknown: 'Chưa kiểm tra',
+    };
+    return labels[status];
+  };
 
   const toggleKeyVisibility = (provider: string) => {
     setShowKeys((prev) => ({ ...prev, [provider]: !prev[provider] }));
@@ -141,6 +203,17 @@ const AiSettingsPage: React.FC<AiSettingsPageProps> = ({ activeTab }) => {
     });
     setNewProvider({ id: '', name: '', baseUrl: '' });
     setShowAddProviderForm(false);
+  };
+
+  const handleSyncNineRouter = async () => {
+    setNineRouterMessage('');
+    try {
+      await store.syncNineRouterModels();
+      const nextCount = useAiStore.getState().models.filter((model) => model.provider === NINE_ROUTER_PROVIDER_ID).length;
+      setNineRouterMessage(`Đã đồng bộ ${nextCount} model từ 9router.`);
+    } catch (error) {
+      setNineRouterMessage(error instanceof Error ? error.message : 'Không đồng bộ được 9router.');
+    }
   };
 
 
@@ -397,16 +470,162 @@ const AiSettingsPage: React.FC<AiSettingsPageProps> = ({ activeTab }) => {
 
         <section className="space-y-4">
           <div>
-            <h3 className="text-sm font-semibold uppercase tracking-wider" style={{ color: '#d4c4b7' }}>Token Optimization</h3>
+            <h3 className="text-sm font-semibold uppercase tracking-wider" style={{ color: '#d4c4b7' }}>Nguồn AI Mặc Định</h3>
             <p className="mt-2 text-sm" style={{ color: '#9c8e82' }}>
-              Kết hợp telemetry hiện tại với roadmap P0/P1/P2 để theo dõi tiến độ tối ưu token.
+              Smart Routing sẽ ưu tiên chọn model trong nguồn này. Nếu nguồn chưa có model khả dụng, hệ thống tự fallback sang nguồn khác.
             </p>
           </div>
 
-          <div className="grid gap-4 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-            <TokenDashboard />
-            <TokenOptimizationTaskTracker />
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {DEFAULT_SOURCE_OPTIONS.map((option) => {
+              const isActive = store.preferredProvider === option.provider;
+              const modelCount = getProviderModelCount(option.provider);
+              return (
+                <button
+                  key={option.provider}
+                  type="button"
+                  onClick={() => store.setPreferredProvider(option.provider)}
+                  aria-pressed={isActive}
+                  className="p-5 rounded-2xl border text-left transition-colors"
+                  style={{
+                    background: isActive ? 'rgba(242,192,141,0.08)' : '#1d1b18',
+                    borderColor: isActive ? 'rgba(242,192,141,0.38)' : 'rgba(80,69,59,0.3)',
+                    color: isActive ? '#f2c08d' : '#e8e1dc',
+                  }}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="font-semibold text-sm">{option.label}</span>
+                    {isActive && <Check size={16} />}
+                  </div>
+                  <p className="mt-2 text-xs leading-relaxed" style={{ color: '#9c8e82' }}>{option.description}</p>
+                  <div className="mt-4 inline-flex rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-wider" style={{ background: 'rgba(80,69,59,0.35)', color: '#d4c4b7' }}>
+                    {modelCount} model
+                  </div>
+                </button>
+              );
+            })}
           </div>
+        </section>
+
+        <hr style={{ borderColor: 'rgba(80,69,59,0.2)' }} />
+
+        <section className="space-y-4">
+          <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+            <div>
+              <h3 className="text-sm font-semibold uppercase tracking-wider" style={{ color: '#d4c4b7' }}>9router</h3>
+              <p className="mt-2 text-sm" style={{ color: '#9c8e82' }}>
+                Đồng bộ danh sách model từ 9router local và đưa vào Smart Routing của VietTruyen.
+              </p>
+            </div>
+            <div className="flex items-center gap-2 rounded-full px-3 py-1 text-xs font-bold" style={{ background: 'rgba(165,208,230,0.1)', color: '#a5d0e6' }}>
+              <Server size={14} />
+              {nineRouterModelCount} model
+            </div>
+          </div>
+
+          <div className="p-5 rounded-2xl border space-y-4" style={{ background: '#1d1b18', borderColor: 'rgba(80,69,59,0.3)' }}>
+            <label className="space-y-2 block">
+              <span className="text-xs font-semibold uppercase tracking-[0.18em]" style={{ color: '#b9ab9e' }}>
+                9router Base URL
+              </span>
+              <input
+                value={store.nineRouter.baseUrl}
+                onChange={(event) => store.setNineRouterBaseUrl(event.target.value)}
+                className="w-full bg-[#151310] border border-[rgba(80,69,59,0.5)] px-4 py-2.5 rounded-xl text-sm outline-none"
+                style={{ color: '#e8e1dc' }}
+                placeholder={DEFAULT_LOCAL_AI_PROXY_URL}
+              />
+            </label>
+
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+              <button
+                onClick={handleSyncNineRouter}
+                disabled={store.nineRouter.isSyncing}
+                className="px-5 py-2.5 rounded-xl text-sm font-bold transition-colors flex items-center justify-center gap-2 disabled:opacity-60"
+                style={{ background: '#a5d0e6', color: '#151310' }}
+              >
+                <RefreshCw size={16} className={store.nineRouter.isSyncing ? 'animate-spin' : ''} />
+                {store.nineRouter.isSyncing ? 'Đang đồng bộ' : 'Đồng bộ từ 9router'}
+              </button>
+
+              <div className="text-xs leading-5" style={{ color: store.nineRouter.lastSyncError ? '#f87171' : '#9c8e82' }}>
+                {nineRouterMessage
+                  || store.nineRouter.lastSyncError
+                  || (store.nineRouter.lastSyncedAt ? `Lần cuối: ${new Date(store.nineRouter.lastSyncedAt).toLocaleString()}` : 'Chưa đồng bộ')}
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Health Check */}
+        <section className="space-y-4">
+          <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+            <div>
+              <h3 className="text-sm font-semibold uppercase tracking-wider" style={{ color: '#d4c4b7' }}>Kiểm Tra Sức Khỏe API</h3>
+              <p className="mt-2 text-sm" style={{ color: '#9c8e82' }}>
+                Ping endpoint của từng provider để xác nhận khả năng kết nối trước khi gọi AI.
+              </p>
+            </div>
+          </div>
+
+          <div className="p-5 rounded-2xl border" style={{ background: '#1d1b18', borderColor: 'rgba(80,69,59,0.3)' }}>
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+              <button
+                onClick={() => store.checkAllProvidersHealth()}
+                disabled={store.isCheckingHealth}
+                className="px-5 py-2.5 rounded-xl text-sm font-bold transition-colors flex items-center justify-center gap-2 disabled:opacity-60"
+                style={{ background: '#10B981', color: '#151310' }}
+              >
+                <Activity size={16} className={store.isCheckingHealth ? 'animate-pulse' : ''} />
+                {store.isCheckingHealth ? 'Đang kiểm tra...' : 'Kiểm tra sức khỏe'}
+              </button>
+
+              <div className="text-xs leading-5" style={{ color: '#9c8e82' }}>
+                {store.lastHealthCheckAt
+                  ? `Lần kiểm tra cuối: ${new Date(store.lastHealthCheckAt).toLocaleString()}`
+                  : 'Chưa kiểm tra lần nào'}
+              </div>
+            </div>
+
+            {store.lastHealthCheckAt && (
+              <div className="mt-4 flex flex-wrap gap-3">
+                {Array.from(new Set(store.models.map((m) => m.provider))).map((provider) => {
+                  const providerModels = store.models.filter((m) => m.provider === provider);
+                  const statuses = providerModels.map((m) => resolveModelHealthStatus(m.id));
+                  const worstStatus = statuses.includes('unavailable')
+                    ? 'unavailable'
+                    : statuses.includes('cooldown')
+                      ? 'cooldown'
+                      : statuses.includes('available')
+                        ? 'available'
+                        : 'unknown';
+                  return (
+                    <div
+                      key={provider}
+                      className="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold"
+                      style={{ background: 'rgba(80,69,59,0.25)', color: '#d4c4b7' }}
+                    >
+                      <div style={healthDotStyle(worstStatus)} />
+                      {provider}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </section>
+
+        <hr style={{ borderColor: 'rgba(80,69,59,0.2)' }} />
+
+        <section className="space-y-4">
+          <div>
+            <h3 className="text-sm font-semibold uppercase tracking-wider" style={{ color: '#d4c4b7' }}>Token Optimization</h3>
+            <p className="mt-2 text-sm" style={{ color: '#9c8e82' }}>
+              Theo dõi telemetry token, cache hit và chi phí thực tế của các AI calls.
+            </p>
+          </div>
+
+          <TokenDashboard />
         </section>
 
         <hr style={{ borderColor: 'rgba(80,69,59,0.2)' }} />
@@ -643,23 +862,31 @@ const AiSettingsPage: React.FC<AiSettingsPageProps> = ({ activeTab }) => {
                     borderColor: isActive ? 'rgba(242,192,141,0.3)' : 'transparent',
                   }}
                 >
-                  <div className="flex items-center gap-4">
+                <div className="flex items-center gap-4">
                     <div className="w-10 h-10 rounded-full flex items-center justify-center text-xl" style={{ background: isActive ? '#f2c08d' : '#373431', color: isActive ? '#151310' : '#8a7d73' }}>
                       <Cpu size={18} />
                     </div>
                     <div>
-                      <h4 className="font-semibold text-sm" style={{ color: isActive ? '#f2c08d' : '#e8e1dc' }}>{model.name}</h4>
+                      <div className="flex items-center gap-2">
+                        <h4 className="font-semibold text-sm" style={{ color: isActive ? '#f2c08d' : '#e8e1dc' }}>{model.name}</h4>
+                        <div
+                          style={healthDotStyle(resolveModelHealthStatus(model.id))}
+                          title={`${healthStatusLabel(resolveModelHealthStatus(model.id))}${store.modelHealth[model.id]?.lastError ? ` — ${store.modelHealth[model.id].lastError}` : ''}`}
+                        />
+                      </div>
                       <p className="text-xs" style={{ color: '#9c8e82' }}>{model.provider} • {model.modelId}</p>
                       <p className="text-[11px] mt-1" style={{ color: '#7f736a' }}>{formatModelEconomics(model)}</p>
                     </div>
                   </div>
-                  {isActive && <div className="text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider" style={{ background: 'rgba(242,192,141,0.1)', color: '#f2c08d' }}>Active</div>}
-                  {isManualFallback && <div className="text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider" style={{ background: 'rgba(80,69,59,0.3)', color: '#d4c4b7' }}>Manual</div>}
-                  {model.isCustom && !isActive && (
-                    <button onClick={(e) => { e.stopPropagation(); store.removeModel(model.id); }} className="p-2 opacity-50 hover:opacity-100 hover:text-red-400">
-                      <Trash2 size={16} />
-                    </button>
-                  )}
+                  <div className="flex items-center gap-2">
+                    {isActive && <div className="text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider" style={{ background: 'rgba(242,192,141,0.1)', color: '#f2c08d' }}>Active</div>}
+                    {isManualFallback && <div className="text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider" style={{ background: 'rgba(80,69,59,0.3)', color: '#d4c4b7' }}>Manual</div>}
+                    {model.isCustom && !isActive && (
+                      <button onClick={(e) => { e.stopPropagation(); store.removeModel(model.id); }} className="p-2 opacity-50 hover:opacity-100 hover:text-red-400">
+                        <Trash2 size={16} />
+                      </button>
+                    )}
+                  </div>
                 </div>
               );
             })}

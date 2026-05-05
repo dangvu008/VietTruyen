@@ -4,7 +4,7 @@
  * Layer: UI (Creation Component)
  * Domain: CreationChat → [framework display, inline editing, confirm actions]
  */
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import type { BrainstormResult } from '../../types/narrative_memory';
 import {
   appendCharacter,
@@ -20,6 +20,7 @@ import {
   updateOutlineField,
   updateWorldField,
 } from '../../lib/creation/framework_edit';
+import { normalizeCreationFramework } from '../../lib/creation/framework_normalizer';
 
 interface FrameworkPreviewProps {
   data: BrainstormResult;
@@ -304,6 +305,7 @@ export default function FrameworkPreview({
   onConfirm,
   onChange,
 }: FrameworkPreviewProps) {
+  const normalizedData = useMemo(() => normalizeCreationFramework(data), [data]);
   const [expanded, setExpanded] = useState<Record<SectionId, boolean>>({
     bible: true,
     characters: true,
@@ -312,13 +314,13 @@ export default function FrameworkPreview({
     foreshadowings: false,
   });
   const [editingSection, setEditingSection] = useState<SectionId | null>(null);
-  const [draftData, setDraftData] = useState<BrainstormResult>(data);
+  const [draftData, setDraftData] = useState<BrainstormResult>(() => normalizedData);
 
   useEffect(() => {
     if (!editingSection) {
-      setDraftData(data);
+      setDraftData(normalizedData);
     }
-  }, [data, editingSection]);
+  }, [normalizedData, editingSection]);
 
   const toggle = (id: SectionId) => {
     if (editingSection === id) return;
@@ -327,23 +329,23 @@ export default function FrameworkPreview({
 
   const startEditing = (id: SectionId) => {
     if (confirmed) return;
-    setDraftData(data);
+    setDraftData(normalizedData);
     setEditingSection(id);
     setExpanded((prev) => ({ ...prev, [id]: true }));
   };
 
   const cancelEditing = () => {
-    setDraftData(data);
+    setDraftData(normalizedData);
     setEditingSection(null);
   };
 
   const saveEditing = () => {
-    onChange?.(draftData);
+    onChange?.(normalizeCreationFramework(draftData));
     setEditingSection(null);
   };
 
   const isEditing = (id: SectionId) => editingSection === id;
-  const { bible, characters, world, outline, foreshadowings } = data;
+  const { bible, characters, world, outline, foreshadowings } = normalizedData;
 
   return (
     <div style={S.container}>
@@ -518,6 +520,36 @@ export default function FrameworkPreview({
                         />
                       </div>
                     </div>
+                    <div style={S.editorRow}>
+                      <div style={S.editorCell}>
+                        <label style={S.editorLabel}>Tự lừa mình</label>
+                        <textarea
+                          style={S.textarea}
+                          value={character.psychology?.selfDeception || ''}
+                          onChange={(event) => setDraftData((current) => updateCharacterField(current, index, 'psychology', {
+                            coreWound: character.psychology?.coreWound || '',
+                            deepFear: character.psychology?.deepFear || '',
+                            hiddenDesire: character.psychology?.hiddenDesire || '',
+                            selfDeception: event.target.value,
+                            bodyLanguage: character.psychology?.bodyLanguage || '',
+                          }))}
+                        />
+                      </div>
+                      <div style={S.editorCell}>
+                        <label style={S.editorLabel}>Biểu hiện khi stress</label>
+                        <textarea
+                          style={S.textarea}
+                          value={character.psychology?.bodyLanguage || ''}
+                          onChange={(event) => setDraftData((current) => updateCharacterField(current, index, 'psychology', {
+                            coreWound: character.psychology?.coreWound || '',
+                            deepFear: character.psychology?.deepFear || '',
+                            hiddenDesire: character.psychology?.hiddenDesire || '',
+                            selfDeception: character.psychology?.selfDeception || '',
+                            bodyLanguage: event.target.value,
+                          }))}
+                        />
+                      </div>
+                    </div>
                     <div style={S.editorToolbar}>
                       <span style={S.helperText}>Bạn có thể chỉnh từng nhân vật ngay trong khung chat này.</span>
                       <button
@@ -549,6 +581,7 @@ export default function FrameworkPreview({
                     <span style={S.charRole}>{character.role}</span>
                   </div>
                   <div style={S.charDetail}>{character.traits}</div>
+                  {character.psychology?.selfDeception && <div style={{ ...S.charDetail, color: '#d4a574' }}>Nội tâm ẩn: {character.psychology.selfDeception}</div>}
                   {character.arc && <div style={{ ...S.charDetail, color: '#9c8e82', fontSize: 12 }}>↗ {character.arc}</div>}
                 </div>
               ))

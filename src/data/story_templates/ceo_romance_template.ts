@@ -21,60 +21,187 @@ export const CEO_ROMANCE_TEMPLATE: StoryTemplate = {
   ],
   "subGenres": [
     {
-      "name": "Hào Môn Tổng Tài",
-      "description": "权力差距 + 契约关系 + 情感拉扯。灰姑娘与王子的现代演绎，在金钱与真心之间抉择。",
-      "coreAppeal": "权力差距 + 契约关系 + 情感拉扯。灰姑娘与王子的现代演绎，在金钱与真心之间抉择。"
+      "name": "契约婚姻流",
+      "description": "因某种原因签订契约，假戏真做",
+      "coreAppeal": "身份反转、真心流露、契约到期抉择",
+      "referenceWorks": [
+        "总裁的替身前妻",
+        "豪门契约：总裁的秘密情人"
+      ]
+    },
+    {
+      "name": "先婚后爱流",
+      "description": "先结婚后培养感情",
+      "coreAppeal": "日久生情、冷面热心、独宠",
+      "referenceWorks": [
+        "裴少的千亿新娘",
+        "总裁的天价萌妻"
+      ]
+    },
+    {
+      "name": "豪门争斗流",
+      "description": "卷入豪门内部争斗",
+      "coreAppeal": "智斗对手、站稳脚跟、逆袭上位",
+      "referenceWorks": [
+        "豪门盛宠",
+        "名门暖婚"
+      ]
+    },
+    {
+      "name": "复仇虐恋流",
+      "description": "带着目的接近，却动了真心",
+      "coreAppeal": "身份揭露、虐心反转、破镜重圆",
+      "referenceWorks": [
+        "总裁的复仇新娘",
+        "豪门恩怨"
+      ]
     }
   ],
-  "worldRules": [],
-  "coolPatterns": [],
-  "conflictPatterns": [],
+  "worldRules": [
+    {
+      "name": "豪门等级",
+      "description": "等级 / 特点 / 资产规模 ------ / ------ / ---------- 顶级财阀 / 控制行业命脉 / 千亿级 一线豪门 / 行业龙头 / 百亿级 二线豪门 / 区域巨头 / 十亿级 新贵 / 新兴富豪 / 亿级 普通富人 / 小有资产 / 千万级"
+    },
+    {
+      "name": "豪门规则",
+      "description": "**门当户对**: 婚姻是利益联姻 **嫡庶有别**: 私生子地位低 **继承权争夺**: 家产是核心矛盾 **面子工程**: 形象比真相重要"
+    },
+    {
+      "name": "势力格局",
+      "description": "**家族长辈**: 掌控大权，需要讨好 **嫡系子女**: 正统继承人 **庶出/私生**: 边缘人，可能黑化 **联姻对象**: 政治筹码 **家族企业**: 权力的载体 --"
+    }
+  ],
+  "coolPatterns": [
+    {
+      "name": "身份反转",
+      "scenario": "被人看不起的女主，实际身份惊人",
+      "appeal": "真实身份揭露，打脸众人"
+    },
+    {
+      "name": "独宠打脸",
+      "scenario": "有人欺负女主",
+      "appeal": "男主霸气护短，当众打脸",
+      "keyNote": "要有铺垫，不能太突兀"
+    },
+    {
+      "name": "契约反转",
+      "scenario": "契约到期，该分开了",
+      "appeal": "男主不愿放手，真心告白",
+      "keyNote": "感情发展要有铺垫"
+    },
+    {
+      "name": "豪门认可",
+      "scenario": "家族长辈刁难",
+      "appeal": "女主用实力/真心征服长辈",
+      "keyNote": "要展示女主的闪光点"
+    }
+  ],
+  "conflictPatterns": [
+    {
+      "type": "身份差距",
+      "source": "门不当户不对",
+      "resolution": "证明自己"
+    },
+    {
+      "type": "契约束缚",
+      "source": "不能动真心",
+      "resolution": "打破契约"
+    },
+    {
+      "type": "自尊",
+      "source": "不想被施舍",
+      "resolution": "独立自强"
+    },
+    {
+      "type": "家族反对",
+      "source": "长辈",
+      "resolution": "获得认可"
+    },
+    {
+      "type": "情敌",
+      "source": "前任/追求者",
+      "resolution": "坚定选择"
+    },
+    {
+      "type": "商业危机",
+      "source": "公司",
+      "resolution": "共同面对"
+    },
+    {
+      "type": "身世秘密",
+      "source": "过去",
+      "resolution": "真相大白"
+    }
+  ],
   "outlineArcs": [
     {
       "title": "卷一：相遇 (1-50章)",
-      "chapterRange": "1-100",
+      "chapterRange": "1-50",
       "coreFocus": "男女主相遇，建立契约关系",
       "coreConflict": "",
       "climax": "签订契约，开始同居"
     },
     {
       "title": "卷二：暧昧 (51-120章)",
-      "chapterRange": "1-100",
+      "chapterRange": "51-120",
       "coreFocus": "日常相处，感情萌芽",
       "coreConflict": "",
       "climax": "第一次心动/吃醋"
     },
     {
       "title": "卷三：考验 (121-200章)",
-      "chapterRange": "1-100",
+      "chapterRange": "121-200",
       "coreFocus": "感情遇到考验",
       "coreConflict": "",
       "climax": "误会/分离"
     },
     {
       "title": "卷四：确认 (201-280章)",
-      "chapterRange": "1-100",
+      "chapterRange": "201-280",
       "coreFocus": "解除误会，确认感情",
       "coreConflict": "",
       "climax": "正式在一起"
     },
     {
       "title": "卷五：圆满 (281-350章)",
-      "chapterRange": "1-100",
+      "chapterRange": "281-350",
       "coreFocus": "获得认可，修成正果",
       "coreConflict": "",
       "climax": "盛大婚礼"
     }
   ],
+  "targetWordCount": "800.000 chữ",
+  "targetChapterCount": 350,
   "pitfalls": [
     {
-      "description": "Thiết lập trước sau mâu thuẫn.",
+      "description": "强行虐恋，为虐而虐",
+      "severity": "critical"
+    },
+    {
+      "description": "霸总脸谱化，没有缺点",
+      "severity": "critical"
+    },
+    {
+      "description": "女主太傻白甜",
+      "severity": "critical"
+    },
+    {
+      "description": "误会太低级",
       "severity": "critical"
     }
   ],
   "bestPractices": [
     {
-      "description": "Thiết lập tự nhất quán."
+      "description": "虐有度，甜有糖"
+    },
+    {
+      "description": "霸总有人性化的一面"
+    },
+    {
+      "description": "女主有主见有底线"
+    },
+    {
+      "description": "误会要合理"
     }
   ],
   "entityTags": [

@@ -20,60 +20,168 @@ export const ESPORTS_TEMPLATE: StoryTemplate = {
   ],
   "subGenres": [
     {
-      "name": "Điện Cạnh / E-Sports",
-      "description": "逆风翻盘 + 赛场高压 + 团队成长。以“比赛结果”驱动强节奏与持续追更。",
-      "coreAppeal": "逆风翻盘 + 赛场高压 + 团队成长。以“比赛结果”驱动强节奏与持续追更。"
+      "name": "职业联赛流",
+      "description": "青训-次级联赛-顶级联赛的升级路径",
+      "coreAppeal": "连败后逆袭、关键局翻盘、MVP封神"
+    },
+    {
+      "name": "天才新人流",
+      "description": "高天赋新人冲击老牌强队",
+      "coreAppeal": "首秀一鸣惊人、对位压制、舆论反转"
+    },
+    {
+      "name": "战术教练流",
+      "description": "以BP、战术博弈、数据分析为主",
+      "coreAppeal": "以弱胜强、奇阵破局、临场指挥"
+    },
+    {
+      "name": "退役重启流",
+      "description": "伤病/禁赛/心态崩溃后重返赛场",
+      "coreAppeal": "绝境回归、宿敌再战、冠军救赎"
     }
   ],
-  "worldRules": [],
-  "coolPatterns": [],
-  "conflictPatterns": [],
+  "worldRules": [
+    {
+      "name": "联赛结构",
+      "description": "层级 / 说明 / 常见冲突 ------ / ------ / ---------- 青训营 / 新人培养 / 选拔淘汰、资源倾斜 次级联赛 / 晋级跳板 / 升降级、赞助压力 顶级联赛 / 最高舞台 / 强队围剿、季后赛生死战 国际赛 / 巅峰对抗 / 赛区对立、版本理解差"
+    },
+    {
+      "name": "战队岗位",
+      "description": "**主C**: 高风险高回报，承担火力输出 **节奏位**: 控图与开团核心，影响全局节奏 **指挥位**: 决策与临场应变，决定关键回合 **辅助位**: 资源分配与保护，稳定团队下限 --"
+    }
+  ],
+  "coolPatterns": [
+    {
+      "name": "让二追三",
+      "scenario": "0:2落后，心态濒临崩盘",
+      "appeal": "战术调整成功，连扳三局",
+      "keyNote": "每局翻盘逻辑要清晰，不能“强行赢”"
+    },
+    {
+      "name": "宿敌对位",
+      "scenario": "主角与前队友/老对手正面对线",
+      "appeal": "对位压制、名场面操作、赛后舆论爆炸",
+      "keyNote": "历史恩怨要提前埋线"
+    },
+    {
+      "name": "教练破局",
+      "scenario": "常规打法被针对，团队陷入死局",
+      "appeal": "临场换阵、奇招制胜",
+      "keyNote": "战术描述“可懂但不啰嗦”"
+    },
+    {
+      "name": "冠军时刻",
+      "scenario": "总决赛决胜局",
+      "appeal": "关键团战与个人极限发挥",
+      "keyNote": "胜利代价要真实（伤病、心理压力、团队牺牲）"
+    }
+  ],
+  "conflictPatterns": [
+    {
+      "type": "选拔淘汰、资源倾斜",
+      "source": "新人培养",
+      "resolution": "选拔淘汰、资源倾斜"
+    },
+    {
+      "type": "升降级、赞助压力",
+      "source": "晋级跳板",
+      "resolution": "升降级、赞助压力"
+    },
+    {
+      "type": "强队围剿、季后赛生死战",
+      "source": "最高舞台",
+      "resolution": "强队围剿、季后赛生死战"
+    },
+    {
+      "type": "赛区对立、版本理解差",
+      "source": "巅峰对抗",
+      "resolution": "赛区对立、版本理解差"
+    },
+    {
+      "type": "宿敌对位",
+      "source": "主角与前队友/老对手正面对线",
+      "resolution": "历史恩怨要提前埋线"
+    },
+    {
+      "type": "卷二：磨合 (81-180章)",
+      "source": "**核心**: 队内矛盾与战术磨合 **高潮**: 让二追三名场面",
+      "resolution": "**核心**: 队内矛盾与战术磨合 **高潮**: 让二追三名场面"
+    },
+    {
+      "type": "必须避免",
+      "source": "❌ 比赛过程“只报结果，不写博弈” ❌ 角色只会喊口号，缺少战术执行细节 ❌ 队伍长期连胜无代价 ❌ 赛后舆论与商业现实完全缺失",
+      "resolution": "❌ 比赛过程“只报结果，不写博弈” ❌ 角色只会喊口号，缺少战术执行细节 ❌ 队伍长期连胜无代价 ❌ 赛后舆论与商业现实完全缺失"
+    }
+  ],
   "outlineArcs": [
     {
       "title": "卷一：入局 (1-80章)",
-      "chapterRange": "1-100",
+      "chapterRange": "1-80",
       "coreFocus": "进入职业体系，建立首个团队目标",
       "coreConflict": "",
       "climax": "首次关键胜局"
     },
     {
       "title": "卷二：磨合 (81-180章)",
-      "chapterRange": "1-100",
+      "chapterRange": "81-180",
       "coreFocus": "队内矛盾与战术磨合",
       "coreConflict": "",
       "climax": "让二追三名场面"
     },
     {
       "title": "卷三：破圈 (181-320章)",
-      "chapterRange": "1-100",
+      "chapterRange": "181-320",
       "coreFocus": "进入顶级联赛，舆论压力上升",
       "coreConflict": "",
       "climax": "宿敌战翻盘"
     },
     {
       "title": "卷四：登顶 (321-520章)",
-      "chapterRange": "1-100",
+      "chapterRange": "321-520",
       "coreFocus": "季后赛与国际赛双线作战",
       "coreConflict": "",
       "climax": "决胜局夺冠"
     },
     {
       "title": "卷五：新王朝 (521-700章)",
-      "chapterRange": "1-100",
+      "chapterRange": "521-700",
       "coreFocus": "守冠、重建、培养新人",
       "coreConflict": "",
       "climax": "传承与闭环"
     }
   ],
+  "targetWordCount": "2.000.000 chữ",
+  "targetChapterCount": 700,
   "pitfalls": [
     {
-      "description": "Thiết lập trước sau mâu thuẫn.",
+      "description": "比赛过程“只报结果，不写博弈”",
+      "severity": "critical"
+    },
+    {
+      "description": "角色只会喊口号，缺少战术执行细节",
+      "severity": "critical"
+    },
+    {
+      "description": "队伍长期连胜无代价",
+      "severity": "critical"
+    },
+    {
+      "description": "赛后舆论与商业现实完全缺失",
       "severity": "critical"
     }
   ],
   "bestPractices": [
     {
-      "description": "Thiết lập tự nhất quán."
+      "description": "每场比赛至少写清1个关键决策点"
+    },
+    {
+      "description": "胜负由“信息、执行、心态”三因素共同决定"
+    },
+    {
+      "description": "胜利伴随成本，失败带来具体后果"
+    },
+    {
+      "description": "赛前-赛中-赛后形成完整情绪链"
     }
   ],
   "entityTags": [

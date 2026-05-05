@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const hydrateProjectChapters = vi.fn();
 const init = vi.fn(async () => undefined);
+const dispose = vi.fn(async () => undefined);
 
 vi.mock('../lib/storage/detect_environment', () => ({
   detectDefaultStorageMode: () => 'online',
@@ -23,7 +24,9 @@ vi.mock('../lib/storage/online_storage_provider', () => ({
       await init();
     }
 
-    async dispose() {}
+    async dispose() {
+      await dispose();
+    }
   },
 }));
 
@@ -70,5 +73,25 @@ describe('use_storage_store', () => {
 
     expect(init).toHaveBeenCalledOnce();
     expect(hydrateProjectChapters).toHaveBeenCalledWith('project-1');
+  });
+
+  it('re-initializes the provider when the active user changes', async () => {
+    const { useStorageStore } = await import('./use_storage_store');
+
+    await useStorageStore.getState().initProvider('guest');
+    await Promise.resolve();
+
+    const firstProvider = useStorageStore.getState().provider;
+
+    await useStorageStore.getState().initProvider('user-2');
+    await Promise.resolve();
+
+    const secondProvider = useStorageStore.getState().provider;
+
+    expect(firstProvider).not.toBe(secondProvider);
+    expect(init).toHaveBeenCalledTimes(2);
+    expect(dispose).toHaveBeenCalledTimes(1);
+    expect(useStorageStore.getState().providerUserId).toBe('user-2');
+    expect(hydrateProjectChapters).toHaveBeenCalledTimes(2);
   });
 });

@@ -20,53 +20,146 @@ export const CTHULHU_TEMPLATE: StoryTemplate = {
   ],
   "subGenres": [
     {
-      "name": "Cthulhu / Vũ Trụ Kinh Hoàng",
-      "description": "不可名状 + 理性崩塌 + 真相代价。读者快感来自“接近真相但无法承受真相”。",
-      "coreAppeal": "不可名状 + 理性崩塌 + 真相代价。读者快感来自“接近真相但无法承受真相”。"
+      "name": "调查档案流",
+      "description": "案件/日志/手稿推进，拼图式叙事",
+      "coreAppeal": "线索闭环、真相揭露、反转证据"
+    },
+    {
+      "name": "仪式失控流",
+      "description": "禁忌仪式触发灾变，后果层层升级",
+      "coreAppeal": "阻止失控、代价交换、局部胜利"
+    },
+    {
+      "name": "旧日入侵流",
+      "description": "现实秩序被古神规则污染",
+      "coreAppeal": "在崩坏秩序中建立新生存规则"
+    },
+    {
+      "name": "理智边缘流",
+      "description": "主角在理智下降中维持行动能力",
+      "coreAppeal": "以微小理性换取关键胜利"
     }
   ],
-  "worldRules": [],
-  "coolPatterns": [],
-  "conflictPatterns": [],
+  "worldRules": [
+    {
+      "name": "真相层级",
+      "description": "层级 / 信息量 / 代价 ------ / -------- / ------ 表层异常 / 可解释偏差 / 恐惧与误判 中层污染 / 规则扭曲 / 理智下降、关系破裂 深层真相 / 宇宙敌意 / 身份崩塌、不可逆损失"
+    },
+    {
+      "name": "势力分层",
+      "description": "**调查者组织**: 试图控制异常扩散 **秘密教团**: 追求古神降临或献祭收益 **中立旁观者**: 掌握情报但拒绝承担后果 **污染个体**: 受影响的人或地点 --"
+    }
+  ],
+  "coolPatterns": [
+    {
+      "name": "规则破译",
+      "scenario": "密室/遗迹/仪式文本无法理解",
+      "appeal": "主角通过细节破译关键规则",
+      "keyNote": "规则必须前后自洽，可验证"
+    },
+    {
+      "name": "代价取胜",
+      "scenario": "无法“无伤通关”",
+      "appeal": "主角以明确代价换来阶段性胜利",
+      "keyNote": "代价必须真实落地到后续剧情"
+    },
+    {
+      "name": "假真相反转",
+      "scenario": "看似结案，实则只是更深层入口",
+      "appeal": "回收前文细节，完成二次反转",
+      "keyNote": "反转不靠“突然告知”，靠线索回收"
+    },
+    {
+      "name": "理智守线",
+      "scenario": "主角濒临崩溃",
+      "appeal": "靠执念或约定强行维持理智完成任务",
+      "keyNote": "情绪锚点要提前埋设"
+    }
+  ],
+  "conflictPatterns": [
+    {
+      "type": "规则破译",
+      "source": "密室/遗迹/仪式文本无法理解",
+      "resolution": "规则必须前后自洽，可验证"
+    },
+    {
+      "type": "代价取胜",
+      "source": "无法“无伤通关”",
+      "resolution": "代价必须真实落地到后续剧情"
+    },
+    {
+      "type": "假真相反转",
+      "source": "看似结案，实则只是更深层入口",
+      "resolution": "反转不靠“突然告知”，靠线索回收"
+    },
+    {
+      "type": "理智守线",
+      "source": "主角濒临崩溃",
+      "resolution": "情绪锚点要提前埋设"
+    }
+  ],
   "outlineArcs": [
     {
       "title": "卷一：异响 (1-70章)",
-      "chapterRange": "1-100",
+      "chapterRange": "1-70",
       "coreFocus": "发现异常与第一条规则",
       "coreConflict": "",
       "climax": "首次活着离开污染区"
     },
     {
       "title": "卷二：深潜 (71-180章)",
-      "chapterRange": "1-100",
+      "chapterRange": "71-180",
       "coreFocus": "调查网络展开，组织与教团对抗",
       "coreConflict": "",
       "climax": "关键人物污染失控"
     },
     {
       "title": "卷三：裂隙 (181-320章)",
-      "chapterRange": "1-100",
+      "chapterRange": "181-320",
       "coreFocus": "世界局部规则改写",
       "coreConflict": "",
       "climax": "代价型胜利，保住核心城市"
     },
     {
       "title": "卷四：归零 (321-500章)",
-      "chapterRange": "1-100",
+      "chapterRange": "321-500",
       "coreFocus": "主角直面深层真相",
       "coreConflict": "",
       "climax": "牺牲与封印，重构新秩序"
     }
   ],
+  "targetWordCount": "1.800.000 chữ",
+  "targetChapterCount": 500,
   "pitfalls": [
     {
-      "description": "Thiết lập trước sau mâu thuẫn.",
+      "description": "只写“吓人描写”，没有规则逻辑",
+      "severity": "critical"
+    },
+    {
+      "description": "古神设定万能，导致剧情无解",
+      "severity": "critical"
+    },
+    {
+      "description": "代价嘴上说有，实际没后果",
+      "severity": "critical"
+    },
+    {
+      "description": "反转全靠最后一章硬揭示",
       "severity": "critical"
     }
   ],
   "bestPractices": [
     {
-      "description": "Thiết lập tự nhất quán."
+      "description": "每次异常都给出至少1条可验证规则"
+    },
+    {
+      "description": "主角每次推进都付出具体成本"
+    },
+    {
+      "description": "用“局部胜利”维持追更爽感"
+    },
+    {
+      "description": "反转前确保有可回溯线索"
     }
   ],
   "entityTags": [

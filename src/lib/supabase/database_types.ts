@@ -103,36 +103,51 @@ export type Database = {
       characters: {
         Row: {
           arc: string | null
+          body_language: string | null
+          core_wound: string | null
           created_at: string | null
           current_stage: string | null
+          deep_fear: string | null
+          hidden_desire: string | null
           id: string
           name: string
           project_id: string
           role: string | null
+          self_deception: string | null
           sort_order: number | null
           traits: string | null
           updated_at: string | null
         }
         Insert: {
           arc?: string | null
+          body_language?: string | null
+          core_wound?: string | null
           created_at?: string | null
           current_stage?: string | null
+          deep_fear?: string | null
+          hidden_desire?: string | null
           id?: string
           name?: string
           project_id: string
           role?: string | null
+          self_deception?: string | null
           sort_order?: number | null
           traits?: string | null
           updated_at?: string | null
         }
         Update: {
           arc?: string | null
+          body_language?: string | null
+          core_wound?: string | null
           created_at?: string | null
           current_stage?: string | null
+          deep_fear?: string | null
+          hidden_desire?: string | null
           id?: string
           name?: string
           project_id?: string
           role?: string | null
+          self_deception?: string | null
           sort_order?: number | null
           traits?: string | null
           updated_at?: string | null
@@ -1026,4 +1041,3 @@ export const Constants = {
     Enums: {},
   },
 } as const
-

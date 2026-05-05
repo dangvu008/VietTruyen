@@ -31,8 +31,8 @@ export function useAiSuggest() {
   });
 
   const suggest = useCallback(async (prompt: { system: string; user: string }) => {
-    const { models, activeModelId, taskModelOverrides } = useAiStore.getState();
-    const model = getModelForTask('brainstorm', models, undefined, activeModelId, taskModelOverrides);
+    const { models, activeModelId, taskModelOverrides, modelHealth, preferredProvider } = useAiStore.getState();
+    const model = getModelForTask('brainstorm', models, undefined, activeModelId, taskModelOverrides, modelHealth, [], preferredProvider);
 
     if (!model) {
       setState({ isLoading: false, result: null, error: 'Chưa chọn model AI. Vào Cài đặt để cấu hình.' });

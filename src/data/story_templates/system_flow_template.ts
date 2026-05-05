@@ -20,37 +20,54 @@ export const SYSTEM_FLOW_TEMPLATE: StoryTemplate = {
   ],
   "subGenres": [
     {
-      "name": "Hệ Thống Lưu / System",
-      "description": "数据可视化 + 任务驱动 + 确定性回报。系统是主角的最强外挂，但也可能是最大的枷锁。",
-      "coreAppeal": "数据可视化 + 任务驱动 + 确定性回报。系统是主角的最强外挂，但也可能是最大的枷锁。"
+      "name": "签到流 (Sign-in)",
+      "description": "**核心**: 在特定地点/时间打卡。 **爽点**: 探索地图 = 获得奖励。 **陷阱**: 容易变成流水账。必须结合剧情（为了签到而不得不闯入禁地）。",
+      "coreAppeal": "探索地图 = 获得奖励。"
+    },
+    {
+      "name": "抽奖流 (Gacha)",
+      "description": "**核心**: 随机性。单车变摩托。 **爽点**: 欧皇时刻，绝境翻盘。 **陷阱**: 运气太好会显得假。需要铺垫“幸运值”或“献祭”代价。",
+      "coreAppeal": "欧皇时刻，绝境翻盘。"
+    },
+    {
+      "name": "兑换流 (Shop)",
+      "description": "**核心**: 只要有钱/积分，什么都能买。 **爽点**: 只要肝就能强。 **陷阱**: 容易变成“打工流”。 --",
+      "coreAppeal": "只要肝就能强。"
     }
   ],
   "worldRules": [],
   "coolPatterns": [],
-  "conflictPatterns": [],
-  "outlineArcs": [
+  "conflictPatterns": [
     {
-      "title": "Quyển 1: Khởi Đầu",
-      "chapterRange": "1-80",
-      "coreFocus": "Giới thiệu thế giới.",
-      "coreConflict": "Xung đột đầu tiên.",
-      "climax": "Bước ngoặt."
-    },
-    {
-      "title": "Quyển 2: Phát Triển",
-      "chapterRange": "81-200",
-      "coreFocus": "Mở rộng.",
-      "coreConflict": "Xung đột chính.",
-      "climax": "Đỉnh cao."
-    },
-    {
-      "title": "Quyển 3: Kết Thúc",
-      "chapterRange": "201-350",
-      "coreFocus": "Giải quyết.",
-      "coreConflict": "Đối đầu cuối.",
-      "climax": "Viên mãn."
+      "type": "阶段三：博弈期 (501+ 章)",
+      "source": "**阴谋论**: 系统是谁造的？目的是什么？（养蛊？夺舍？培养救世主？） **反抗**: 主角试图摆脱系统的控制，寻找没有系统也能变强的方法。 --",
+      "resolution": "**阴谋论**: 系统是谁造的？目的是什么？（养蛊？夺舍？培养救世主？） **反抗**: 主角试图摆脱系统的控制，寻找没有系统也能变强的方法。 --"
     }
   ],
+  "outlineArcs": [
+    {
+      "title": "阶段一：工具期 (1-200 章)",
+      "chapterRange": "1-200",
+      "coreFocus": "系统冷冰冰，机械发布任务。主角依赖系统生存。 **命名建议**: 系统名称/功能暂时未知时，正文用“代号/称呼”（如“继承者系统”“面板”），不要用“???”作为读者可见文本。",
+      "coreConflict": "",
+      "climax": ""
+    },
+    {
+      "title": "阶段二：伙伴期 (201-500 章)",
+      "chapterRange": "201-500",
+      "coreFocus": "系统解锁智能语音/精灵形象。开始吐槽、卖萌、提供建议。 主角开始思考系统的来源。",
+      "coreConflict": "",
+      "climax": ""
+    },
+    {
+      "title": "阶段三：博弈期 (501+ 章)",
+      "chapterRange": "1-100",
+      "coreFocus": "**阴谋论**: 系统是谁造的？目的是什么？（养蛊？夺舍？培养救世主？） **反抗**: 主角试图摆脱系统的控制，寻找没有系统也能变强的方法。 --",
+      "coreConflict": "",
+      "climax": ""
+    }
+  ],
+  "targetChapterCount": 500,
   "pitfalls": [
     {
       "description": "Thiết lập trước sau mâu thuẫn.",

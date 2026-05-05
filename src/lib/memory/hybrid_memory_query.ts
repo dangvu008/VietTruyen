@@ -1,9 +1,11 @@
 import type { HybridMemoryResult, RetrievalPackItem } from '../../types/memory_embedding';
 import type { Project } from '../../types/story';
+import { getActiveNarrativeStateFactsAtChapter } from '../../db/narrative_db';
+import { getOpenHooksForProject } from './pending_hooks_repository';
 import { getContinuityWarnings, getEntitySnapshotAt, getRelevantNarrativeCommunities, searchMemory } from './memory_query';
 import { buildMemoryRetrievalProfile, type MemoryRetrievalIntent } from './memory_retrieval_profile';
 import { rerankMemorySearchHits } from './memory_reranker';
-import { buildGraphPack, buildRiskPack, buildSemanticPack, createPackItem } from './retrieval_pack_builder';
+import { buildGraphPack, buildHookPack, buildRiskPack, buildSemanticPack, buildStatePack, createPackItem } from './retrieval_pack_builder';
 import { searchMemoryEmbeddings } from './vector_query';
 
 function formatSnapshotLine(name: string, attributes: Record<string, string>): string {
@@ -11,6 +13,25 @@ function formatSnapshotLine(name: string, attributes: Record<string, string>): s
     .filter(Boolean)
     .join(', ');
   return details ? `- ${name}: ${details}` : `- ${name}`;
+}
+
+// [Domain:NarrativeMemory] P3a - RAG Deduplication Rules
+function applyRagDedupRules(
+  hits: RetrievalPackItem[],
+  currentChapterIndex: number
+): RetrievalPackItem[] {
+  return hits.map(hit => {
+    if (hit.chapterIndex === undefined) return hit;
+    const distance = currentChapterIndex - hit.chapterIndex;
+    
+    // Skip content that is too recent (e.g. from the last 2 chapters) to prevent AI looping
+    if (distance <= 2 && distance > 0) return null;       
+    
+    // Mark slightly older content to reduce its weight/priority in the prompt
+    if (distance <= 5 && distance > 0) return { ...hit, body: `[MOD40%] ${hit.body}` }; 
+    
+    return hit;
+  }).filter(Boolean) as RetrievalPackItem[];
 }
 
 async function retrieveHybridMemory(
@@ -21,7 +42,7 @@ async function retrieveHybridMemory(
 ): Promise<HybridMemoryResult> {
   const profile = buildMemoryRetrievalProfile(intent, project, query);
 
-  const [definitions, continuityWarnings, communities, semanticCandidates] = await Promise.all([
+  const [definitions, continuityWarnings, communities, semanticCandidates, activeStateFacts, openHooks] = await Promise.all([
     searchMemory(project.id, query).catch(() => []),
     getContinuityWarnings(project.id, Math.max(1, targetChapterIndex)).catch(() => []),
     getRelevantNarrativeCommunities(project, targetChapterIndex, 2).catch(() => []),
@@ -30,6 +51,8 @@ async function retrieveHybridMemory(
       limit: profile.candidateLimit,
       contentTypes: profile.contentTypes,
     }).catch(() => []),
+    getActiveNarrativeStateFactsAtChapter(project.id, Math.max(1, targetChapterIndex)).catch(() => []),
+    getOpenHooksForProject(project.id).catch(() => []),
   ]);
 
   const semanticHits = rerankMemorySearchHits(project, query, semanticCandidates, {
@@ -38,7 +61,27 @@ async function retrieveHybridMemory(
 
   const canonPack: RetrievalPackItem[] = [];
   const riskPack = buildRiskPack(continuityWarnings, 3);
-  const warnings = riskPack.map((item) => item.body);
+  const seedEntityIds = new Set(definitions.map((definition) => definition.entityId));
+  const relevantStateFacts = activeStateFacts
+    .filter((fact) => seedEntityIds.size === 0 || seedEntityIds.has(fact.subjectId) || query.toLowerCase().includes(fact.subjectId.toLowerCase()))
+    .sort((left, right) => right.validFromChapter - left.validFromChapter);
+  const relevantHooks = openHooks
+    .filter((hook) => {
+      if (hook.relatedEntityIds.some((entityId) => seedEntityIds.has(entityId))) return true;
+      return hook.description.toLowerCase().includes(query.toLowerCase()) || hook.plantedChapterIndex >= Math.max(1, targetChapterIndex - 6);
+    })
+    .sort((left, right) => {
+      const leftUrgency = left.expectedPayoffBy != null ? Math.abs(left.expectedPayoffBy - targetChapterIndex) : 999;
+      const rightUrgency = right.expectedPayoffBy != null ? Math.abs(right.expectedPayoffBy - targetChapterIndex) : 999;
+      return leftUrgency - rightUrgency;
+    });
+  const warnings = [
+    ...riskPack.map((item) => item.body),
+    ...relevantHooks
+      .filter((hook) => hook.expectedPayoffBy != null && hook.expectedPayoffBy <= targetChapterIndex + 2)
+      .slice(0, 2)
+      .map((hook) => `Hook gần hạn payoff: ${hook.description}`),
+  ];
 
   for (const definition of definitions.slice(0, 3)) {
     const snapshot = await getEntitySnapshotAt(project.id, definition.entityId, Math.max(1, targetChapterIndex)).catch(() => undefined);
@@ -69,10 +112,17 @@ async function retrieveHybridMemory(
   }
 
   const graphPack = buildGraphPack(communities, 2);
-  const semanticPack = buildSemanticPack(semanticHits, profile.finalLimit);
+  const statePack = buildStatePack(relevantStateFacts, 4);
+  const hookPack = buildHookPack(relevantHooks, 4);
+  let semanticPack = buildSemanticPack(semanticHits, profile.finalLimit);
+  
+  // Apply RAG dedup rules (P3a) to prevent AI from repeating recently generated content
+  semanticPack = applyRagDedupRules(semanticPack, targetChapterIndex);
 
   return {
     canonPack,
+    statePack,
+    hookPack,
     graphPack,
     semanticPack,
     riskPack,

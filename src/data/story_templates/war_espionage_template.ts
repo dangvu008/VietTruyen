@@ -21,60 +21,177 @@ export const WAR_ESPIONAGE_TEMPLATE: StoryTemplate = {
   ],
   "subGenres": [
     {
-      "name": "Kháng Chiến / Điệp Chiến",
-      "description": "身份博弈 + 信息战 + 高压生存。在敌后的刀锋上行走，用智慧与勇气守护信仰。",
-      "coreAppeal": "身份博弈 + 信息战 + 高压生存。在敌后的刀锋上行走，用智慧与勇气守护信仰。"
+      "name": "地下潜伏流",
+      "description": "长期潜伏敌营，获取情报",
+      "coreAppeal": "身份周旋、险中求胜、关键情报",
+      "referenceWorks": [
+        "潜伏",
+        "风筝",
+        "伪装者",
+        "悬崖"
+      ]
+    },
+    {
+      "name": "敌后抗战流",
+      "description": "敌后游击，打击敌人",
+      "coreAppeal": "战术碾压、以少胜多、民族大义",
+      "referenceWorks": [
+        "亮剑",
+        "雪豹",
+        "我的团长我的团"
+      ]
+    },
+    {
+      "name": "情报战流",
+      "description": "情报机构之间的博弈",
+      "coreAppeal": "智力对决、破译密码、反间计",
+      "referenceWorks": [
+        "暗算",
+        "解密",
+        "风声"
+      ]
+    },
+    {
+      "name": "特工行动流",
+      "description": "执行特殊任务",
+      "coreAppeal": "惊险刺激、完成不可能任务",
+      "referenceWorks": [
+        "麻雀",
+        "胭脂",
+        "旗袍"
+      ]
     }
   ],
-  "worldRules": [],
-  "coolPatterns": [],
-  "conflictPatterns": [],
+  "worldRules": [
+    {
+      "name": "势力格局",
+      "description": "势力 / 特点 / 目标 ------ / ------ / ------ 我方 / 地下党/军统 / 抗日救国 日方 / 特务机关 / 镇压抗日 汪伪 / 伪政权 / 维护统治 中间派 / 观望势力 / 自保"
+    },
+    {
+      "name": "情报机构",
+      "description": "机构 / 性质 / 特点 ------ / ------ / ------ 中共地下党 / 我方 / 信仰坚定 军统 / 国民党 / 手段强硬 日本特高课 / 敌方 / 残忍狡猾 76号 / 汪伪 / 叛徒走狗"
+    },
+    {
+      "name": "身份层级",
+      "description": "身份 / 特点 / 风险 ------ / ------ / ------ 高层潜伏 / 情报价值高 / 极高 中层潜伏 / 执行任务 / 高 外围人员 / 传递情报 / 中 交通员 / 联络 / 中高 --"
+    }
+  ],
+  "coolPatterns": [
+    {
+      "name": "险中求胜",
+      "scenario": "身份即将暴露，绝境逃生",
+      "appeal": "惊险刺激，化险为夷",
+      "keyNote": "要有合理的脱身方式"
+    },
+    {
+      "name": "智斗敌特",
+      "scenario": "与敌方特务斗智斗勇",
+      "appeal": "智力碾压，对手落败",
+      "keyNote": "双方都要有智商"
+    },
+    {
+      "name": "关键情报",
+      "scenario": "获取改变战局的情报",
+      "appeal": "情报价值巨大，影响深远"
+    },
+    {
+      "name": "策反成功",
+      "scenario": "成功策反敌方人员",
+      "appeal": "化敌为友，扩大战果",
+      "keyNote": "策反过程要合理"
+    }
+  ],
+  "conflictPatterns": [
+    {
+      "type": "卷一：潜入 (1-60章)",
+      "source": "边缘人员",
+      "resolution": "第一次重要任务"
+    },
+    {
+      "type": "卷二：扎根 (61-150章)",
+      "source": "核心人员",
+      "resolution": "获取重要情报"
+    },
+    {
+      "type": "卷三：危机 (151-250章)",
+      "source": "被调查",
+      "resolution": "化解危机"
+    },
+    {
+      "type": "卷四：反击 (251-350章)",
+      "source": "关键棋子",
+      "resolution": "重大行动成功"
+    }
+  ],
   "outlineArcs": [
     {
       "title": "卷一：潜入 (1-60章)",
-      "chapterRange": "1-100",
+      "chapterRange": "1-60",
       "coreFocus": "建立身份，站稳脚跟",
       "coreConflict": "边缘人员",
       "climax": "第一次重要任务"
     },
     {
       "title": "卷二：扎根 (61-150章)",
-      "chapterRange": "1-100",
+      "chapterRange": "61-150",
       "coreFocus": "深入敌营，获取信任",
       "coreConflict": "核心人员",
       "climax": "获取重要情报"
     },
     {
       "title": "卷三：危机 (151-250章)",
-      "chapterRange": "1-100",
+      "chapterRange": "151-250",
       "coreFocus": "身份受到怀疑",
       "coreConflict": "被调查",
       "climax": "化解危机"
     },
     {
       "title": "卷四：反击 (251-350章)",
-      "chapterRange": "1-100",
+      "chapterRange": "251-350",
       "coreFocus": "主动出击，打击敌人",
       "coreConflict": "关键棋子",
       "climax": "重大行动成功"
     },
     {
       "title": "卷五：胜利 (351-400章)",
-      "chapterRange": "1-100",
+      "chapterRange": "351-400",
       "coreFocus": "迎来胜利，身份揭晓",
       "coreConflict": "英雄",
       "climax": "圆满结局"
     }
   ],
+  "targetWordCount": "1.000.000 chữ",
+  "targetChapterCount": 400,
   "pitfalls": [
     {
-      "description": "Thiết lập trước sau mâu thuẫn.",
+      "description": "过度煽情失真",
+      "severity": "critical"
+    },
+    {
+      "description": "反派降智",
+      "severity": "critical"
+    },
+    {
+      "description": "主角光环太强",
+      "severity": "critical"
+    },
+    {
+      "description": "历史常识错误",
       "severity": "critical"
     }
   ],
   "bestPractices": [
     {
-      "description": "Thiết lập tự nhất quán."
+      "description": "情感克制有力"
+    },
+    {
+      "description": "反派有智商"
+    },
+    {
+      "description": "主角有危机有代价"
+    },
+    {
+      "description": "历史细节准确"
     }
   ],
   "entityTags": [

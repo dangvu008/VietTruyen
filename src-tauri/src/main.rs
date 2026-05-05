@@ -331,6 +331,11 @@ fn ensure_9router_started() -> Result<(), String> {
     Err(last_error.unwrap_or_else(|| "Không thể tự bật 9router.".to_string()))
 }
 
+#[tauri::command]
+fn ensure_nine_router_started() -> Result<(), String> {
+    ensure_9router_started()
+}
+
 fn main() {
     tauri::Builder::default()
         .setup(|_app| {
@@ -342,6 +347,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             // PDF parsing
             parse_pdf_with_liteparse,
+            ensure_nine_router_started,
             // Git storage commands
             git_commands::storage_init,
             git_commands::storage_list_projects,

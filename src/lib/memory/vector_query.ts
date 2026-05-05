@@ -139,6 +139,9 @@ function buildCharacterNoteSource(project: Project, character: Character): Embed
     `${character.name} (${character.role})`,
     character.currentStage && `Cảnh giới: ${character.currentStage}`,
     character.traits && `Tính cách: ${character.traits}`,
+    character.psychology?.deepFear && `Nỗi sợ sâu: ${character.psychology.deepFear}`,
+    character.psychology?.hiddenDesire && `Mong muốn ẩn: ${character.psychology.hiddenDesire}`,
+    character.psychology?.selfDeception && `Tự lừa mình: ${character.psychology.selfDeception}`,
     character.arc && `Arc: ${character.arc}`,
     character.aliases?.length ? `Bí danh: ${character.aliases.join(', ')}` : '',
   ].filter(Boolean);

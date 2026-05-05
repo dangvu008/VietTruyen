@@ -18,6 +18,7 @@ import { getModelForTask } from './model_router';
 import { useAiStore } from '../../store/use_ai_store';
 import { createId } from '../../core/id';
 import type { Project } from '../../types/story';
+import { buildEraRegisterGuardrailSection } from './era_register_guardrails';
 import type {
   StyleCorrection,
   StyleAnalysisResult,
@@ -70,7 +71,10 @@ export async function analyzeChapterStyle(opts: AnalyzeOptions): Promise<StyleAn
     aiStore.models,
     undefined,
     aiStore.activeModelId,
-    aiStore.taskModelOverrides
+    aiStore.taskModelOverrides,
+    aiStore.modelHealth,
+    [],
+    aiStore.preferredProvider
   );
 
   if (!model) {
@@ -110,6 +114,7 @@ function buildAnalyzerPrompt(
     );
     rulesSection = `\n\nQUY TẮC ĐÃ HỌC (ưu tiên phát hiện lỗi tương tự):\n${ruleLines.join('\n')}`;
   }
+  const eraRegisterGuardrail = buildEraRegisterGuardrailSection(project);
 
   return `Phân tích văn phong đoạn truyện sau:
 
@@ -117,6 +122,8 @@ THỂ LOẠI: ${project.genre || 'Không rõ'}
 GIỌNG VĂN: ${project.tone || 'Không rõ'}
 PHONG CÁCH: ${project.writingStyle || 'Không rõ'}
 ${rulesSection}
+
+${eraRegisterGuardrail}
 
 NỘI DUNG CHƯƠNG:
 """
@@ -139,7 +146,7 @@ Trả về JSON đúng format:
 
 Lưu ý: "original" phải trích NGUYÊN VĂN từ nội dung, không paraphrase.
 Chỉ liệt kê lỗi thật sự quan trọng, tối đa 15 corrections.
-Nếu genre/tone gợi ý bối cảnh cổ đại hoặc cổ phong, hãy đặc biệt soi lỗi dùng từ hiện đại kiểu "thành phố", "cao ốc", "CEO", "app".
+Nếu genre/tone gợi ý bối cảnh cổ đại hoặc cổ phong, hãy đặc biệt soi lỗi dùng từ hiện đại kiểu "va chạm vật lý", "phản xạ thần kinh", "thành phố", "cao ốc", "CEO", "app".
 Đồng thời soi kỹ lỗi xưng hô như "ta" đổi sang "tôi", "thiếp/chàng" đổi sang "anh/em", hoặc kẻ thù lại nói với nhau quá thân mật không có setup.`;
 }
 

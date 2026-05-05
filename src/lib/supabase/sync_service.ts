@@ -72,6 +72,11 @@ export async function uploadProject(project: Project, userId: string): Promise<{
       arc: c.arc,
       current_stage: c.currentStage,
       traits: c.traits,
+      core_wound: c.psychology?.coreWound || '',
+      deep_fear: c.psychology?.deepFear || '',
+      hidden_desire: c.psychology?.hiddenDesire || '',
+      self_deception: c.psychology?.selfDeception || '',
+      body_language: c.psychology?.bodyLanguage || '',
       sort_order: i,
     }));
     await supabase.from('characters').insert(chars);
@@ -91,34 +96,69 @@ export async function uploadProject(project: Project, userId: string): Promise<{
     await supabase.from('outline_beats').insert(beats);
   }
 
-  // 5. Sync chapters — UPSERT only (never DELETE-all before INSERT).
-  // uploadProject is called from syncProjectMetadataToProvider which may
-  // receive a snapshot whose chapters have been strip-serialised (content='').
-  // A DELETE-then-INSERT would wipe Supabase content in that case.
-  // Strategy: UPSERT rows that exist in the snapshot; remove orphans only when
-  // we have a non-empty keep-set to avoid accidentally clearing all chapters.
+  // 5. Sync chapters — SPLIT strategy to prevent stripped content from wiping Supabase.
+  // partialize strips chapter content to '' when persisting to localStorage.
+  // After reload, syncProjectMetadataToProvider may call uploadProject with
+  // stripped chapters BEFORE hydration completes. If we blindly upsert content='',
+  // we permanently destroy the real content on Supabase.
+  //
+  // Strategy:
+  // - "Full" chapters (have content): upsert everything including content
+  // - "Stripped" chapters (content='' but have title): upsert metadata ONLY
+  //   (title, sort_order, status) — do NOT touch content/summary columns
+  // - Orphan cleanup: only when we have a non-empty keep-set
   if (project.chapters.length > 0) {
-    const chaptersToUpsert = project.chapters.map((c, i) => ({
-      id: c.id,
-      project_id: project.id,
-      title: c.title,
-      summary: c.summary || '',
-      content: c.content,
-      status: c.status,
-      sort_order: i,
-      created_at: c.createdAt,
-      updated_at: c.updatedAt,
-    }));
+    const fullChapters = project.chapters.filter((c) => c.content?.trim());
+    const strippedChapters = project.chapters.filter((c) => !c.content?.trim());
 
-    const { error: upsertError } = await (supabase
-      .from('chapters') as ReturnType<typeof supabase.from>)
-      .upsert(chaptersToUpsert, { onConflict: 'id' });
+    // [Domain:Storage] STEP 5a — Upsert full chapters (content present)
+    if (fullChapters.length > 0) {
+      const fullRows = fullChapters.map((c, _i) => ({
+        id: c.id,
+        project_id: project.id,
+        title: c.title,
+        summary: c.summary || '',
+        content: c.content,
+        status: c.status,
+        sort_order: project.chapters.indexOf(c),
+        created_at: c.createdAt,
+        updated_at: c.updatedAt,
+      }));
 
-    if (upsertError) {
-      console.warn('[uploadProject] Chapter upsert failed (non-fatal):', upsertError.message);
-    } else {
-      // Only remove orphan chapters when we have a confirmed keep-set
-      const keepIds = project.chapters.map((c) => c.id);
+      const { error: fullError } = await (supabase
+        .from('chapters') as ReturnType<typeof supabase.from>)
+        .upsert(fullRows, { onConflict: 'id' });
+
+      if (fullError) {
+        console.warn('[uploadProject] Full chapter upsert failed (non-fatal):', fullError.message);
+      }
+    }
+
+    // [Domain:Storage] STEP 5b — Stripped chapters: metadata-only upsert
+    // Only update title, sort_order, status — preserve existing content/summary on Supabase.
+    // Uses individual UPDATE (not UPSERT) to avoid inserting new rows with empty content.
+    if (strippedChapters.length > 0) {
+      for (const c of strippedChapters) {
+        const { error: metaError } = await supabase
+          .from('chapters')
+          .update({
+            title: c.title,
+            status: c.status,
+            sort_order: project.chapters.indexOf(c),
+            updated_at: c.updatedAt,
+          })
+          .eq('id', c.id)
+          .eq('project_id', project.id);
+
+        if (metaError) {
+          console.warn(`[uploadProject] Metadata-only update for chapter ${c.id} failed:`, metaError.message);
+        }
+      }
+    }
+
+    // [Domain:Storage] STEP 5c — Remove orphan chapters not in the new set
+    const keepIds = project.chapters.map((c) => c.id);
+    if (keepIds.length > 0) {
       await supabase
         .from('chapters')
         .delete()
@@ -162,7 +202,7 @@ export async function downloadProjects(): Promise<{ data: Project[]; error: Erro
   for (const row of rows) {
     // Fetch related data
     const [worldRes, charsRes, beatsRes, chaptersRes, foreshadowingsRes] = await Promise.all([
-      supabase.from('world_rules').select('*').eq('project_id', row.id).single(),
+      supabase.from('world_rules').select('*').eq('project_id', row.id).maybeSingle(),
       supabase.from('characters').select('*').eq('project_id', row.id).order('sort_order'),
       supabase.from('outline_beats').select('*').eq('project_id', row.id).order('sort_order'),
       supabase.from('chapters').select('*').eq('project_id', row.id).order('sort_order'),
@@ -187,6 +227,13 @@ export async function downloadProjects(): Promise<{ data: Project[]; error: Erro
       arc: c.arc || '',
       currentStage: c.current_stage || '',
       traits: c.traits || '',
+      psychology: {
+        coreWound: c.core_wound || '',
+        deepFear: c.deep_fear || '',
+        hiddenDesire: c.hidden_desire || '',
+        selfDeception: c.self_deception || '',
+        bodyLanguage: c.body_language || '',
+      },
     }));
 
     const outline: OutlineBeat[] = (beatsRes.data || []).map((b) => ({

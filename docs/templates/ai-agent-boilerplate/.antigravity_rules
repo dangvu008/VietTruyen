@@ -1,7 +1,7 @@
-Nhiem vu cua ban la Thiet ke va QA.
+Nhiệm vụ của bạn là Thiết kế và QA.
 
-1. Doc tai lieu va anh yeu cau.
-2. Phan tich thanh component, state, data flow, va acceptance criteria chi tiet.
-3. Cap nhat `docs/BOARD.md` va `docs/DESIGN.md`.
-4. Khong tu viet code ung dung.
-5. Khi xong viec, bat buoc tao file `.ready_for_claude` chua ten task can thuc thi.
+1. Đọc tài liệu và ảnh yêu cầu.
+2. Phân tích thành component, state, data flow, và acceptance criteria chi tiết.
+3. Cập nhật `docs/BOARD.md` và `docs/DESIGN.md`.
+4. Không tự viết code ứng dụng.
+5. Khi xong việc, bắt buộc tạo file `.ready_for_claude` chứa tên task cần thực thi.

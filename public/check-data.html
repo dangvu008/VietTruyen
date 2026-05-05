@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<title>VietTruyen — Project Data Check</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Inter', sans-serif; background: #110e0c; color: #f5e6d0; padding: 40px; }
+  h1 { font-size: 24px; margin-bottom: 8px; color: #f0c59a; }
+  h2 { font-size: 18px; margin: 24px 0 12px; color: #ceb9f4; }
+  .subtitle { color: #8f7f73; margin-bottom: 20px; font-size: 14px; }
+  .card { background: #1a1715; border: 1px solid rgba(255,255,255,0.06); border-radius: 16px; padding: 20px; margin-bottom: 16px; }
+  .stat { display: inline-block; background: rgba(255,255,255,0.04); border-radius: 12px; padding: 12px 20px; margin: 4px; text-align: center; }
+  .stat .value { font-size: 28px; font-weight: 700; }
+  .stat .label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; color: #8f7f73; margin-top: 4px; }
+  .ok { color: #69d2a4; }
+  .warn { color: #f0c59a; }
+  .bad { color: #f87171; }
+  table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+  th, td { padding: 8px 12px; text-align: left; border-bottom: 1px solid rgba(255,255,255,0.06); font-size: 13px; }
+  th { color: #8f7f73; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; font-size: 10px; }
+  .content-preview { max-width: 500px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #a99b90; }
+  pre { background: #0d0b0a; padding: 12px; border-radius: 8px; font-size: 12px; overflow-x: auto; margin-top: 8px; max-height: 400px; }
+  #loading { color: #f0c59a; font-size: 16px; }
+  .project-card { background: #1e1a17; border: 1px solid rgba(240,197,154,0.15); border-radius: 16px; padding: 20px; margin-bottom: 16px; }
+  .project-title { font-size: 16px; font-weight: 600; color: #f0c59a; margin-bottom: 12px; }
+  .match { background: rgba(105,210,164,0.1); border-color: rgba(105,210,164,0.3); }
+  button { background: #f0c59a; color: #1c140f; border: none; border-radius: 8px; padding: 8px 16px; cursor: pointer; font-weight: 600; font-size: 13px; margin: 4px; }
+  button:hover { background: #f5d4af; }
+  button.danger { background: #ef4444; color: white; }
+</style>
+</head>
+<body>
+<h1>🔍 VietTruyen — Kiểm tra dữ liệu theo Project</h1>
+<p class="subtitle">So sánh localStorage vs IndexedDB cho từng project</p>
+<div id="loading">Đang quét dữ liệu...</div>
+<div id="results" style="display:none"></div>
+
+<script>
+async function getLocalStorageProjects() {
+  const raw = localStorage.getItem('viettruyen-projects');
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed.state?.projects || [];
+  } catch { return []; }
+}
+
+async function getIndexedDBChapters() {
+  return new Promise((resolve) => {
+    const req = indexedDB.open('narrative-memory-db');
+    req.onerror = () => resolve([]);
+    req.onsuccess = () => {
+      const db = req.result;
+      const tableNames = Array.from(db.objectStoreNames);
+      if (!tableNames.includes('chapters')) { db.close(); resolve([]); return; }
+      
+      const tx = db.transaction('chapters', 'readonly');
+      const store = tx.objectStore('chapters');
+      const all = store.getAll();
+      tx.oncomplete = () => { db.close(); resolve(all.result || []); };
+      tx.onerror = () => { db.close(); resolve([]); };
+    };
+  });
+}
+
+async function run() {
+  const lsProjects = await getLocalStorageProjects();
+  const idbChapters = await getIndexedDBChapters();
+  
+  // Group IDB chapters by projectId
+  const idbByProject = {};
+  for (const ch of idbChapters) {
+    const pid = ch.projectId || 'unknown';
+    if (!idbByProject[pid]) idbByProject[pid] = [];
+    idbByProject[pid].push(ch);
+  }
+  
+  document.getElementById('loading').style.display = 'none';
+  const results = document.getElementById('results');
+  results.style.display = 'block';
+  
+  let html = '';
+  
+  // Summary
+  html += '<h2>📊 Tổng quan</h2><div class="card">';
+  html += `<div class="stat"><div class="value">${lsProjects.length}</div><div class="label">Projects (localStorage)</div></div>`;
+  html += `<div class="stat"><div class="value">${Object.keys(idbByProject).length}</div><div class="label">Projects (IndexedDB)</div></div>`;
+  html += `<div class="stat"><div class="value">${idbChapters.length}</div><div class="label">Total IDB Chapters</div></div>`;
+  html += `<div class="stat"><div class="value ok">${idbChapters.filter(c => c.content?.trim()?.length > 50).length}</div><div class="label">With Content</div></div>`;
+  html += '</div>';
+  
+  // Per-project comparison
+  html += '<h2>📖 Chi tiết từng Project</h2>';
+  
+  for (const proj of lsProjects) {
+    const idbChaps = idbByProject[proj.id] || [];
+    const lsChaps = proj.chapters || [];
+    const idbWithContent = idbChaps.filter(c => c.content?.trim()?.length > 50);
+    const lsWithContent = lsChaps.filter(c => c.content?.trim()?.length > 50);
+    const hasData = idbWithContent.length > 0;
+    
+    html += `<div class="project-card ${hasData ? 'match' : ''}">`;
+    html += `<div class="project-title">${hasData ? '✅' : '❌'} ${proj.title} <span style="font-size:12px;color:#8f7f73">(${proj.id.slice(0,8)}...)</span></div>`;
+    
+    html += `<div class="stat"><div class="value">${lsChaps.length}</div><div class="label">LS Chapters</div></div>`;
+    html += `<div class="stat"><div class="value ${lsWithContent.length > 0 ? 'ok' : 'bad'}">${lsWithContent.length}</div><div class="label">LS with Content</div></div>`;
+    html += `<div class="stat"><div class="value">${idbChaps.length}</div><div class="label">IDB Chapters</div></div>`;
+    html += `<div class="stat"><div class="value ${idbWithContent.length > 0 ? 'ok' : 'bad'}">${idbWithContent.length}</div><div class="label">IDB with Content</div></div>`;
+    
+    if (idbChaps.length > 0 || lsChaps.length > 0) {
+      html += '<table><tr><th>#</th><th>Title (LS)</th><th>LS Content</th><th>IDB Content</th><th>IDB Preview</th></tr>';
+      
+      const maxLen = Math.max(lsChaps.length, idbChaps.length);
+      for (let i = 0; i < maxLen; i++) {
+        const lsCh = lsChaps[i];
+        const idbCh = idbChaps.find(c => c.id === lsCh?.id) || idbChaps[i];
+        
+        const lsContent = lsCh?.content?.length ?? 0;
+        const idbContent = idbCh?.content?.length ?? 0;
+        const lsCls = lsContent > 50 ? 'ok' : 'bad';
+        const idbCls = idbContent > 50 ? 'ok' : 'bad';
+        
+        html += `<tr>`;
+        html += `<td>${i+1}</td>`;
+        html += `<td>${lsCh?.title || idbCh?.title || '—'}</td>`;
+        html += `<td class="${lsCls}">${lsContent.toLocaleString()}</td>`;
+        html += `<td class="${idbCls}">${idbContent.toLocaleString()}</td>`;
+        html += `<td class="content-preview">${idbCh?.content?.trim()?.slice(0,120) || '(empty)'}</td>`;
+        html += `</tr>`;
+      }
+      html += '</table>';
+    }
+    
+    // Storage mode
+    html += `<p style="margin-top:12px;font-size:12px;color:#6f6259">storageMode: ${proj.storageMode || 'not set'} | ID: ${proj.id}</p>`;
+    html += '</div>';
+  }
+  
+  // Projects in IDB but NOT in localStorage
+  const lsProjectIds = new Set(lsProjects.map(p => p.id));
+  const orphanProjects = Object.keys(idbByProject).filter(pid => !lsProjectIds.has(pid));
+  
+  if (orphanProjects.length > 0) {
+    html += '<h2>👻 Orphan Projects (chỉ có trong IndexedDB)</h2>';
+    for (const pid of orphanProjects) {
+      const chaps = idbByProject[pid];
+      const withContent = chaps.filter(c => c.content?.trim()?.length > 50);
+      html += `<div class="project-card">`;
+      html += `<div class="project-title">🔗 Project ID: ${pid.slice(0,12)}...</div>`;
+      html += `<div class="stat"><div class="value">${chaps.length}</div><div class="label">Chapters</div></div>`;
+      html += `<div class="stat"><div class="value ${withContent.length > 0 ? 'ok' : 'bad'}">${withContent.length}</div><div class="label">With Content</div></div>`;
+      
+      if (chaps.length > 0) {
+        html += '<table><tr><th>#</th><th>Title</th><th>Content</th><th>Preview</th></tr>';
+        chaps.slice(0, 20).forEach((c, i) => {
+          const cls = (c.content?.trim()?.length ?? 0) > 50 ? 'ok' : 'bad';
+          html += `<tr><td>${i+1}</td><td>${c.title || '(no title)'}</td><td class="${cls}">${(c.content?.length ?? 0).toLocaleString()}</td><td class="content-preview">${c.content?.trim()?.slice(0,100) || '(empty)'}</td></tr>`;
+        });
+        if (chaps.length > 20) html += `<tr><td colspan="4" style="color:#8f7f73">...và ${chaps.length - 20} chapters nữa</td></tr>`;
+        html += '</table>';
+      }
+      html += '</div>';
+    }
+  }
+  
+  // Diagnosis
+  html += '<h2>🩺 Chẩn đoán & Hành động</h2><div class="card">';
+  
+  const projectsWithIDBContent = lsProjects.filter(p => {
+    const idbChaps = idbByProject[p.id] || [];
+    return idbChaps.some(c => c.content?.trim()?.length > 50);
+  });
+  
+  if (projectsWithIDBContent.length > 0) {
+    html += `<p class="ok">✅ ${projectsWithIDBContent.length} project(s) CÓ nội dung trong IndexedDB!</p>`;
+    html += `<p style="margin-top:8px;color:#a99b90">Reload trang chính (localhost:1420) — fixes đã áp dụng sẽ tự động hydrate nội dung từ IndexedDB.</p>`;
+    html += `<p style="margin-top:4px;color:#a99b90">Nếu vẫn trống sau reload, mở Console (F12) để xem log [onRehydrateStorage] và [loadProjectWithFullChapters].</p>`;
+  } else {
+    html += `<p class="bad">❌ Không có project nào trong localStorage có nội dung tương ứng trong IndexedDB.</p>`;
+    if (orphanProjects.length > 0) {
+      html += `<p class="warn" style="margin-top:8px">⚠️ Có ${orphanProjects.length} orphan project(s) trong IndexedDB — dữ liệu có thể thuộc project đã bị xóa khỏi localStorage.</p>`;
+    }
+  }
+  html += '</div>';
+  
+  results.innerHTML = html;
+}
+
+run();
+</script>
+</body>
+</html>

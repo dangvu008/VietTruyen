@@ -193,6 +193,7 @@ export function renderActivePage({
           onUpdateProject={projectActions.updateProject}
           onAddChapter={projectActions.addChapter}
           onOpenAi={showAi}
+          onNavigate={(tab) => setActiveTab(toTabId(tab, 'writer'))}
         />
       );
 
@@ -207,6 +208,7 @@ export function renderActivePage({
           onAddChapter={projectActions.addChapter}
           onOpenAi={showAi}
           initialMode="detail"
+          onNavigate={(tab) => setActiveTab(toTabId(tab, 'review'))}
         />
       );
 

@@ -12,6 +12,7 @@
 import React, { useState } from 'react';
 import { useAuthStore } from '../../store/use_auth_store';
 import { ArrowRight, Sparkles, Feather, Mail, Lock, Eye, EyeOff, Shield } from 'lucide-react';
+import { isTauriEnvironment } from '../../lib/storage/detect_environment';
 
 const LoginPage: React.FC = () => {
   const { signInWithGoogle, continueAsGuest, signInWithEmail, signUpWithEmail, isLoading } = useAuthStore();
@@ -25,6 +26,7 @@ const LoginPage: React.FC = () => {
   const [errorMsg, setErrorMsg] = useState('');
 
   const isSignup = authMode === 'email-signup';
+  const isDesktopApp = isTauriEnvironment();
 
   const handleEmailAuth = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -58,6 +60,14 @@ const LoginPage: React.FC = () => {
         setAgreedToTerms(false);
         setErrorMsg('Đăng ký thành công! Vui lòng kiểm tra email để xác nhận tài khoản.');
       }
+    }
+  };
+
+  const handleGoogleAuth = async () => {
+    setErrorMsg('');
+    const { error } = await signInWithGoogle();
+    if (error) {
+      setErrorMsg(error.message);
     }
   };
 
@@ -133,8 +143,8 @@ const LoginPage: React.FC = () => {
 
                 {/* Google Sign In */}
                 <button
-                  onClick={signInWithGoogle}
-                  disabled={isLoading}
+                  onClick={handleGoogleAuth}
+                  disabled={isLoading || isDesktopApp}
                   className="w-full flex items-center justify-center gap-3 px-6 py-4 rounded-xl font-medium transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed group relative overflow-hidden mt-3"
                   style={{ background: '#1d1b18', color: '#e8e1dc' }}
                 >
@@ -151,6 +161,11 @@ const LoginPage: React.FC = () => {
                   )}
                   <span>{isLoading ? 'Đang kết nối...' : 'Tiếp tục với Google'}</span>
                 </button>
+                {isDesktopApp && (
+                  <p className="px-1 text-xs leading-relaxed" style={{ color: '#9c8e82' }}>
+                    Google OAuth hiện chỉ hỗ trợ bản web. Trong ứng dụng desktop, hãy dùng đăng nhập email hoặc chế độ khách.
+                  </p>
+                )}
 
                 {/* Divider */}
                 <div className="flex items-center gap-4 py-2 mt-4">

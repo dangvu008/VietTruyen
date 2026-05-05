@@ -77,7 +77,25 @@ function attributesToCharacter(source: Character, attributes: Record<string, str
     currentStage: attributes.current_stage ?? source.currentStage,
     traits: attributes.traits ?? source.traits,
     arc: attributes.arc ?? source.arc,
-    facts: collectCustomFacts(attributes, ['name', 'role', 'current_stage', 'traits', 'arc']),
+    psychology: {
+      coreWound: attributes.core_wound ?? source.psychology?.coreWound ?? '',
+      deepFear: attributes.deep_fear ?? source.psychology?.deepFear ?? '',
+      hiddenDesire: attributes.hidden_desire ?? source.psychology?.hiddenDesire ?? '',
+      selfDeception: attributes.self_deception ?? source.psychology?.selfDeception ?? '',
+      bodyLanguage: attributes.body_language ?? source.psychology?.bodyLanguage ?? '',
+    },
+    facts: collectCustomFacts(attributes, [
+      'name',
+      'role',
+      'current_stage',
+      'traits',
+      'arc',
+      'core_wound',
+      'deep_fear',
+      'hidden_desire',
+      'self_deception',
+      'body_language',
+    ]),
   });
 }
 

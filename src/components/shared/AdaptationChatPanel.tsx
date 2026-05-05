@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Bot, User, Sparkles, AlertCircle, Copy, BookOpen, GitBranch, ArrowLeft, MoreHorizontal, Maximize2 } from 'lucide-react';
+import { Send, Bot, User, Sparkles, AlertCircle, Copy, BookOpen, GitBranch, ArrowLeft, MoreHorizontal, Maximize2, RotateCcw } from 'lucide-react';
+import VoiceMicButton from './VoiceMicButton';
 
 interface Message {
   id: string;
@@ -137,7 +138,7 @@ const AdaptationChatPanel: React.FC<AdaptationChatPanelProps> = ({
                   </div>
                   
                   {/* Message Bubble */}
-                  <div className={`max-w-[80%] flex flex-col min-w-[200px] ${isUser ? 'items-end' : 'items-start'}`}>
+                  <div className={`group max-w-[80%] flex flex-col min-w-[200px] ${isUser ? 'items-end' : 'items-start'}`}>
                     <div className="flex items-center gap-2 mb-1.5 px-1">
                       <span className="text-xs font-bold text-on-surface-variant">
                         {isUser ? 'Bạn' : 'VietTruyen AI'}
@@ -154,6 +155,18 @@ const AdaptationChatPanel: React.FC<AdaptationChatPanelProps> = ({
                     >
                       {msg.content}
                     </div>
+
+                    {isUser && (
+                      <div className="opacity-0 transition-opacity group-hover:opacity-100 mt-1.5 pr-1">
+                        <button
+                          onClick={() => setInputVal(msg.content)}
+                          className="flex items-center gap-1.5 text-[11px] text-on-surface-variant hover:text-on-surface"
+                          title="Điền lại yêu cầu này vào khung chat"
+                        >
+                          <RotateCcw size={12} /> Thử lại
+                        </button>
+                      </div>
+                    )}
                     
                     {/* Action buttons (only for assistant) */}
                     {!isUser && (
@@ -215,6 +228,12 @@ const AdaptationChatPanel: React.FC<AdaptationChatPanelProps> = ({
               />
               
               <div className="flex items-center gap-2 pb-2 pr-2">
+                <VoiceMicButton
+                  onText={(text) => setInputVal(text)}
+                  disabled={isProcessing}
+                  variant="light"
+                  size={18}
+                />
                 <button
                   onClick={handleSend}
                   disabled={!inputVal.trim() || isProcessing}

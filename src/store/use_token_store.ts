@@ -43,7 +43,7 @@ const MAX_PIPELINE_SESSIONS = 100;
 function emptyStepBreakdown(): PipelineSession['stepBreakdown'] {
   const steps: PipelineStepLabel[] = [
     'context_build', 'plan_branches', 'write_chapter',
-    'review_checkers', 'style_analysis', 'data_extraction', 'memory_sync',
+    'pre_save_quality_gate', 'review_checkers', 'style_analysis', 'data_extraction', 'memory_sync',
   ];
   const result: Partial<PipelineSession['stepBreakdown']> = {};
   for (const step of steps) {

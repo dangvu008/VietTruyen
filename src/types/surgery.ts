@@ -1,4 +1,5 @@
 import type { Arc, Project } from './story';
+import type { SelectedPlotDirection } from './plot_direction';
 
 export type SurgeryTargetType = 'character' | 'plot' | 'foreshadowing' | 'world_rule';
 export type SurgeryPolicy =
@@ -49,6 +50,7 @@ export interface SurgerySpec {
   assumptions: string[];
   blockedReasons: string[];
   sourceFormat: SourceFormat;
+  selectedPlotDirection?: SelectedPlotDirection;
   canonVersionApplied?: number;
   scanId?: string;
   frozenProjectSnapshot?: Partial<Project>;
@@ -121,6 +123,7 @@ export interface SourceImportJob {
   projectId: string;
   sourceTitle: string;
   sourceFormat: SourceFormat;
+  sourceText?: string;
   status: SourceImportStatus;
   totalChunks: number;
   processedChunks: number;

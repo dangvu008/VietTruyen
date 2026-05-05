@@ -1,6 +1,6 @@
 /**
  * File: run_all_checkers.ts
- * Purpose: Orchestrator to run all 6 Checker Agents in parallel
+ * Purpose: Orchestrator to run all checker agents in parallel
  * Layer: Core/Domain
  * Domain: Checkers -> [Orchestration]
  */
@@ -12,7 +12,7 @@ import { initDefaultCheckers } from './default_checkers';
 // CheckerContext moved to checker_types.ts
 
 /**
- * Runs all 7 checkers in parallel (6 original + Golden Three).
+ * Runs all registered checkers in parallel.
  * @param context The narrative contextual data needed by all checkers
  * @param callAi An async function provided by the caller (e.g., a React hook) to communicate with the LLM
  */
@@ -71,6 +71,18 @@ export async function runAllCheckers(
     r.issues.filter(issue => issue.severity === 'high' || issue.severity === 'critical')
   );
 
+  const suggestedRevisionTasks = priority_fixes
+    .slice(0, 5)
+    .map((issue, index) => `${index + 1}. ${issue.description} -> ${issue.suggestion}`);
+  const guidedRevisionPrompt = suggestedRevisionTasks.length > 0
+    ? [
+        `Vá continuity và mạch cảm xúc cho chương ${chapterNumber}.`,
+        'Ưu tiên xử lý theo thứ tự sau:',
+        ...suggestedRevisionTasks,
+        'Giữ nguyên cốt lõi nhịp truyện, chỉ sửa các điểm mâu thuẫn hoặc hụt nhịp đã nêu.',
+      ].join('\n')
+    : `Chương ${chapterNumber} đạt review. Chỉ cần chỉnh nhẹ câu chữ nếu muốn tăng độ mượt.`;
+
   return {
     chapterId,
     chapterNumber,
@@ -78,6 +90,8 @@ export async function runAllCheckers(
     combined_score,
     pass,
     priority_fixes,
+    suggestedRevisionTasks,
+    guidedRevisionPrompt,
     reviewedAt: new Date().toISOString(),
   };
 }

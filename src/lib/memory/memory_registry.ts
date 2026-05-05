@@ -1,5 +1,5 @@
 import { createId } from '../../core/id';
-import type { Character, CharacterSpeechProfile, CharacterSpeechRule, Project, StoryFact, WorldRules } from '../../types/story';
+import type { Character, CharacterPsychology, CharacterSpeechProfile, CharacterSpeechRule, Project, StoryFact, WorldRules } from '../../types/story';
 import type { EntityDefinition, EntityType } from '../../types/narrative_memory';
 
 export const WORLD_ENTITY_ID = 'world_rules';
@@ -65,11 +65,26 @@ function normalizeSpeechProfile(profile?: CharacterSpeechProfile): CharacterSpee
   };
 }
 
+function normalizeCharacterPsychology(psychology?: CharacterPsychology): CharacterPsychology | undefined {
+  if (!psychology) return undefined;
+
+  const normalized = {
+    coreWound: psychology.coreWound?.trim() || '',
+    deepFear: psychology.deepFear?.trim() || '',
+    hiddenDesire: psychology.hiddenDesire?.trim() || '',
+    selfDeception: psychology.selfDeception?.trim() || '',
+    bodyLanguage: psychology.bodyLanguage?.trim() || '',
+  };
+
+  return Object.values(normalized).some(Boolean) ? normalized : undefined;
+}
+
 export function normalizeCharacter(character: Character): Character {
   return {
     ...character,
     aliases: Array.from(new Set([character.name, ...(character.aliases || [])].map((value) => value.trim()).filter(Boolean))),
     facts: normalizeStoryFacts(character.facts),
+    psychology: normalizeCharacterPsychology(character.psychology),
     speechProfile: normalizeSpeechProfile(character.speechProfile),
   };
 }
@@ -91,6 +106,14 @@ export function buildCharacterAttributes(character: Character): Record<string, s
     traits: normalized.traits,
     arc: normalized.arc,
   };
+
+  if (normalized.psychology) {
+    if (normalized.psychology.coreWound) attributes.core_wound = normalized.psychology.coreWound;
+    if (normalized.psychology.deepFear) attributes.deep_fear = normalized.psychology.deepFear;
+    if (normalized.psychology.hiddenDesire) attributes.hidden_desire = normalized.psychology.hiddenDesire;
+    if (normalized.psychology.selfDeception) attributes.self_deception = normalized.psychology.selfDeception;
+    if (normalized.psychology.bodyLanguage) attributes.body_language = normalized.psychology.bodyLanguage;
+  }
 
   if (normalized.speechProfile) {
     attributes.speech_default_self = normalized.speechProfile.defaultSelfPronouns.join(', ');

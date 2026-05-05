@@ -21,51 +21,74 @@ export const MELODRAMA_TEMPLATE: StoryTemplate = {
   ],
   "subGenres": [
     {
-      "name": "Cẩu Huyết Ngôn Tình / Melodrama",
-      "description": "情感冲突 + 虐恋情深 + 追妻火葬场。狗血不是贬义，是击中读者情感痛点的利器。",
-      "coreAppeal": "情感冲突 + 虐恋情深 + 追妻火葬场。狗血不是贬义，是击中读者情感痛点的利器。"
+      "name": "霸总甜宠流",
+      "description": "男强女弱，霸道宠溺，糖多虐少",
+      "coreAppeal": "宠妻无度，打脸情敌，豪门生活"
+    },
+    {
+      "name": "追妻火葬场流",
+      "description": "前期虐女主，后期男主跪舔",
+      "coreAppeal": "女主逆袭，男主追悔莫及，卑微求复合"
+    },
+    {
+      "name": "重生复仇流",
+      "description": "女主带记忆重生，步步为营",
+      "coreAppeal": "手撕渣男贱女，扭转命运，收获真爱"
+    },
+    {
+      "name": "替身文学流",
+      "description": "女主是白月光替身，虐心虐肺",
+      "coreAppeal": "替身逆袭，白月光塌房，男主追悔"
     }
   ],
   "worldRules": [],
   "coolPatterns": [],
-  "conflictPatterns": [],
+  "conflictPatterns": [
+    {
+      "type": "卷一：甜蜜假象 (1-50章, 15%)",
+      "source": "男主冷漠，女主隐忍",
+      "resolution": "**开篇钩子**: 契约/协议结合，展示不平等地位 **人物登场**: 男女主、白月光、情敌 **核心冲突**: 男主冷漠，女主隐忍 **小高潮**: 第一次心动/误会"
+    }
+  ],
   "outlineArcs": [
     {
       "title": "卷一：甜蜜假象 (1-50章, 15%)",
-      "chapterRange": "1-100",
-      "coreFocus": "卷一：甜蜜假象 (1-50章, 15%)",
-      "coreConflict": "",
+      "chapterRange": "1-50",
+      "coreFocus": "**开篇钩子**: 契约/协议结合，展示不平等地位 **人物登场**: 男女主、白月光、情敌 **核心冲突**: 男主冷漠，女主隐忍 **小高潮**: 第一次心动/误会",
+      "coreConflict": "男主冷漠，女主隐忍",
       "climax": ""
     },
     {
       "title": "卷二：虐心深渊 (51-130章, 25%)",
-      "chapterRange": "1-100",
-      "coreFocus": "卷二：虐心深渊 (51-130章, 25%)",
+      "chapterRange": "51-130",
+      "coreFocus": "**危机升级**: 白月光出现，误会加深 **虐点集中**: 误解、背叛、伤害 **转折**: 女主心死，决定离开 **高潮**: 小产/重病/被陷害",
       "coreConflict": "",
       "climax": "小产/重病/被陷害"
     },
     {
       "title": "卷三：决裂离开 (131-180章, 15%)",
-      "chapterRange": "1-100",
-      "coreFocus": "卷三：决裂离开 (131-180章, 15%)",
+      "chapterRange": "131-180",
+      "coreFocus": "**真相部分揭露**: 白月光的真面目 **女主离开**: 带球跑/净身出户/假死 **男主震惊**: 发现失去的珍贵",
       "coreConflict": "",
       "climax": ""
     },
     {
       "title": "卷四：追妻之路 (181-280章, 30%)",
-      "chapterRange": "1-100",
-      "coreFocus": "卷四：追妻之路 (181-280章, 30%)",
+      "chapterRange": "181-280",
+      "coreFocus": "**男主追悔**: 寻找、等待、卑微 **女主成长**: 事业有成、自信独立 **反复拉扯**: 旧情难忘又难原谅 **高潮**: 女主有新欢，男主崩溃",
       "coreConflict": "",
       "climax": "女主有新欢，男主崩溃"
     },
     {
       "title": "卷五：破镜重圆 (281-350章, 15%)",
-      "chapterRange": "1-100",
-      "coreFocus": "卷五：破镜重圆 (281-350章, 15%)",
+      "chapterRange": "281-350",
+      "coreFocus": "**真相大白**: 所有误会解开 **男主赎罪**: 舍命相护/放弃一切 **和解过程**: 慢慢重建信任 **大结局**: HE，婚礼/孩子 --",
       "coreConflict": "",
       "climax": ""
     }
   ],
+  "targetWordCount": "800.000 chữ",
+  "targetChapterCount": 350,
   "pitfalls": [
     {
       "description": "Thiết lập trước sau mâu thuẫn.",

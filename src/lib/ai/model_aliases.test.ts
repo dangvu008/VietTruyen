@@ -22,4 +22,27 @@ describe('model_aliases', () => {
     expect(normalized.modelId).toBe('anthropic/claude-sonnet-4');
     expect(normalized.name).toBe('Claude Sonnet 4 (OpenRouter)');
   });
+
+  it('rewrites retired Mistral Small Creative presets to Mistral Small 4', () => {
+    expect(normalizeModelIdForProvider('openrouter', 'mistralai/mistral-small-creative'))
+      .toBe('mistralai/mistral-small-2603');
+
+    const normalized = normalizeAiModel({
+      id: 'openrouter-mistral-small-creative',
+      name: 'Mistral Small Creative (OpenRouter)',
+      provider: 'openrouter',
+      modelId: 'mistralai/mistral-small-creative',
+      description: 'Old creative model',
+      isCustom: false,
+      tier: 'quality',
+      inputCostPer1M: 0.10,
+      outputCostPer1M: 0.30,
+      contextWindow: 32768,
+      capabilities: ['cheap', 'creative_writing', 'editing'],
+    });
+
+    expect(normalized.modelId).toBe('mistralai/mistral-small-2603');
+    expect(normalized.name).toBe('Mistral Small 4 (OpenRouter)');
+    expect(normalized.contextWindow).toBe(262_144);
+  });
 });

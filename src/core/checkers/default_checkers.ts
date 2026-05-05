@@ -5,6 +5,7 @@ import { buildPacingCheckerPrompt, parsePacingReport } from './pacing_checker';
 import { buildReaderPullCheckerPrompt, parseReaderPullReport } from './reader_pull_checker';
 import { buildConsistencyCheckerPrompt, parseConsistencyReport } from './consistency_checker';
 import { buildContinuityCheckerPrompt, parseContinuityReport } from './continuity_checker';
+import { buildDiscourseDepthCheckerPrompt, parseDiscourseDepthReport } from './discourse_depth_checker';
 import { buildGoldenThreeCheckerPrompt, parseGoldenThreeReport } from './golden_three_checker';
 
 export function initDefaultCheckers() {
@@ -36,7 +37,11 @@ export function initDefaultCheckers() {
 
   checkerRegistry.register({
     name: 'consistency',
-    buildPrompt: (ctx) => buildConsistencyCheckerPrompt(ctx.chapterText, ctx.chapterNumber, ctx.systemStateContext),
+    buildPrompt: (ctx) => buildConsistencyCheckerPrompt(ctx.chapterText, ctx.chapterNumber, ctx.systemStateContext, {
+      continuityWarnings: ctx.continuityWarnings,
+      activeHooks: ctx.activeHooks?.map((hook) => hook.description),
+      storyStateFacts: ctx.storyStateFacts?.map((fact) => `${fact.subjectId}.${fact.predicate}=${fact.value}`),
+    }),
     parseReport: parseConsistencyReport,
   });
 
@@ -44,6 +49,19 @@ export function initDefaultCheckers() {
     name: 'continuity',
     buildPrompt: (ctx) => buildContinuityCheckerPrompt(ctx.chapterText, ctx.chapterNumber, ctx.previousSummary, ctx.activeThreads),
     parseReport: parseContinuityReport,
+  });
+
+  checkerRegistry.register({
+    name: 'discourse_depth',
+    buildPrompt: (ctx) => buildDiscourseDepthCheckerPrompt(
+      ctx.chapterText,
+      ctx.chapterNumber,
+      ctx.previousSummary,
+      ctx.activeThreads,
+      ctx.chapterIntent,
+      ctx.futureTarget,
+    ),
+    parseReport: parseDiscourseDepthReport,
   });
 
   checkerRegistry.register({

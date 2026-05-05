@@ -47,6 +47,10 @@ export function renderGlobalPage({
     onNavigate('creation-chat');
   };
 
+  const handleOpenProjectFromLibrary = (projectId: string) => {
+    onEnterProject(projectId);
+  };
+
   switch (activeTab) {
     case 'creation-chat':
       return (
@@ -75,7 +79,7 @@ export function renderGlobalPage({
           onCreateProject={handleStartCreationChat}
           onDuplicateProject={projectActions.duplicateProject}
           onDeleteProject={projectActions.deleteProject}
-          onSetActiveProject={onEnterProject}
+          onSetActiveProject={handleOpenProjectFromLibrary}
           onUpdateProject={projectActions.updateProject}
         />
       );

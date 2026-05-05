@@ -8,7 +8,8 @@
  * States:
  * - idle        → hidden (no badge)
  * - generating  → pulsing amber dot + "Đang viết..."
- * - failed      → amber warning + "Tạo dở dang"
+ * - partial     → amber warning + "Tạo dở dang"
+ * - failed      → amber warning + "Tạo lỗi"
  * - done        → brief green checkmark (auto-hides after 3s)
  */
 
@@ -90,16 +91,17 @@ const FullBadge: React.FC<BadgeProps> = ({ status, showDone, className }) => {
     );
   }
 
-  if (status === 'failed') {
+  if (status === 'partial' || status === 'failed') {
+    const label = status === 'partial' ? 'Tạo dở dang' : 'Tạo lỗi';
     return (
       <div
         className={`inline-flex items-center gap-2 rounded-full border border-amber-500/40 bg-amber-500/10 px-3 py-1 ${className}`}
         role="alert"
-        aria-label="Tạo dở dang"
+        aria-label={label}
       >
         <AlertTriangle className="h-3 w-3 text-amber-400 flex-shrink-0" />
         <span className="text-[11px] font-semibold tracking-wide text-amber-400 whitespace-nowrap">
-          Tạo dở dang
+          {label}
         </span>
       </div>
     );
@@ -136,9 +138,9 @@ const CompactBadge: React.FC<BadgeProps> = ({ status, showDone, className }) => 
     );
   }
 
-  if (status === 'failed') {
+  if (status === 'partial' || status === 'failed') {
     return (
-      <span className={`flex-shrink-0 ${className}`} aria-label="Tạo dở dang">
+      <span className={`flex-shrink-0 ${className}`} aria-label={status === 'partial' ? 'Tạo dở dang' : 'Tạo lỗi'}>
         <AlertTriangle className="h-3 w-3 text-amber-400" />
       </span>
     );

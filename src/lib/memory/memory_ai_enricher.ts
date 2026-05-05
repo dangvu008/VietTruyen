@@ -20,6 +20,7 @@ import type { AiModel, Chapter } from '../../types/story';
 import { callAiModelTracked } from '../ai/tracked_ai_client';
 import { quickTruncate } from '../ai/token_estimator';
 import { MEMORY_EXTRACTOR_VERSION } from './memory_registry';
+import { mergeDependencies, mergeTimelineFacts } from './delta_merge';
 
 export interface AiEnrichmentParams {
   projectId: string;       // Explicit — Chapter type does not carry projectId
@@ -299,8 +300,8 @@ export async function enrichChapterMemoryWithAi(
   }
 
   return {
-    dependencies: [...params.dependencies, ...newDeps],
-    timelineFacts: [...params.timelineFacts, ...newFacts],
+    dependencies: mergeDependencies(params.dependencies, newDeps),
+    timelineFacts: mergeTimelineFacts(params.timelineFacts, newFacts),
     warnings,
   };
 }

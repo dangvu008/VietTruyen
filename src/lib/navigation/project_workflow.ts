@@ -1,6 +1,7 @@
 import type { Project } from '../../types/story';
 import type { ProjectTabId } from '../../types/navigation';
 import type { Chapter } from '../../types/story';
+import type { BatchComposeProgress } from '../../types/creation_chat';
 
 export type ProjectWorkflowPhase = 'setup' | 'writing' | 'finalize';
 
@@ -14,6 +15,13 @@ export interface ProjectWorkflowSnapshot {
   setupScore: number;
   progressPercent: number;
   recommendedTab: ProjectTabId;
+}
+
+export interface CreationChatResumeSnapshot {
+  linkedProjectId: string | null;
+  frameworkConfirmed: boolean;
+  isBatchComposing: boolean;
+  batchCompose: BatchComposeProgress | null;
 }
 
 export const PROJECT_TAB_LABELS: Record<ProjectTabId, string> = {
@@ -46,6 +54,27 @@ export function hasChapterManuscript(chapter?: Chapter | null): boolean {
   return hasText(chapter?.content);
 }
 
+export function hasProjectEditableDraft(project: Project): boolean {
+  return project.chapters.some((chapter) => hasChapterManuscript(chapter)) || hasText(project.storyPreview);
+}
+
+export function shouldOpenCreationChatForProject(
+  project: Project,
+  creationChat?: CreationChatResumeSnapshot | null,
+): boolean {
+  if (!creationChat || creationChat.linkedProjectId !== project.id) {
+    return false;
+  }
+
+  const hasIncompleteBatchCompose = Boolean(
+    creationChat.batchCompose &&
+      creationChat.batchCompose.total > 0 &&
+      creationChat.batchCompose.successCount < creationChat.batchCompose.total,
+  );
+
+  return !creationChat.frameworkConfirmed || creationChat.isBatchComposing || hasIncompleteBatchCompose;
+}
+
 export function getProjectWorldCoverage(project: Project): number {
   let score = 0;
 
@@ -64,10 +93,18 @@ export function hasProjectIdea(project: Project): boolean {
   return hasText(project.logline) || hasText(project.mainPlot) || hasText(project.endgame);
 }
 
+export function hasProjectCharacterSetup(project: Project): boolean {
+  return project.characters.length > 0 || hasText(project.characterSetup);
+}
+
+export function hasProjectWorldSetup(project: Project): boolean {
+  return getProjectWorldCoverage(project) > 0 || hasText(project.worldSetting);
+}
+
 export function getProjectWorkflowSnapshot(project: Project): ProjectWorkflowSnapshot {
   const hasIdea = hasProjectIdea(project);
-  const hasCharacters = project.characters.length > 0;
-  const hasWorld = getProjectWorldCoverage(project) > 0;
+  const hasCharacters = hasProjectCharacterSetup(project);
+  const hasWorld = hasProjectWorldSetup(project);
   const hasOutline = hasProjectOutline(project);
   const manuscriptChapters = project.chapters.filter((chapter) => hasChapterManuscript(chapter));
   const hasDraft = manuscriptChapters.length > 0;

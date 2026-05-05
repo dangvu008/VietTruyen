@@ -114,6 +114,29 @@ export interface TemplateBestPractice {
   description: string;
 }
 
+// ─── Character Archetypes ───────────────────────────────────
+export interface TemplateCharacterArchetype {
+  /** Vai trò narrative (VD: "Tông môn sư huynh ganh đua") */
+  role: string;
+  /** Chức năng trong cốt truyện — tại sao nhân vật này cần tồn tại */
+  narrativeFunction: string;
+  /** Gợi ý tính cách mẫu */
+  personalityHint: string;
+  /** Arc/quyển nào nhân vật xuất hiện nhiều nhất */
+  primaryArc?: string;
+  /** Số lượng gợi ý [min, max] cho vai trò này */
+  suggestedCount: [number, number];
+}
+
+export interface TemplateCharacterScaleHint {
+  /** Gợi ý số nhân vật mới mỗi 100 chương */
+  per100Chapters: number;
+  /** Tổng nhân vật tối thiểu cho toàn truyện */
+  minTotal: number;
+  /** Tổng nhân vật tối đa (tránh bloat) */
+  maxTotal: number;
+}
+
 // ─── Entity tag patterns ────────────────────────────────────
 export interface TemplateEntityTag {
   /** Loại entity (VD: "功法", "法宝", "势力") */
@@ -157,6 +180,19 @@ export interface TemplateLanguageRegister {
   forbiddenPronouns: string[];
   /** Luật xưng hô theo tình huống */
   dialogueRules: TemplateDialogueRule[];
+}
+
+export interface TemplateSharingMetadata {
+  /** Private: chỉ local. Shared: đã publish lên kho chung. */
+  visibility: 'private' | 'shared';
+  /** Fingerprint của tác phẩm nguồn để dedupe canonical template. */
+  sourceFingerprint?: string;
+  /** Tiêu đề tác phẩm nguồn dùng cho truy vết. */
+  sourceTitle?: string;
+  /** ID row trong kho shared template trên Supabase. */
+  sharedTemplateId?: string;
+  /** Tác giả đã publish shared template. */
+  sharedByUserId?: string;
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -218,6 +254,15 @@ export interface StoryTemplate {
 
   /** Gợi ý constraint pack */
   constraintPacks?: string[];
+
+  /** Bộ khung nhân vật gợi ý theo thể loại — đa dạng vai trò narrative */
+  characterArchetypes?: TemplateCharacterArchetype[];
+
+  /** Gợi ý tổng nhân vật theo độ dài truyện — scale khi truyện dài lên */
+  characterScaleHint?: TemplateCharacterScaleHint;
+
+  /** Metadata cho flow chia sẻ/dedupe template. */
+  sharing?: TemplateSharingMetadata;
 }
 
 /** Compact version for prompt injection — chỉ gửi phần quan trọng nhất */
@@ -228,8 +273,11 @@ export interface StoryTemplatePromptSlice {
   subGenreSummary: string;
   worldRulesSummary: string;
   powerSystemSummary?: string;
+  opportunityArcSummary?: string;
   outlineStructure: string;
   coolPatternsSummary: string;
+  bestPracticesSummary?: string;
   pitfallsSummary: string;
+  constraintPacksSummary?: string;
   entityTagHints: string;
 }

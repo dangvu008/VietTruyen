@@ -70,6 +70,7 @@ export function appendCharacter(framework: BrainstormResult): BrainstormResult {
         traits: '',
         arc: '',
         currentStage: '',
+        psychology: undefined,
       },
     ],
   };

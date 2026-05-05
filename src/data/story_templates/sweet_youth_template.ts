@@ -21,60 +21,160 @@ export const SWEET_YOUTH_TEMPLATE: StoryTemplate = {
   ],
   "subGenres": [
     {
-      "name": "Thanh Xuân Ngọt Sủng",
-      "description": "轻甜氛围 + 高密度互动 + 成长共鸣。在最美好的年纪，遇见最对的人。",
-      "coreAppeal": "轻甜氛围 + 高密度互动 + 成长共鸣。在最美好的年纪，遇见最对的人。"
+      "name": "校园恋爱流",
+      "description": "高中/大学校园，纯爱故事",
+      "coreAppeal": "暧昧互动、告白心动、甜蜜日常",
+      "referenceWorks": [
+        "致我们单纯的小美好",
+        "你好，旧时光",
+        "最好的我们"
+      ]
+    },
+    {
+      "name": "青梅竹马流",
+      "description": "从小一起长大，日久生情",
+      "coreAppeal": "默契互动、身份转变、守护成长",
+      "referenceWorks": [
+        "何以笙箫默",
+        "微微一笑很倾城"
+      ]
+    },
+    {
+      "name": "欢喜冤家流",
+      "description": "初见不对付，斗嘴变真爱",
+      "coreAppeal": "互怼日常、反差萌、真心流露",
+      "referenceWorks": [
+        "杉杉来了",
+        "亲爱的，热爱的"
+      ]
+    },
+    {
+      "name": "治愈暖甜流",
+      "description": "温暖治愈，细水长流",
+      "coreAppeal": "温馨日常、相互治愈、平淡幸福",
+      "referenceWorks": [
+        "你是我的荣耀",
+        "余生请多指教"
+      ]
     }
   ],
-  "worldRules": [],
-  "coolPatterns": [],
-  "conflictPatterns": [],
+  "worldRules": [
+    {
+      "name": "校园场景",
+      "description": "场景 / 功能 / 经典桥段 ------ / ------ / ---------- 教室 / 日常互动 / 同桌、传纸条 操场 / 运动会 / 加油、受伤 图书馆 / 学习 / 偶遇、占座 食堂 / 吃饭 / 抢座、投喂 宿舍 / 私密空间 / 夜聊、探病 天台 / 告白圣地 / 告白、约定"
+    },
+    {
+      "name": "人物身份",
+      "description": "身份 / 特点 / 常见设定 ------ / ------ / ---------- 学霸 / 成绩优秀 / 高冷/温柔 学渣 / 成绩一般 / 活泼/努力 校草 / 颜值担当 / 受欢迎 校花 / 美丽动人 / 被追求 体育生 / 运动健将 / 阳光 文艺生 / 才艺出众 / 文静 --"
+    }
+  ],
+  "coolPatterns": [
+    {
+      "name": "英雄救美",
+      "scenario": "女主遇到麻烦/危险",
+      "appeal": "男主及时出现，霸气护短",
+      "keyNote": "不能太刻意，要自然"
+    },
+    {
+      "name": "吃醋宣誓",
+      "scenario": "有人接近对方",
+      "appeal": "吃醋表现，宣誓主权",
+      "keyNote": "要可爱，不能太过分"
+    },
+    {
+      "name": "公开撒糖",
+      "scenario": "在众人面前秀恩爱",
+      "appeal": "让围观者羡慕嫉妒",
+      "keyNote": "要自然，不能太做作"
+    },
+    {
+      "name": "意外同居",
+      "scenario": "因为某种原因住在一起",
+      "appeal": "日常互动，暧昧升温",
+      "keyNote": "要有合理理由"
+    }
+  ],
+  "conflictPatterns": [
+    {
+      "type": "内部冲突",
+      "source": "冲突 / 来源 / 解决 ------ / ------ / ------ 误会 / 信息不对称 / 沟通解释 自卑 / 差距感 / 对方鼓励 犹豫 / 不确定感情 / 确认心意",
+      "resolution": "冲突 / 来源 / 解决 ------ / ------ / ------ 误会 / 信息不对称 / 沟通解释 自卑 / 差距感 / 对方鼓励 犹豫 / 不确定感情 / 确认心意"
+    },
+    {
+      "type": "外部冲突",
+      "source": "冲突 / 来源 / 解决 ------ / ------ / ------ 家长反对 / 门不当户不对 / 证明自己 情敌出现 / 第三者 / 坚定选择 异地分离 / 升学/工作 / 坚持等待 前任纠缠 / 过去感情 / 划清界限 --",
+      "resolution": "冲突 / 来源 / 解决 ------ / ------ / ------ 家长反对 / 门不当户不对 / 证明自己 情敌出现 / 第三者 / 坚定选择 异地分离 / 升学/工作 / 坚持等待 前任纠缠 / 过去感情 / 划清界限 --"
+    }
+  ],
   "outlineArcs": [
     {
       "title": "卷一：相遇 (1-50章)",
-      "chapterRange": "1-100",
+      "chapterRange": "1-50",
       "coreFocus": "男女主相识，建立联系",
       "coreConflict": "",
       "climax": "第一次心动瞬间"
     },
     {
       "title": "卷二：暧昧 (51-120章)",
-      "chapterRange": "1-100",
+      "chapterRange": "51-120",
       "coreFocus": "互动增多，暧昧升温",
       "coreConflict": "",
       "climax": "差点告白/被打断"
     },
     {
       "title": "卷三：确认 (121-180章)",
-      "chapterRange": "1-100",
+      "chapterRange": "121-180",
       "coreFocus": "告白成功，确定关系",
       "coreConflict": "",
       "climax": "正式告白，在一起"
     },
     {
       "title": "卷四：考验 (181-240章)",
-      "chapterRange": "1-100",
+      "chapterRange": "181-240",
       "coreFocus": "感情遇到考验",
       "coreConflict": "",
       "climax": "共同克服困难"
     },
     {
       "title": "卷五：圆满 (241-300章)",
-      "chapterRange": "1-100",
+      "chapterRange": "241-300",
       "coreFocus": "修成正果",
       "coreConflict": "",
       "climax": "甜蜜结局"
     }
   ],
+  "targetWordCount": "600.000 chữ",
+  "targetChapterCount": 300,
   "pitfalls": [
     {
-      "description": "Thiết lập trước sau mâu thuẫn.",
+      "description": "甜度单一，没有变化",
+      "severity": "critical"
+    },
+    {
+      "description": "冲突太假，强行虐",
+      "severity": "critical"
+    },
+    {
+      "description": "男主太完美，没有缺点",
+      "severity": "critical"
+    },
+    {
+      "description": "女主太傻白甜",
       "severity": "critical"
     }
   ],
   "bestPractices": [
     {
-      "description": "Thiết lập tự nhất quán."
+      "description": "甜度有节奏，有起伏"
+    },
+    {
+      "description": "冲突合理，能共情"
+    },
+    {
+      "description": "男主有缺点，会成长"
+    },
+    {
+      "description": "女主有主见，有成长"
     }
   ],
   "entityTags": [

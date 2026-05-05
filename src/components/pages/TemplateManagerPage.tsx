@@ -36,6 +36,7 @@ import {
 } from '../../store/use_template_store';
 import TemplateDetailView from './template_manager/TemplateDetailView';
 import TemplateEditForm from './template_manager/TemplateEditForm';
+import { getTemplateTagLabelVi } from '../../lib/story_templates/tag_labels_vi';
 
 // ─── Genre Icon Map ─────────────────────────────────────────
 
@@ -129,7 +130,7 @@ const TemplateCard: React.FC<TemplateCardProps> = ({
         {/* Stats */}
         <div className="flex items-center gap-3 shrink-0 text-[11px] text-[var(--vt-text-muted)]">
           <span>{template.subGenres.length} lưu phái</span>
-          <span>{template.outlineArcs.length} arcs</span>
+          <span>{template.outlineArcs.length} mạch</span>
         </div>
 
         {/* Actions */}
@@ -227,7 +228,7 @@ const TemplateCard: React.FC<TemplateCardProps> = ({
             className="px-2 py-0.5 rounded-full text-[10px] font-medium"
             style={{ background: `${accentColor}10`, color: `${accentColor}cc` }}
           >
-            {tag}
+            {getTemplateTagLabelVi(tag)}
           </span>
         ))}
       </div>
@@ -236,7 +237,7 @@ const TemplateCard: React.FC<TemplateCardProps> = ({
       <div className="flex items-center gap-3 pt-3 border-t border-white/5 text-[11px] text-[var(--vt-text-muted)]">
         <span>{template.subGenres.length} lưu phái</span>
         <span className="w-px h-3 bg-white/10" />
-        <span>{template.outlineArcs.length} arcs</span>
+        <span>{template.outlineArcs.length} mạch</span>
         {template.targetChapterCount && (
           <>
             <span className="w-px h-3 bg-white/10" />
@@ -497,7 +498,7 @@ const TemplateManagerPage: React.FC = () => {
       <div className="flex items-center gap-4 text-xs text-[var(--vt-text-muted)]">
         <span className="flex items-center gap-1.5">
           <Tag size={12} />
-          {filteredTemplates.length} templates
+          {filteredTemplates.length} mẫu
         </span>
         <span className="w-px h-3 bg-white/10" />
         <span>{allTemplates.filter((t) => !t.isCustom).length} tích hợp sẵn</span>

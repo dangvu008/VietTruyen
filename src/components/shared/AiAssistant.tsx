@@ -7,7 +7,8 @@
  * v3: API keys handled by proxy. No client-side key validation.
  */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Loader2, Send, Sparkles, X } from 'lucide-react';
+import { Loader2, RotateCcw, Send, Sparkles, X } from 'lucide-react';
+import VoiceMicButton from './VoiceMicButton';
 import { useAiStore } from '../../store/use_ai_store';
 import type { Project } from '../../types/story';
 import AiOptionsTab from './AiOptionsTab';
@@ -158,6 +159,8 @@ const AiAssistant: React.FC<AiAssistantProps> = ({
     activeModelId,
     models,
     taskModelOverrides,
+    modelHealth,
+    preferredProvider,
     temperature,
     topP,
     contextSize,
@@ -205,7 +208,7 @@ const AiAssistant: React.FC<AiAssistantProps> = ({
 
     try {
       if (project && isPlotQuestion(prompt, project)) {
-        const plotModel = getModelForTask('answer_plot', models, undefined, activeModelId, taskModelOverrides);
+        const plotModel = getModelForTask('answer_plot', models, undefined, activeModelId, taskModelOverrides, modelHealth, [], preferredProvider);
         const plotAnswer = await answerPlotQuestion({
           project,
           question: prompt,
@@ -219,7 +222,7 @@ const AiAssistant: React.FC<AiAssistantProps> = ({
         return;
       }
 
-      const activeModel = getModelForTask('chat', models, undefined, activeModelId, taskModelOverrides);
+      const activeModel = getModelForTask('chat', models, undefined, activeModelId, taskModelOverrides, modelHealth, [], preferredProvider);
       if (!activeModel) {
         throw new Error('Chưa chọn model AI. Vào Cài đặt AI để cấu hình.');
       }
@@ -431,17 +434,32 @@ ${storyPreview ? storyPreview.slice(0, 1500) : 'Trống (chưa có nội dung g�
       {messages.map((msg, index) => (
         <div
           key={`${msg.role}-${index}`}
-          className={`max-w-[88%] text-[15px] leading-relaxed animate-slide-in-up ${
-            msg.role === 'user'
-              ? isDark 
-                ? 'ml-auto bg-[#f2c08d] text-[#151310] font-medium px-5 py-3 rounded-bl-sm rounded-l-2xl rounded-t-2xl shadow-ambient' 
-                : 'ml-auto bg-primary text-on-primary shadow-[0_6px_20px_-8px_rgba(184,90,8,0.6)] font-medium px-5 py-3 rounded-bl-sm rounded-l-2xl rounded-t-2xl'
-              : isDark
-                ? 'mr-auto text-[#d4c4b7] border-l-[3px] border-[#d4a574] pl-5 py-1'
-                : 'mr-auto text-on-surface border-l-[3px] border-primary pl-5 py-1'
-          }`}
+          className={`group flex flex-col gap-1 ${msg.role === 'user' ? 'items-end' : 'items-start'}`}
         >
-          <p className="whitespace-pre-wrap">{msg.content}</p>
+          <div
+            className={`max-w-[88%] text-[15px] leading-relaxed animate-slide-in-up ${
+              msg.role === 'user'
+                ? isDark 
+                  ? 'bg-[#f2c08d] text-[#151310] font-medium px-5 py-3 rounded-bl-sm rounded-l-2xl rounded-t-2xl shadow-ambient' 
+                  : 'bg-primary text-on-primary shadow-[0_6px_20px_-8px_rgba(184,90,8,0.6)] font-medium px-5 py-3 rounded-bl-sm rounded-l-2xl rounded-t-2xl'
+                : isDark
+                  ? 'text-[#d4c4b7] border-l-[3px] border-[#d4a574] pl-5 py-1'
+                  : 'text-on-surface border-l-[3px] border-primary pl-5 py-1'
+            }`}
+          >
+            <p className="whitespace-pre-wrap">{msg.content}</p>
+          </div>
+          {msg.role === 'user' && (
+            <div className="opacity-0 transition-opacity group-hover:opacity-100 pr-1 mt-0.5">
+              <button
+                onClick={() => setInput(msg.content)}
+                className={`flex items-center gap-1.5 text-[11px] ${isDark ? 'text-[#8f7f73] hover:text-[#d4c4b7]' : 'text-on-surface-variant hover:text-on-surface'}`}
+                title="Điền lại yêu cầu này vào khung chat"
+              >
+                <RotateCcw size={13} /> Thử lại
+              </button>
+            </div>
+          )}
         </div>
       ))}
 
@@ -559,7 +577,7 @@ ${storyPreview ? storyPreview.slice(0, 1500) : 'Trống (chưa có nội dung g�
       {activeTab === 'chat' && (
         <div className={`mt-auto flex-shrink-0 ${isWorkspace ? 'border-t border-[#50453b] p-6' : 'pt-4 p-5'}`}>
         <div className={isWorkspace ? 'mx-auto max-w-3xl' : ''}>
-          <div className="flex gap-2">
+          <div className="flex gap-2 items-center">
             <input
               type="text"
               value={input}
@@ -578,6 +596,12 @@ ${storyPreview ? storyPreview.slice(0, 1500) : 'Trống (chưa có nội dung g�
                   : 'border-outline bg-transparent text-on-surface placeholder-on-surface-variant focus:border-primary'
               }`}
               disabled={loading}
+            />
+            <VoiceMicButton
+              onText={(text) => setInput(text)}
+              disabled={loading}
+              variant="dark"
+              size={16}
             />
             <button
               onClick={() => void handleSend()}

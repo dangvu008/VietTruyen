@@ -11,7 +11,7 @@ import type { StoryTemplate } from '../../types/story_template';
 export const APOCALYPSE_TEMPLATE: StoryTemplate = {
   id: 'apocalypse',
   name: 'Mạt Thế / Hậu Tận Thế',
-  originalName: '末世',
+  originalName: 'ngày tận thế',
   coreSellingPoint: 'Tài nguyên sụp đổ + Sinh tồn bác dịch + Nhân tính lựa chọn. Xây dựng lại trật tự trên đống tàn tro.',
   tags: ['apocalypse', 'survival', 'base-building', 'zombie'],
 

@@ -17,35 +17,91 @@ import {
   getTemplateOutlineHint,
   getTemplateConflictPatterns
 } from './template_injector';
+import { buildCreationCharacterGuardrails } from './character_cast_guardrails';
+import { buildJsonObjectSystem, buildVietnameseTextSystem } from './prompt_standard';
+
+function normalizeIdeaText(text: string): string {
+  return text
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd');
+}
+
+function allowModernTechTerms(originalIdea: string, answers: Record<string, string>): boolean {
+  const source = normalizeIdeaText(`${originalIdea} ${Object.values(answers).join(' ')}`);
+  return [
+    'ai',
+    'android',
+    'code',
+    'cong nghe',
+    'du lieu',
+    'he thong',
+    'khoa hoc',
+    'lap trinh',
+    'sci-fi',
+    'system',
+    'tri tue nhan tao',
+  ].some((keyword) => source.includes(keyword));
+}
+
+function buildPlotPreviewQualityRules(originalIdea: string, answers: Record<string, string>): string {
+  const techGuard = allowModernTechTerms(originalIdea, answers)
+    ? '- Nếu ý tưởng có yếu tố công nghệ/AI, dùng chúng như một phần của thế giới truyện, không viết theo kiểu meta hay lẫn với tên nền tảng.\n'
+    : '- Không tự ý đưa AI, Android, iOS, code, dữ liệu, hệ điều hành hoặc công nghệ hiện đại vào truyện nếu brief không nêu rõ.\n';
+
+  return `YÊU CẦU CHẤT LƯỢNG:
+- Mỗi field "protagonist", "openingSetup", "centralConflict", "endingPromise" phải dài ít nhất 2 câu, đủ cụ thể để người viết có thể dùng ngay.
+- Field "escalation" phải dài 3-4 câu, mô tả rõ từng nấc leo thang, không viết tắt.
+- "logline" phải là 1-2 câu sắc gọn nhưng vẫn đủ premise, không quá chung chung.
+- "hooks" phải có đúng 3 mục, mỗi mục là một móc câu riêng, không trùng ý, không quá ngắn.
+- Không dùng nhãn kiểu "Arc 1", "Arc 2", "Phần 3", không đánh số đầu dòng trong nội dung các field.
+- Không để câu cụt ở cuối field. Không chèn chú thích meta trong ngoặc chỉ để giải thích ý.
+${techGuard}- Viết như biên tập viên truyện dài kỳ người Việt, tự nhiên, giàu hình ảnh, không lộ giọng AI.`;
+}
 
 // ─── System Prompts ─────────────────────────────────────────
 
-const DISCUSS_SYSTEM = `Bạn là chuyên gia sáng tạo tiểu thuyết mạng Việt Nam cấp cao nhất.
-Vai trò: Brainstorm cùng người viết — nhận câu trả lời, phân tích ngắn gọn, phản hồi tích cực.
-Quy tắc:
-- Trả lời NGẮN GỌN (3-5 câu), đi thẳng vào trọng tâm
-- Phản hồi tích cực về lựa chọn của người viết
-- Nếu user chọn nhiều option → kết hợp thành ý coherent
-- Kết thúc bằng 1 câu chuyển tiếp sang chủ đề tiếp theo
-- LUÔN trả lời bằng tiếng Việt`;
+const DISCUSS_SYSTEM = buildVietnameseTextSystem(
+  'Senior Vietnamese webnovel development editor',
+  'Respond to the writer’s latest choice, reinforce the useful part, and move the brainstorm forward',
+  [
+    'Keep the reply to 3-5 sentences.',
+    'Be concise and specific.',
+    'If the writer combined multiple options, merge them into one coherent direction.',
+    'End with one transition sentence toward the next topic.',
+  ],
+);
 
-const AI_DECIDE_SYSTEM = `Bạn là chuyên gia sáng tạo tiểu thuyết mạng Việt Nam.
-Người viết yêu cầu bạn TỰ QUYẾT ĐỊNH. Hãy:
-1. Chọn option phù hợp nhất với ý tưởng ban đầu
-2. Giải thích TẠI SAO bạn chọn (2-3 câu)
-3. Hỏi "Bạn OK không?" để user confirm
-Trả lời NGẮN GỌN. Tiếng Việt.`;
+const AI_DECIDE_SYSTEM = buildVietnameseTextSystem(
+  'Vietnamese webnovel creative director',
+  'Choose the best option for the writer when they delegate the decision',
+  [
+    'Pick one option that best fits the original idea.',
+    'Explain the choice in 2-3 short sentences.',
+    'End by asking whether the writer agrees.',
+    'Keep the reply concise.',
+  ],
+);
 
-const PLOT_REVIEW_SYSTEM = `Bạn là biên tập viên cốt truyện cho tiểu thuyết mạng Việt Nam.
-Nhiệm vụ: đọc ý tưởng gốc + câu trả lời brainstorm và tạo BẢN REVIEW CỐT TRUYỆN ngắn để người viết duyệt trước.
-LUÔN trả về JSON hợp lệ. Không markdown, không giải thích ngoài JSON.
-Ưu tiên rõ ràng, mạch lạc, dễ review và dễ góp ý tiếp.`;
+const PLOT_REVIEW_SYSTEM = buildJsonObjectSystem(
+  'Vietnamese webnovel plot editor',
+  'Turn the idea and brainstorm answers into a short but usable plot review for writer approval',
+  [
+    'Prefer clarity, coherence, and concrete story value.',
+    'Write fields with enough detail to support framework generation immediately.',
+  ],
+);
 
-const FRAMEWORK_SYSTEM = `Bạn là chuyên gia sáng tạo tiểu thuyết mạng Việt Nam.
-Nhiệm vụ: Phân tích cuộc brainstorm và tạo KHUNG LỚN hoàn chỉnh cho truyện.
-Mục tiêu: tạo bộ khung dùng được NGAY để người viết bắt đầu chương đầu tiên nhanh nhất.
-LUÔN trả về JSON hợp lệ. Không giải thích, không markdown — CHỈ JSON.
-Sáng tạo thêm chi tiết nếu cuộc trò chuyện chưa đề cập, nhưng ưu tiên súc tích và nhất quán.`;
+const FRAMEWORK_SYSTEM = buildJsonObjectSystem(
+  'Vietnamese webnovel architect',
+  'Convert the brainstorm into a complete story framework the writer can use immediately',
+  [
+    'Stay concise but complete.',
+    'Invent missing details only when needed for consistency.',
+    'Prioritize internal coherence over novelty.',
+  ],
+);
 
 // ─── Discussion Response ────────────────────────────────────
 
@@ -120,6 +176,7 @@ export function buildPlotPreviewPrompt(
   const answersText = Object.entries(answers).length > 0
     ? Object.entries(answers).map(([k, v]) => `- ${k}: ${v}`).join('\n')
     : '(Chưa có — AI tự quyết định từ ý tưởng gốc)';
+  const qualityRules = buildPlotPreviewQualityRules(originalIdea, answers);
 
   return {
     system: PLOT_REVIEW_SYSTEM,
@@ -132,6 +189,8 @@ ${answersText}
 
 CHI TIẾT BỔ SUNG:
 ${historyText}
+
+${qualityRules}
 
 Trả về JSON đúng format:
 {
@@ -153,6 +212,8 @@ export function buildPlotPreviewRevisionPrompt(
   currentPreview: CreationPlotPreview,
   userFeedback: string,
 ): { system: string; user: string } {
+  const qualityRules = buildPlotPreviewQualityRules(originalIdea, answers);
+
   return {
     system: PLOT_REVIEW_SYSTEM,
     user: `Người viết đang review lại cốt truyện trước khi dựng framework.
@@ -166,7 +227,9 @@ ${JSON.stringify(currentPreview, null, 2)}
 GÓP Ý MỚI CỦA NGƯỜI VIẾT:
 ${userFeedback}
 
-Hãy cập nhật lại JSON theo đúng format cũ. Chỉ thay những phần cần thay, giữ mạch truyện nhất quán.`,
+${qualityRules}
+
+Hãy cập nhật lại JSON theo đúng format cũ. Chỉ thay những phần cần thay, nhưng nếu field nào còn ngắn hoặc mơ hồ thì phải chủ động viết lại cho đầy đặn hơn.`,
   };
 }
 
@@ -208,6 +271,7 @@ ${JSON.stringify(plotPreview, null, 2)}`
     outlineHint ? `\nCẤU TRÚC GỢI Ý:\n${outlineHint}` : '',
     conflictPatterns ? `\nXUNG ĐỘT ĐẶC TRƯNG:\n${conflictPatterns}` : '',
   ].join('');
+  const characterGuardrails = buildCreationCharacterGuardrails();
 
   return {
     system: FRAMEWORK_SYSTEM,
@@ -220,6 +284,8 @@ ${answersText}
 
 CHI TIẾT BỔ SUNG TỪ NGƯỜI VIẾT:
 ${historyText}${plotReviewText}${templateBlock}${extraTemplateContext}
+
+${characterGuardrails}
 
 Trả về JSON đúng format sau. Sáng tạo thêm nếu thiếu thông tin:
 

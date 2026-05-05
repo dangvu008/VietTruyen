@@ -9,7 +9,9 @@ export type NarrativeNodeType =
   | 'beat'
   | 'motif'
   | 'source_span'
-  | 'retcon_event';
+  | 'retcon_event'
+  | 'state_fact'
+  | 'state_mutation';
 
 export type NarrativeEdgeType =
   | 'co_presence'
@@ -24,7 +26,10 @@ export type NarrativeEdgeType =
   | 'source_derives_to'
   | 'retcon_targets'
   | 'continuity_risk'
-  | 'semantic_neighbor';
+  | 'semantic_neighbor'
+  | 'state_evidence'
+  | 'state_updates'
+  | 'state_conflicts';
 
 export interface NarrativeNode {
   id: string;

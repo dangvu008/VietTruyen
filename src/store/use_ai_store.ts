@@ -13,8 +13,22 @@ import { createId } from '../core/id';
 import { DEFAULT_AI_MODELS } from '../data/ai_models';
 import type { AiTaskType, TaskModelOverrideMap } from '../lib/ai/model_router';
 import { normalizeAiModels } from '../lib/ai/model_aliases';
+import { tryEnsureLocalNineRouterStarted } from '../lib/ai/local_proxy_runtime';
+import {
+  fetchNineRouterAvailability,
+  fetchNineRouterModels,
+  getDefaultNineRouterBaseUrl,
+  mergeNineRouterModels,
+  NINE_ROUTER_PROVIDER_ID,
+  normalizeNineRouterBaseUrl,
+} from '../lib/ai/nine_router_catalog';
+import {
+  checkAllProvidersHealth,
+  clearHealthCache,
+  mapProviderResultsToModelHealth,
+} from '../lib/ai/model_health_checker';
 import { supabase } from '../lib/supabase/supabase_client';
-import type { AiModel, AiProvider, WorkflowEngineType } from '../types/story';
+import type { AiModel, AiModelHealth, AiProvider, WorkflowEngineType } from '../types/story';
 
 export interface CustomProvider {
   id: string;
@@ -29,6 +43,13 @@ export interface SubscriptionState {
   tokensUsed: number;
   tokensLimit: number;
   currentMonth: string;
+}
+
+export interface NineRouterSyncState {
+  baseUrl: string;
+  isSyncing: boolean;
+  lastSyncedAt?: string;
+  lastSyncError?: string;
 }
 
 const DEFAULT_ACTIVE_EXPERTS = [
@@ -67,11 +88,58 @@ function mergeDefaultModels(models: AiModel[]): AiModel[] {
   return [...enrichedModels, ...missingDefaults];
 }
 
+function ensureNineRouterProvider(providers: CustomProvider[], baseUrl: string): CustomProvider[] {
+  const normalizedBaseUrl = normalizeNineRouterBaseUrl(baseUrl);
+  const nextProvider: CustomProvider = {
+    id: NINE_ROUTER_PROVIDER_ID,
+    name: '9router',
+    baseUrl: normalizedBaseUrl,
+    hint: 'Local 9router OpenAI-compatible proxy',
+  };
+  const existingIndex = providers.findIndex((provider) => provider.id === NINE_ROUTER_PROVIDER_ID);
+  if (existingIndex === -1) return [...providers, nextProvider];
+
+  return providers.map((provider, index) => (
+    index === existingIndex ? { ...provider, ...nextProvider } : provider
+  ));
+}
+
+function removeMissingModelOverrides(
+  overrides: TaskModelOverrideMap,
+  modelIds: Set<string>
+): TaskModelOverrideMap {
+  return Object.fromEntries(
+    Object.entries(overrides).filter(([, modelId]) => modelIds.has(modelId))
+  ) as TaskModelOverrideMap;
+}
+
+function resolveSafeManualModelId(models: AiModel[], currentManualId: string): string {
+  return models.find((model) => model.id === currentManualId)?.id
+    ?? models[0]?.id
+    ?? '';
+}
+
+function resolveProviderModelId(models: AiModel[], provider: string): string | undefined {
+  return models.find((model) => model.provider === provider)?.id;
+}
+
+function pruneExpiredModelHealth(modelHealth: Record<string, AiModelHealth>): Record<string, AiModelHealth> {
+  const now = Date.now();
+  return Object.fromEntries(
+    Object.entries(modelHealth).filter(([, health]) => (
+      health.status !== 'cooldown'
+      || !health.unavailableUntil
+      || new Date(health.unavailableUntil).getTime() > now
+    ))
+  );
+}
+
 interface AiState {
   models: AiModel[];
   customProviders: CustomProvider[];
   activeModelId: string;
   manualModelId: string;
+  preferredProvider: string;
   taskModelOverrides: TaskModelOverrideMap;
   workflowEngine: WorkflowEngineType;
   subscription: SubscriptionState;
@@ -81,9 +149,14 @@ interface AiState {
   autoSummarize: boolean;
   persona: string;
   activeExperts: string[];
+  nineRouter: NineRouterSyncState;
+  modelHealth: Record<string, AiModelHealth>;
+  lastHealthCheckAt?: string;
+  isCheckingHealth: boolean;
 
   // Model management
   setActiveModel: (id: string) => void;
+  setPreferredProvider: (provider: string) => void;
   setSmartRoutingEnabled: (enabled: boolean) => void;
   setTaskModelOverride: (taskType: AiTaskType, modelId: string) => void;
   setWorkflowEngine: (engine: WorkflowEngineType) => void;
@@ -91,6 +164,15 @@ interface AiState {
   updateModel: (id: string, patch: Partial<AiModel>) => void;
   removeModel: (id: string) => void;
   getActiveModel: () => AiModel | undefined;
+  syncNineRouterModels: () => Promise<void>;
+  refreshNineRouterAvailability: () => Promise<void>;
+  setNineRouterBaseUrl: (baseUrl: string) => void;
+  checkAllProvidersHealth: () => Promise<void>;
+  markModelUnavailable: (
+    modelId: string,
+    options?: { status?: AiModelHealth['status']; unavailableUntil?: string; lastError?: string }
+  ) => void;
+  clearModelHealth: (modelId?: string) => void;
 
   // Custom provider management
   addCustomProvider: (provider: CustomProvider) => void;
@@ -124,6 +206,7 @@ type PersistedAiState = Partial<Pick<
   | 'customProviders'
   | 'activeModelId'
   | 'manualModelId'
+  | 'preferredProvider'
   | 'taskModelOverrides'
   | 'workflowEngine'
   | 'temperature'
@@ -132,6 +215,8 @@ type PersistedAiState = Partial<Pick<
   | 'autoSummarize'
   | 'persona'
   | 'activeExperts'
+  | 'nineRouter'
+  | 'modelHealth'
 >>;
 
 const DEFAULT_SUBSCRIPTION: SubscriptionState = {
@@ -148,7 +233,8 @@ export const useAiStore = create<AiState>()(
       models: [...DEFAULT_AI_MODELS],
       customProviders: [],
       activeModelId: 'auto',
-      manualModelId: DEFAULT_AI_MODELS[0]?.id ?? '',
+      manualModelId: resolveProviderModelId(DEFAULT_AI_MODELS, 'openrouter') ?? DEFAULT_AI_MODELS[0]?.id ?? '',
+      preferredProvider: 'openrouter',
       taskModelOverrides: {},
       workflowEngine: 'api',
       subscription: { ...DEFAULT_SUBSCRIPTION },
@@ -158,6 +244,13 @@ export const useAiStore = create<AiState>()(
       autoSummarize: true,
       persona: 'Trợ lý',
       activeExperts: [...DEFAULT_ACTIVE_EXPERTS],
+      nineRouter: {
+        baseUrl: getDefaultNineRouterBaseUrl(),
+        isSyncing: false,
+      },
+      modelHealth: {},
+      lastHealthCheckAt: undefined,
+      isCheckingHealth: false,
 
       // Legacy — kept for backward compat, no longer primary path
       apiKeys: {},
@@ -167,6 +260,15 @@ export const useAiStore = create<AiState>()(
           activeModelId: id,
           manualModelId: id === 'auto' ? state.manualModelId : id,
         })),
+      setPreferredProvider: (provider) =>
+        set((state) => {
+          const nextManualId = resolveProviderModelId(state.models, provider) ?? state.manualModelId;
+          return {
+            preferredProvider: provider,
+            manualModelId: nextManualId,
+            activeModelId: state.activeModelId === 'auto' ? 'auto' : nextManualId,
+          };
+        }),
       setSmartRoutingEnabled: (enabled) =>
         set((state) => {
           if (enabled) {
@@ -244,6 +346,9 @@ export const useAiStore = create<AiState>()(
             activeModelId: nextActive,
             manualModelId: nextManualId,
             taskModelOverrides: nextTaskOverrides,
+            modelHealth: Object.fromEntries(
+              Object.entries(state.modelHealth).filter(([modelId]) => modelId !== id)
+            ),
           };
         }),
 
@@ -264,29 +369,185 @@ export const useAiStore = create<AiState>()(
         return state.models.find((m) => m.id === resolvedId);
       },
 
-      fetchSubscription: async () => {
+      setNineRouterBaseUrl: (baseUrl) =>
+        set((state) => {
+          const normalizedBaseUrl = normalizeNineRouterBaseUrl(baseUrl);
+          return {
+            nineRouter: {
+              ...state.nineRouter,
+              baseUrl: normalizedBaseUrl,
+              lastSyncError: undefined,
+            },
+            customProviders: ensureNineRouterProvider(state.customProviders, normalizedBaseUrl),
+          };
+        }),
+
+      syncNineRouterModels: async () => {
+        const baseUrl = normalizeNineRouterBaseUrl(get().nineRouter.baseUrl);
+        set((state) => ({
+          nineRouter: { ...state.nineRouter, baseUrl, isSyncing: true, lastSyncError: undefined },
+          customProviders: ensureNineRouterProvider(state.customProviders, baseUrl),
+        }));
+
         try {
-          const { data: { user } } = await supabase.auth.getUser();
-          if (!user) return;
+          await tryEnsureLocalNineRouterStarted(baseUrl);
+          const [syncedModels, availability] = await Promise.all([
+            fetchNineRouterModels(baseUrl),
+            fetchNineRouterAvailability(baseUrl).catch(() => ({} as Record<string, AiModelHealth>)),
+          ]);
 
-          // Fetch subscription tier
-          const { data: sub } = await supabase
-            .from('subscriptions')
-            .select('tier, status')
-            .eq('user_id', user.id)
-            .single();
+          set((state) => {
+            const nextModels = mergeNineRouterModels(state.models, syncedModels);
+            const modelIds = new Set(nextModels.map((model) => model.id));
+            const nextManualId = resolveSafeManualModelId(nextModels, state.manualModelId);
+            const nextPreferredModelId = resolveProviderModelId(nextModels, state.preferredProvider);
+            const nextActiveModelId =
+              state.activeModelId === 'auto'
+                ? 'auto'
+                : modelIds.has(state.activeModelId)
+                  ? state.activeModelId
+                  : nextManualId || 'auto';
 
-          // Fetch current month token usage
-          const currentMonth = new Date().toISOString().substring(0, 7);
-          const { data: usage } = await supabase
-            .from('token_usage')
-            .select('tokens_used, tokens_limit')
-            .eq('user_id', user.id)
-            .eq('month', currentMonth)
-            .single();
+            return {
+              models: nextModels,
+              customProviders: ensureNineRouterProvider(state.customProviders, baseUrl),
+              manualModelId: nextPreferredModelId ?? nextManualId,
+              activeModelId: nextActiveModelId,
+              taskModelOverrides: removeMissingModelOverrides(state.taskModelOverrides, modelIds),
+              modelHealth: pruneExpiredModelHealth({ ...state.modelHealth, ...availability }),
+              nineRouter: {
+                ...state.nineRouter,
+                baseUrl,
+                isSyncing: false,
+                lastSyncedAt: new Date().toISOString(),
+                lastSyncError: undefined,
+              },
+            };
+          });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          set((state) => ({
+            nineRouter: {
+              ...state.nineRouter,
+              baseUrl,
+              isSyncing: false,
+              lastSyncError: message,
+            },
+          }));
+          throw error;
+        }
+      },
 
-          set({
-            subscription: {
+      refreshNineRouterAvailability: async () => {
+        const baseUrl = normalizeNineRouterBaseUrl(get().nineRouter.baseUrl);
+        await tryEnsureLocalNineRouterStarted(baseUrl);
+        const availability = await fetchNineRouterAvailability(baseUrl);
+        set((state) => ({
+          modelHealth: pruneExpiredModelHealth({ ...state.modelHealth, ...availability }),
+        }));
+      },
+
+      checkAllProvidersHealth: async () => {
+        const state = get();
+        if (state.isCheckingHealth) return;
+
+        set({ isCheckingHealth: true });
+        try {
+          const nineRouterBaseUrl = normalizeNineRouterBaseUrl(state.nineRouter.baseUrl);
+          const results = await checkAllProvidersHealth(
+            state.models,
+            state.apiKeys,
+            nineRouterBaseUrl,
+          );
+          const healthUpdates = mapProviderResultsToModelHealth(state.models, results);
+
+          // [Domain:AI] STEP — Merge: chỉ apply unavailable mới, clear cũ nếu provider đã available
+          set((current) => {
+            const next = { ...current.modelHealth };
+
+            // Clear health-check-originated cooldowns cho providers đã available
+            const availableProviders = new Set(
+              results.filter((r) => r.status === 'available').map((r) => r.provider),
+            );
+            for (const model of current.models) {
+              const existing = next[model.id];
+              if (
+                existing
+                && availableProviders.has(model.provider)
+                && existing.lastError?.startsWith('[Health Check]')
+              ) {
+                delete next[model.id];
+              }
+            }
+
+            // Apply new unavailable marks
+            Object.assign(next, healthUpdates);
+
+            return {
+              modelHealth: pruneExpiredModelHealth(next),
+              lastHealthCheckAt: new Date().toISOString(),
+              isCheckingHealth: false,
+            };
+          });
+
+          clearHealthCache();
+        } catch (error) {
+          console.warn('[AiStore] Health check failed:', error);
+          set({ isCheckingHealth: false });
+        }
+      },
+
+      markModelUnavailable: (modelId, options) =>
+        set((state) => {
+          const unavailableUntil = options?.unavailableUntil
+            ?? new Date(Date.now() + 2 * 60 * 1000).toISOString();
+          return {
+            modelHealth: {
+              ...state.modelHealth,
+              [modelId]: {
+                status: options?.status ?? 'cooldown',
+                unavailableUntil,
+                lastError: options?.lastError,
+                updatedAt: new Date().toISOString(),
+              },
+            },
+          };
+        }),
+
+      clearModelHealth: (modelId) =>
+        set((state) => {
+          if (!modelId) return { modelHealth: {} };
+          const next = { ...state.modelHealth };
+          delete next[modelId];
+          return { modelHealth: next };
+        }),
+
+	      fetchSubscription: async () => {
+	        try {
+	          const { data: { user } } = await supabase.auth.getUser();
+	          if (!user) return;
+
+	          // Fetch subscription tier
+	          const { data: subscriptions } = await supabase
+	            .from('subscriptions')
+	            .select('tier, status')
+	            .eq('user_id', user.id)
+	            .limit(1);
+
+	          // Fetch current month token usage
+	          const currentMonth = new Date().toISOString().substring(0, 7);
+	          const { data: usageRows } = await supabase
+	            .from('token_usage')
+	            .select('tokens_used, tokens_limit')
+	            .eq('user_id', user.id)
+	            .eq('month', currentMonth)
+	            .limit(1);
+
+	          const sub = subscriptions?.[0];
+	          const usage = usageRows?.[0];
+
+	          set({
+	            subscription: {
               tier: (sub?.tier as SubscriptionState['tier']) || 'free',
               status: (sub?.status as SubscriptionState['status']) || 'active',
               tokensUsed: usage?.tokens_used ?? 0,
@@ -329,7 +590,7 @@ export const useAiStore = create<AiState>()(
     }),
     {
       name: 'viettruyen-ai-settings',
-      version: 4,
+      version: 7,
       migrate: (persistedState) => {
         const typedState = (persistedState ?? {}) as PersistedAiState;
         const normalizedModels = typedState.models
@@ -339,8 +600,10 @@ export const useAiStore = create<AiState>()(
           typedState.activeModelId && typedState.activeModelId !== 'auto'
             ? typedState.activeModelId
             : typedState.manualModelId;
+        const preferredProvider = typedState.preferredProvider ?? 'openrouter';
         const fallbackManualId =
-          normalizedModels.find((model) => model.id === preservedManualId)?.id
+          resolveProviderModelId(normalizedModels, preferredProvider)
+          ?? normalizedModels.find((model) => model.id === preservedManualId)?.id
           ?? normalizedModels[0]?.id
           ?? '';
 
@@ -348,7 +611,15 @@ export const useAiStore = create<AiState>()(
           ...typedState,
           models: normalizedModels,
           manualModelId: fallbackManualId,
+          preferredProvider,
           taskModelOverrides: typedState.taskModelOverrides ?? {},
+          nineRouter: {
+            baseUrl: normalizeNineRouterBaseUrl(typedState.nineRouter?.baseUrl),
+            isSyncing: false,
+            lastSyncedAt: typedState.nineRouter?.lastSyncedAt,
+            lastSyncError: typedState.nineRouter?.lastSyncError,
+          },
+          modelHealth: pruneExpiredModelHealth(typedState.modelHealth ?? {}),
         };
       },
       storage: createJSONStorage(() => localStorage),
@@ -357,6 +628,7 @@ export const useAiStore = create<AiState>()(
         customProviders: state.customProviders,
         activeModelId: state.activeModelId,
         manualModelId: state.manualModelId,
+        preferredProvider: state.preferredProvider,
         taskModelOverrides: state.taskModelOverrides,
         workflowEngine: state.workflowEngine,
         temperature: state.temperature,
@@ -365,6 +637,11 @@ export const useAiStore = create<AiState>()(
         autoSummarize: state.autoSummarize,
         persona: state.persona,
         activeExperts: state.activeExperts,
+        nineRouter: {
+          ...state.nineRouter,
+          isSyncing: false,
+        },
+        modelHealth: pruneExpiredModelHealth(state.modelHealth),
         // Don't persist apiKeys or subscription to localStorage
         // subscription is fetched from server on each session
       }),

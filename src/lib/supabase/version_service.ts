@@ -13,6 +13,11 @@
 import { supabase } from './supabase_client';
 import type { ChapterVersion, VersionDiff, DiffLine } from '../../types/version_control';
 
+interface ProfileSummary {
+  full_name?: string | null;
+  avatar_url?: string | null;
+}
+
 // ── Save Version (auto-called when chapter is saved) ──
 
 export async function saveVersion(
@@ -31,7 +36,7 @@ export async function saveVersion(
     .eq('chapter_id', chapterId)
     .order('version_number', { ascending: false })
     .limit(1)
-    .single();
+    .maybeSingle();
 
   const nextVersion = (latest?.version_number ?? 0) + 1;
 
@@ -42,7 +47,7 @@ export async function saveVersion(
       .select('content')
       .eq('chapter_id', chapterId)
       .eq('version_number', latest.version_number)
-      .single();
+      .maybeSingle();
 
     if (lastFull?.content === content) {
       // Content unchanged — return existing version, don't create new one
@@ -51,8 +56,10 @@ export async function saveVersion(
         .select('*')
         .eq('chapter_id', chapterId)
         .eq('version_number', latest.version_number)
-        .single();
-      return mapVersionRow(existing!);
+        .maybeSingle();
+      if (existing) {
+        return mapVersionRow(existing);
+      }
     }
   }
 
@@ -84,15 +91,13 @@ export async function saveVersion(
 export async function listVersions(chapterId: string): Promise<ChapterVersion[]> {
   const { data, error } = await supabase
     .from('chapter_versions')
-    .select(`
-      *,
-      profiles:author_id ( full_name, avatar_url )
-    `)
+    .select('*')
     .eq('chapter_id', chapterId)
     .order('version_number', { ascending: false });
 
   if (error) throw error;
-  return (data || []).map(mapVersionRow);
+  const profilesById = await loadAuthorProfiles(data || []);
+  return (data || []).map((row) => mapVersionRow(row, profilesById));
 }
 
 // ── Get Single Version ──
@@ -100,15 +105,13 @@ export async function listVersions(chapterId: string): Promise<ChapterVersion[]>
 export async function getVersion(versionId: string): Promise<ChapterVersion | null> {
   const { data, error } = await supabase
     .from('chapter_versions')
-    .select(`
-      *,
-      profiles:author_id ( full_name, avatar_url )
-    `)
+    .select('*')
     .eq('id', versionId)
-    .single();
+    .maybeSingle();
 
-  if (error) return null;
-  return mapVersionRow(data);
+  if (error || !data) return null;
+  const profilesById = await loadAuthorProfiles(data ? [data] : []);
+  return mapVersionRow(data, profilesById);
 }
 
 // ── Restore Version (copy content back to chapter + save as new version) ──
@@ -236,8 +239,35 @@ function simpleFallbackLCS(a: string[], b: string[]): string[] {
   return result;
 }
 
-function mapVersionRow(row: Record<string, unknown>): ChapterVersion {
-  const profiles = row.profiles as Record<string, unknown> | undefined;
+async function loadAuthorProfiles(rows: Array<Record<string, unknown>>): Promise<Record<string, ProfileSummary>> {
+  const authorIds = Array.from(
+    new Set(rows.map((row) => row.author_id).filter((id): id is string => typeof id === 'string')),
+  );
+
+  if (authorIds.length === 0) return {};
+
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id, full_name, avatar_url')
+    .in('id', authorIds);
+
+  if (error) return {};
+
+  return (data || []).reduce<Record<string, ProfileSummary>>((profilesById, profile) => {
+    profilesById[profile.id] = {
+      full_name: profile.full_name,
+      avatar_url: profile.avatar_url,
+    };
+    return profilesById;
+  }, {});
+}
+
+function mapVersionRow(
+  row: Record<string, unknown>,
+  profilesById: Record<string, ProfileSummary> = {},
+): ChapterVersion {
+  const authorId = row.author_id as string;
+  const profile = profilesById[authorId];
   return {
     id: row.id as string,
     chapter_id: row.chapter_id as string,
@@ -247,9 +277,9 @@ function mapVersionRow(row: Record<string, unknown>): ChapterVersion {
     content: row.content as string,
     summary: (row.summary as string) || null,
     word_count: (row.word_count as number) || 0,
-    author_id: row.author_id as string,
-    author_name: (profiles?.full_name as string) || 'Ẩn danh',
-    author_avatar: (profiles?.avatar_url as string) || undefined,
+    author_id: authorId,
+    author_name: profile?.full_name || 'Ẩn danh',
+    author_avatar: profile?.avatar_url || undefined,
     change_note: (row.change_note as string) || null,
     created_at: row.created_at as string,
   };

@@ -1,6 +1,7 @@
 import { getProjectRules } from '../../db/narrative_db';
 import { useAiStore } from '../../store/use_ai_store';
 import type { Project } from '../../types/story';
+import { guardChapterContent } from '../chapter/chapter_content_guard';
 import type {
   BranchPlanningResult,
   ChapterLedger,
@@ -11,6 +12,9 @@ import type {
 import { buildSurpriseContext, buildWritingContext } from './context_builder';
 import { getModelForTask } from './model_router';
 import { buildBranchPlannerPrompts, buildChapterWriterPrompts } from './surprise_prompts';
+import { buildChapterCharacterGuardrails } from './character_cast_guardrails';
+import { extractWriterVisibleContent } from './writer_response_content';
+import { getOpenHooksForProject } from '../memory/pending_hooks_repository';
 import {
   detectExpectation,
   extractAnchors,
@@ -19,6 +23,20 @@ import {
 } from './surprise_engine';
 import { callAiModelTracked } from './tracked_ai_client';
 import { callAiStreaming } from './streaming_ai_client';
+
+const MAX_STREAM_MODEL_ATTEMPTS = 3;
+const MAX_STREAM_CONTINUATIONS = 2;
+const WEAK_TITLE_VALUES = new Set([
+  '',
+  '(trống)',
+  'trống',
+  'untitled',
+  'không tên',
+  'chưa đặt tên',
+  'chương không tên',
+  'tên chương',
+  'chapter title',
+]);
 
 function cleanJsonLike(text: string): string {
   return text.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
@@ -97,25 +115,62 @@ function buildDefaultLedger(): ChapterLedger {
   };
 }
 
+function normalizeTitleCandidate(value: unknown): string {
+  return String(value || '')
+    .replace(/^["'“”‘’]+|["'“”‘’]+$/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function isWeakChapterTitle(value: unknown): boolean {
+  const normalized = normalizeTitleCandidate(value);
+  if (!normalized) return true;
+  return WEAK_TITLE_VALUES.has(normalized.toLocaleLowerCase('vi-VN'));
+}
+
+export function resolveChapterWriteTitle(
+  project: Project,
+  targetChapterIndex: number,
+  branch: SurpriseBranch,
+): string {
+  const chapterNumber = targetChapterIndex + 1;
+  const existingChapter = project.chapters.find((chapter) => (
+    (chapter.sequenceNumber ?? 0) === chapterNumber
+  ));
+  const candidates = [
+    branch.suggestedTitle,
+    project.outline[targetChapterIndex]?.title,
+    existingChapter?.title,
+  ];
+
+  for (const candidate of candidates) {
+    if (!isWeakChapterTitle(candidate)) {
+      return normalizeTitleCandidate(candidate);
+    }
+  }
+
+  return `Chương ${chapterNumber}`;
+}
+
 /**
  * Fallback: khi không có sentinel markers, cố gắng extract nội dung từ raw text.
  * Loại bỏ phần JSON ledger nếu có ở đầu/cuối, giữ lại phần văn xuôi.
  */
 function extractContentFallback(responseText: string): { ledger: ChapterLedger; content: string } {
-  // [Domain:AI] STEP — Try to extract JSON block from start, treat rest as content
-  const trimmed = responseText.trim();
+  let contentText = extractWriterVisibleContent(responseText);
+  let ledger = buildDefaultLedger();
 
   // Case 1: Starts with JSON block {…} then prose
-  if (trimmed.startsWith('{')) {
+  if (contentText.startsWith('{')) {
     try {
-      const firstBrace = trimmed.indexOf('{');
-      const lastBrace = trimmed.indexOf('}');
+      const firstBrace = contentText.indexOf('{');
+      const lastBrace = contentText.indexOf('}');
       if (firstBrace !== -1 && lastBrace !== -1) {
-        const jsonPart = trimmed.slice(firstBrace, lastBrace + 1);
-        const rest = trimmed.slice(lastBrace + 1).trim();
+        const jsonPart = contentText.slice(firstBrace, lastBrace + 1);
+        const rest = contentText.slice(lastBrace + 1).trim();
         if (rest.length > 100) {
           const ledgerJson = JSON.parse(jsonPart) as Partial<ChapterLedger>;
-          const ledger = {
+          ledger = {
             summary: String(ledgerJson.summary || '').trim(),
             beatStatus: ledgerJson.beatStatus === 'delay' || ledgerJson.beatStatus === 'replace' ? ledgerJson.beatStatus : 'hit' as const,
             usedCharacterNames: normalizeList(ledgerJson.usedCharacterNames),
@@ -123,7 +178,7 @@ function extractContentFallback(responseText: string): { ledger: ChapterLedger; 
             foreshadowPlanted: normalizeList(ledgerJson.foreshadowPlanted),
             preservedAnchorIds: normalizeList(ledgerJson.preservedAnchorIds),
           };
-          return { ledger, content: rest };
+          contentText = rest;
         }
       }
     } catch {
@@ -131,9 +186,10 @@ function extractContentFallback(responseText: string): { ledger: ChapterLedger; 
     }
   }
 
-  // Case 2: No structure at all — use full text as content
-  if (trimmed.length > 100) {
-    return { ledger: buildDefaultLedger(), content: trimmed };
+  // Case 2: No structure at all — accept any non-empty prose after sanitation.
+  const guardedContent = guardChapterContent(contentText);
+  if (!guardedContent.rejected && guardedContent.content.trim()) {
+    return { ledger, content: guardedContent.content };
   }
 
   throw new Error('Writer output rỗng hoặc quá ngắn để sử dụng.');
@@ -148,54 +204,67 @@ export function parseWriterResponse(responseText: string): {
   const ledgerMarker = '@@LEDGER@@';
   const contentMarker = '@@CONTENT@@';
   
-  const ecotIndex = responseText.indexOf(ecotMarker);
-  const ledgerIndex = responseText.indexOf(ledgerMarker);
-  const contentIndex = responseText.indexOf(contentMarker);
+  let content = '';
+  let ledgerText = '';
+  let ecotAnalysis = '';
 
-  let ecotAnalysis: string | undefined = undefined;
-  if (ecotIndex !== -1 && ledgerIndex !== -1 && ledgerIndex > ecotIndex) {
-    ecotAnalysis = responseText.slice(ecotIndex + ecotMarker.length, ledgerIndex).trim();
-  }
+  const extractBlock = (marker: string): string => {
+    const idx = responseText.indexOf(marker);
+    if (idx === -1) return '';
+    const start = idx + marker.length;
+    const nextIdxs = [
+      responseText.indexOf(ecotMarker, start),
+      responseText.indexOf(ledgerMarker, start),
+      responseText.indexOf(contentMarker, start),
+    ].filter(i => i !== -1);
+    
+    const end = nextIdxs.length > 0 ? Math.min(...nextIdxs) : responseText.length;
+    return responseText.slice(start, end).trim();
+  };
 
-  // [Domain:AI] STEP 1 — Happy path: both sentinel markers present and in correct order
-  if (ledgerIndex !== -1 && contentIndex !== -1 && contentIndex > ledgerIndex) {
-    const ledgerText = responseText
-      .slice(ledgerIndex + ledgerMarker.length, contentIndex)
-      .trim();
-    const content = responseText.slice(contentIndex + contentMarker.length).trim();
+  ecotAnalysis = extractBlock(ecotMarker);
+  ledgerText = extractBlock(ledgerMarker);
+  content = extractBlock(contentMarker);
 
-    if (ledgerText && content) {
-      try {
-        const ledgerJson = JSON.parse(extractJsonObject(ledgerText)) as Partial<ChapterLedger>;
-        return {
-          ledger: {
-            summary: String(ledgerJson.summary || '').trim(),
-            beatStatus: ledgerJson.beatStatus === 'delay' || ledgerJson.beatStatus === 'replace' ? ledgerJson.beatStatus : 'hit',
-            usedCharacterNames: normalizeList(ledgerJson.usedCharacterNames),
-            introducedEntities: normalizeList(ledgerJson.introducedEntities),
-            foreshadowPlanted: normalizeList(ledgerJson.foreshadowPlanted),
-            preservedAnchorIds: normalizeList(ledgerJson.preservedAnchorIds),
-          },
-          content,
-          ecotAnalysis,
-        };
-      } catch (parseErr) {
-        console.warn('[parseWriterResponse] Ledger JSON parse failed, falling back:', parseErr);
-        // Ledger parse failed but content is valid — use content with default ledger
-        return { ledger: buildDefaultLedger(), content, ecotAnalysis };
-      }
+  let ledger = buildDefaultLedger();
+  
+  if (ledgerText) {
+    try {
+      const ledgerJson = JSON.parse(extractJsonObject(ledgerText)) as Partial<ChapterLedger>;
+      ledger = {
+        summary: String(ledgerJson.summary || '').trim(),
+        beatStatus: ledgerJson.beatStatus === 'delay' || ledgerJson.beatStatus === 'replace' ? ledgerJson.beatStatus : 'hit',
+        usedCharacterNames: normalizeList(ledgerJson.usedCharacterNames),
+        introducedEntities: normalizeList(ledgerJson.introducedEntities),
+        foreshadowPlanted: normalizeList(ledgerJson.foreshadowPlanted),
+        preservedAnchorIds: normalizeList(ledgerJson.preservedAnchorIds),
+      };
+    } catch (parseErr) {
+      console.warn('[parseWriterResponse] Ledger JSON parse failed:', parseErr);
     }
   }
 
-  // [Domain:AI] STEP 2 — Fallback: sentinels missing or wrong order
-  // Log for diagnostics without throwing
-  console.warn(
-    '[parseWriterResponse] Sentinel markers not found or wrong order. Attempting fallback extraction.',
-    `\nledgerIndex=${ledgerIndex}, contentIndex=${contentIndex}`,
-    `\nFirst 200 chars: ${responseText.slice(0, 200)}`,
-  );
+  if (!content) {
+    console.warn('[parseWriterResponse] @@CONTENT@@ missing or empty. Using fallback.');
+    try {
+      const fallbackResult = extractContentFallback(responseText);
+      content = fallbackResult.content;
+      if (!ledgerText || !ledger.summary) {
+        ledger = fallbackResult.ledger;
+      }
+    } catch {
+      throw new Error('Writer output vi phạm sentinel contract: metadata nội bộ hoặc phản hồi dang dở không được phép lưu.');
+    }
+  }
 
-  return extractContentFallback(responseText);
+  const guardedContent = guardChapterContent(content);
+  if (guardedContent.rejected || !guardedContent.content.trim()) {
+    throw new Error('Writer output vi phạm sentinel contract: metadata nội bộ hoặc phản hồi dang dở không được phép lưu.');
+  }
+
+  content = guardedContent.content;
+
+  return { ledger, content, ecotAnalysis: ecotAnalysis || undefined };
 }
 
 function mergeWriterContextText(primaryContext: string, ghostwriterContext: string): string {
@@ -207,24 +276,239 @@ function mergeWriterContextText(primaryContext: string, ghostwriterContext: stri
 
   return [
     trimmedPrimary,
-    '## GHOSTWRITER RUNTIME CONTEXT',
+    '## NGỮ CẢNH VIẾT BỔ SUNG',
     trimmedGhostwriter,
   ].join('\n\n');
 }
 
-async function resolveTaskModel(taskType: 'plan_chapter' | 'write_chapter') {
+async function resolveTaskModel(
+  taskType: 'plan_chapter' | 'write_chapter',
+  excludedModelIds: string[] = [],
+) {
   const aiState = useAiStore.getState();
   const model = getModelForTask(
     taskType,
     aiState.models,
     undefined,
     aiState.activeModelId,
-    aiState.taskModelOverrides
+    aiState.taskModelOverrides,
+    aiState.modelHealth,
+    excludedModelIds,
+    aiState.preferredProvider
   );
   if (!model) {
     throw new Error('Không tìm thấy model AI khả dụng.');
   }
   return { model };
+}
+
+function isAbortLikeError(error: unknown): boolean {
+  if (error instanceof DOMException && error.name === 'AbortError') return true;
+  if (error instanceof Error) return error.message.toLowerCase().includes('abort');
+  return false;
+}
+
+function isRecoverableModelError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const message = error.message.toLowerCase();
+  return [
+    'timed out',
+    'timeout',
+    'failed to fetch',
+    'fetch failed',
+    'networkerror',
+    'econnrefused',
+    'econnreset',
+    'etimedout',
+    'rate limit',
+    'rate_limit',
+    'too many requests',
+    'quota',
+    ' 429',
+    ': 429',
+    ' 500',
+    ': 500',
+    ' 502',
+    ': 502',
+    ' 503',
+    ': 503',
+    ' 504',
+    ': 504',
+    'model_not_found',
+    'model not found',
+    'invalid_api_key',
+    'invalid api key',
+    'authentication_error',
+    'local ai proxy không phản hồi',
+    'không kết nối được tới provider',
+  ].some((keyword) => message.includes(keyword));
+}
+
+function markModelUnavailable(modelId: string, error: unknown): void {
+  const store = useAiStore.getState();
+  store.markModelUnavailable?.(modelId, {
+    lastError: error instanceof Error ? error.message : String(error),
+  });
+}
+
+function findOverlapLength(left: string, right: string): number {
+  const max = Math.min(800, left.length, right.length);
+  for (let length = max; length >= 20; length -= 1) {
+    if (left.slice(-length) === right.slice(0, length)) {
+      return length;
+    }
+  }
+  return 0;
+}
+
+function joinContinuationText(left: string, right: string): string {
+  const overlap = findOverlapLength(left, right);
+  if (overlap > 0) return left + right.slice(overlap);
+  if (/[,.!?;:…]$/u.test(left) && /^\S/u.test(right)) {
+    return `${left} ${right}`;
+  }
+  return left + right;
+}
+
+function extractMarkedBlock(responseText: string, marker: string, followingMarkers: string[]): string {
+  const index = responseText.indexOf(marker);
+  if (index === -1) return '';
+
+  const start = index + marker.length;
+  const nextIndexes = followingMarkers
+    .map((candidate) => responseText.indexOf(candidate, start))
+    .filter((candidate) => candidate !== -1);
+  const end = nextIndexes.length > 0 ? Math.min(...nextIndexes) : responseText.length;
+  return responseText.slice(start, end).trim();
+}
+
+function mergeContinuationResponse(partialResponse: string, continuationResponse: string): string {
+  const continuation = continuationResponse.trimStart();
+  if (!continuation) return partialResponse;
+
+  if (partialResponse.includes('@@CONTENT@@') && continuation.includes('@@CONTENT@@')) {
+    const partialEcot = extractMarkedBlock(partialResponse, '@@ECOT_ANALYSIS@@', ['@@LEDGER@@', '@@CONTENT@@']);
+    const continuationEcot = extractMarkedBlock(continuation, '@@ECOT_ANALYSIS@@', ['@@LEDGER@@', '@@CONTENT@@']);
+    const partialLedger = extractMarkedBlock(partialResponse, '@@LEDGER@@', ['@@CONTENT@@']);
+    const continuationLedger = extractMarkedBlock(continuation, '@@LEDGER@@', ['@@CONTENT@@']);
+    const partialContent = extractWriterVisibleContent(partialResponse);
+    const continuationContent = extractWriterVisibleContent(continuation);
+
+    return [
+      '@@ECOT_ANALYSIS@@',
+      partialEcot || continuationEcot || 'Tự động nối tiếp phản hồi bị cắt.',
+      '@@LEDGER@@',
+      partialLedger || continuationLedger || JSON.stringify(buildDefaultLedger()),
+      '@@CONTENT@@',
+      joinContinuationText(partialContent, continuationContent),
+    ].join('\n');
+  }
+
+  return joinContinuationText(partialResponse, continuation);
+}
+
+function buildContinuationPrompt(originalUserPrompt: string, partialResponse: string): string {
+  return [
+    originalUserPrompt,
+    '',
+    '---',
+    'PHẢN HỒI TRƯỚC BỊ CẮT GIỮA CHỪNG. Hãy viết phần CÒN THIẾU để hoàn tất cùng output contract.',
+    'Không lặp lại phần đã có. Nếu đang dở câu, bắt đầu bằng đúng ký tự/cụm tiếp theo để nối mạch.',
+    'Nếu phần @@LEDGER@@ đã có, ưu tiên tiếp tục @@CONTENT@@. Nếu thiếu marker nào, bổ sung marker còn thiếu.',
+    '',
+    'PHẦN ĐÃ CÓ:',
+    partialResponse.slice(-12_000),
+  ].join('\n');
+}
+
+async function completeInterruptedWriterResponse(opts: {
+  partialResponse: string;
+  model: { provider: string; modelId: string; name: string; baseUrl?: string };
+  prompts: { system: string; user: string };
+  pipelineSessionId?: string;
+  signal?: AbortSignal;
+}): Promise<string> {
+  let responseText = opts.partialResponse;
+
+  for (let pass = 0; pass < MAX_STREAM_CONTINUATIONS; pass += 1) {
+    const continuation = await callAiModelTracked({
+      provider: opts.model.provider,
+      modelId: opts.model.modelId,
+      modelName: opts.model.name,
+      baseUrl: opts.model.baseUrl,
+      systemPrompt: [
+        opts.prompts.system,
+        'RECOVERY MODE: hoàn tất phản hồi writer bị cắt. Trả phần nối tiếp, không viết lại từ đầu.',
+      ].join('\n\n'),
+      userPrompt: buildContinuationPrompt(opts.prompts.user, responseText),
+      taskType: 'write_chapter',
+      skipCache: true,
+      pipelineSessionId: opts.pipelineSessionId,
+      pipelineStep: 'write_chapter',
+      signal: opts.signal,
+    });
+
+    if (!continuation.trim()) break;
+    responseText = mergeContinuationResponse(responseText, continuation);
+
+    try {
+      parseWriterResponse(responseText);
+      break;
+    } catch {
+      // One more continuation pass may supply a missing marker or unfinished sentence.
+    }
+  }
+
+  return responseText;
+}
+
+async function callStreamingWithModelFallback(opts: {
+  initialModel: { id: string; provider: string; modelId: string; name: string; baseUrl?: string };
+  prompts: { system: string; user: string };
+  taskType: 'write_chapter';
+  onChunk: (chunk: string, accumulated: string) => void;
+  signal?: AbortSignal;
+}): Promise<{
+  text: string;
+  completed: boolean;
+  model: { id: string; provider: string; modelId: string; name: string; baseUrl?: string };
+}> {
+  const excludedModelIds: string[] = [];
+  let model = opts.initialModel;
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt < MAX_STREAM_MODEL_ATTEMPTS; attempt += 1) {
+    try {
+      const result = await callAiStreaming({
+        provider: model.provider,
+        modelId: model.modelId,
+        modelName: model.name,
+        baseUrl: model.baseUrl,
+        systemPrompt: opts.prompts.system,
+        userPrompt: opts.prompts.user,
+        taskType: opts.taskType,
+        signal: opts.signal,
+        onChunk: opts.onChunk,
+      });
+
+      return { ...result, model };
+    } catch (error) {
+      lastError = error;
+      if (isAbortLikeError(error) || !isRecoverableModelError(error)) {
+        throw error;
+      }
+
+      excludedModelIds.push(model.id);
+      markModelUnavailable(model.id, error);
+      const next = await resolveTaskModel(opts.taskType, excludedModelIds).catch(() => null);
+      if (!next?.model) break;
+      model = next.model;
+    }
+  }
+
+  throw lastError instanceof Error
+    ? lastError
+    : new Error('Không thể stream nội dung từ model AI hiện tại.');
 }
 
 export async function planChapterBranches(opts: {
@@ -238,8 +522,9 @@ export async function planChapterBranches(opts: {
   pipelineSessionId?: string;
 }): Promise<BranchPlanningResult> {
   const { project, targetChapterIndex, tensionLevel, prompt, notes, sourceOverride, pipelineSessionId } = opts;
-  const anchors = extractAnchors(project, targetChapterIndex);
-  const expectation = detectExpectation(project, targetChapterIndex, anchors);
+  const activeHooks = await getOpenHooksForProject(project.id).catch(() => []);
+  const anchors = extractAnchors(project, targetChapterIndex, activeHooks);
+  const expectation = detectExpectation(project, targetChapterIndex, anchors, activeHooks);
   const { model } = await resolveTaskModel('plan_chapter');
   const prompts = buildBranchPlannerPrompts({
     project,
@@ -247,6 +532,7 @@ export async function planChapterBranches(opts: {
     tensionLevel,
     anchors,
     expectation,
+    currentBeat: project.outline[targetChapterIndex],
     prompt,
     notes,
     sourceOverride,
@@ -302,8 +588,9 @@ export async function writeChapterFromBranch(opts: {
   signal?: AbortSignal;
 }): Promise<ChapterWriteResult> {
   const { project, targetChapterIndex, tensionLevel, branch, prompt, notes, sourceOverride, styleInstruction, pipelineSessionId, onChunk, signal } = opts;
-  const anchors = extractAnchors(project, targetChapterIndex);
-  const expectation = detectExpectation(project, targetChapterIndex, anchors);
+  const activeHooks = await getOpenHooksForProject(project.id).catch(() => []);
+  const anchors = extractAnchors(project, targetChapterIndex, activeHooks);
+  const expectation = detectExpectation(project, targetChapterIndex, anchors, activeHooks);
   const styleRules = await getProjectRules(project.id).catch(() => []);
   const surpriseContext = await buildSurpriseContext(
     project,
@@ -328,6 +615,7 @@ export async function writeChapterFromBranch(opts: {
   const { model } = await resolveTaskModel('write_chapter');
   const prompts = buildChapterWriterPrompts({
     contextText: mergedContextText,
+    characterGuardrails: buildChapterCharacterGuardrails(project, targetChapterIndex),
     branch,
     tensionLevel,
     prompt,
@@ -338,13 +626,9 @@ export async function writeChapterFromBranch(opts: {
   // [Domain:AI] STEP — Use streaming client when onChunk callback is provided
   let responseText: string;
   if (onChunk) {
-    const streamResult = await callAiStreaming({
-      provider: model.provider,
-      modelId: model.modelId,
-      modelName: model.name,
-      baseUrl: model.baseUrl,
-      systemPrompt: prompts.system,
-      userPrompt: prompts.user,
+    const streamResult = await callStreamingWithModelFallback({
+      initialModel: model,
+      prompts,
       taskType: 'write_chapter',
       signal,
       onChunk,
@@ -352,6 +636,15 @@ export async function writeChapterFromBranch(opts: {
     responseText = streamResult.text;
     if (!responseText.trim() && !streamResult.completed) {
       throw new Error('Người dùng đã dừng quá trình tạo nội dung.');
+    }
+    if (responseText.trim() && !streamResult.completed && !signal?.aborted) {
+      responseText = await completeInterruptedWriterResponse({
+        partialResponse: responseText,
+        model: streamResult.model,
+        prompts,
+        pipelineSessionId,
+        signal,
+      });
     }
   } else {
     responseText = await callAiModelTracked({
@@ -379,7 +672,7 @@ export async function writeChapterFromBranch(opts: {
   );
 
   return {
-    title: branch.suggestedTitle || project.outline[targetChapterIndex]?.title || `Chương ${targetChapterIndex + 1}`,
+    title: resolveChapterWriteTitle(project, targetChapterIndex, branch),
     content,
     ledger,
     divergence,

@@ -20,6 +20,11 @@ import type {
   EntityDefinition,
   EntitySnapshot,
   IndexJob,
+  NarrativePredicateDefinition,
+  NarrativeStateEvidence,
+  NarrativeStateFact,
+  NarrativeStateMutation,
+  PendingHook,
   ProjectIndexState,
   PropagationResult,
   PropagationTask,
@@ -82,10 +87,17 @@ class NarrativeDatabase extends Dexie {
   narrativeNodes!: Table<DexieCompatible<NarrativeNode>>;
   narrativeEdges!: Table<DexieCompatible<NarrativeEdge>>;
   narrativeCommunities!: Table<DexieCompatible<NarrativeCommunity>>;
+  narrativePredicateDefinitions!: Table<DexieCompatible<NarrativePredicateDefinition>>;
+  narrativeStateFacts!: Table<DexieCompatible<NarrativeStateFact>>;
+  narrativeStateMutations!: Table<DexieCompatible<NarrativeStateMutation>>;
+  narrativeStateEvidence!: Table<DexieCompatible<NarrativeStateEvidence>>;
 
   // HSC (Hierarchical Summary Cache) table
   summaryCache!: Table<DexieCompatible<CachedSummary>>;
   memoryEmbeddings!: Table<DexieCompatible<MemoryEmbeddingRecord>>;
+
+  // P1: Pending Hooks — plot continuity registry
+  pendingHooks!: Table<DexieCompatible<PendingHook>>;
 
   constructor() {
     super('narrative-memory-db');
@@ -224,6 +236,72 @@ class NarrativeDatabase extends Dexie {
       summaryCache: 'id, projectId, tier, [projectId+tier], rangeKey, updatedAt',
       memoryEmbeddings: 'id, projectId, [projectId+contentType], [projectId+chapterId], chapterIndex, updatedAt',
     });
+
+    this.version(8).stores({
+      chapters: 'id, projectId, [projectId+index], [projectId+sequenceNumber], status, updatedAt',
+      entitySnapshots: 'id, entityId, projectId, [projectId+entityId], [entityId+chapterIndex], chapterId',
+      chapterDeps: 'id, chapterId, entityId, projectId, [projectId+chapterId], [projectId+entityId]',
+      entityDefinitions: 'id, entityId, projectId, [projectId+entityId], entityType, canonicalName, updatedAt',
+      timelineFacts: 'id, entityId, projectId, [projectId+entityId], [projectId+entityId+attributeKey], [projectId+sourceChapterId], chapterFrom, chapterTo, sourceType',
+      chapterDependencies: 'id, chapterId, projectId, [projectId+chapterId], [projectId+entityId], [projectId+entityId+attributeKey], chapterIndex, dependencyStatus',
+      chapterMetadata: 'chapterId, projectId, [projectId+chapterIndex], contentHash, extractedAt',
+      canonicalEdits: 'id, projectId, entityId, [projectId+entityId], [projectId+entityId+attributeKey], effectiveFromChapter, propagationStatus, createdAt',
+      propagationTasks: 'id, projectId, chapterId, [projectId+chapterId], [projectId+entityId], [projectId+canonicalEditId], status, chapterIndex, updatedAt',
+      propagationLogs: 'id, projectId, entityId, status, createdAt',
+      indexJobs: 'id, projectId, [projectId+status], jobType, updatedAt',
+      projectIndexState: 'projectId, updatedAt, lastIndexedAt',
+      styleCorrections: 'id, projectId, chapterId, category, status, [projectId+status], [projectId+chapterId]',
+      styleRules: 'id, projectId, category, weight, [projectId+category]',
+      projectArcs: 'id, projectId, [projectId+index], [projectId+chapterStart], updatedAt',
+      surgerySpecs: 'id, projectId, status, updatedAt, createdAt',
+      impactScans: 'id, projectId, specId, status, updatedAt, createdAt',
+      rewriteTasks: 'id, projectId, scanId, specId, status, [projectId+status], [projectId+arcId], [projectId+chapterId], updatedAt',
+      sourceImportJobs: 'id, projectId, status, updatedAt, createdAt',
+      narrativeNodes: 'id, projectId, nodeType, refId, [projectId+nodeType], updatedAt',
+      narrativeEdges: 'id, projectId, edgeType, [projectId+fromNodeId], [projectId+toNodeId], updatedAt',
+      narrativeCommunities: 'id, projectId, [projectId+score], updatedAt',
+      summaryCache: 'id, projectId, tier, [projectId+tier], rangeKey, updatedAt',
+      memoryEmbeddings: 'id, projectId, [projectId+contentType], [projectId+chapterId], chapterIndex, updatedAt',
+      narrativePredicateDefinitions: 'id, predicate, projectId, [projectId+predicate], updatedAt',
+      narrativeStateFacts: 'id, projectId, [projectId+subjectId], [projectId+predicate], [projectId+status], validFromChapter, validToChapter, updatedAt',
+      narrativeStateMutations: 'id, projectId, chapterId, [projectId+chapterId], [projectId+subjectId], [projectId+predicate], reviewStatus, createdAt',
+      narrativeStateEvidence: 'id, projectId, chapterId, [projectId+chapterId], sourceHash, createdAt',
+    });
+
+    // [Domain:NarrativeMemory] Version 9 — P1: Pending Hooks registry
+    // Additive: no existing tables modified
+    this.version(9).stores({
+      chapters: 'id, projectId, [projectId+index], [projectId+sequenceNumber], status, updatedAt',
+      entitySnapshots: 'id, entityId, projectId, [projectId+entityId], [entityId+chapterIndex], chapterId',
+      chapterDeps: 'id, chapterId, entityId, projectId, [projectId+chapterId], [projectId+entityId]',
+      entityDefinitions: 'id, entityId, projectId, [projectId+entityId], entityType, canonicalName, updatedAt',
+      timelineFacts: 'id, entityId, projectId, [projectId+entityId], [projectId+entityId+attributeKey], [projectId+sourceChapterId], chapterFrom, chapterTo, sourceType',
+      chapterDependencies: 'id, chapterId, projectId, [projectId+chapterId], [projectId+entityId], [projectId+entityId+attributeKey], chapterIndex, dependencyStatus',
+      chapterMetadata: 'chapterId, projectId, [projectId+chapterIndex], contentHash, extractedAt',
+      canonicalEdits: 'id, projectId, entityId, [projectId+entityId], [projectId+entityId+attributeKey], effectiveFromChapter, propagationStatus, createdAt',
+      propagationTasks: 'id, projectId, chapterId, [projectId+chapterId], [projectId+entityId], [projectId+canonicalEditId], status, chapterIndex, updatedAt',
+      propagationLogs: 'id, projectId, entityId, status, createdAt',
+      indexJobs: 'id, projectId, [projectId+status], jobType, updatedAt',
+      projectIndexState: 'projectId, updatedAt, lastIndexedAt',
+      styleCorrections: 'id, projectId, chapterId, category, status, [projectId+status], [projectId+chapterId]',
+      styleRules: 'id, projectId, category, weight, [projectId+category]',
+      projectArcs: 'id, projectId, [projectId+index], [projectId+chapterStart], updatedAt',
+      surgerySpecs: 'id, projectId, status, updatedAt, createdAt',
+      impactScans: 'id, projectId, specId, status, updatedAt, createdAt',
+      rewriteTasks: 'id, projectId, scanId, specId, status, [projectId+status], [projectId+arcId], [projectId+chapterId], updatedAt',
+      sourceImportJobs: 'id, projectId, status, updatedAt, createdAt',
+      narrativeNodes: 'id, projectId, nodeType, refId, [projectId+nodeType], updatedAt',
+      narrativeEdges: 'id, projectId, edgeType, [projectId+fromNodeId], [projectId+toNodeId], updatedAt',
+      narrativeCommunities: 'id, projectId, [projectId+score], updatedAt',
+      summaryCache: 'id, projectId, tier, [projectId+tier], rangeKey, updatedAt',
+      memoryEmbeddings: 'id, projectId, [projectId+contentType], [projectId+chapterId], chapterIndex, updatedAt',
+      narrativePredicateDefinitions: 'id, predicate, projectId, [projectId+predicate], updatedAt',
+      narrativeStateFacts: 'id, projectId, [projectId+subjectId], [projectId+predicate], [projectId+status], validFromChapter, validToChapter, updatedAt',
+      narrativeStateMutations: 'id, projectId, chapterId, [projectId+chapterId], [projectId+subjectId], [projectId+predicate], reviewStatus, createdAt',
+      narrativeStateEvidence: 'id, projectId, chapterId, [projectId+chapterId], sourceHash, createdAt',
+      // P1: new table — lifecycle management for plot foreshadowing threads
+      pendingHooks: 'id, projectId, [projectId+status], plantedChapterId, plantedChapterIndex, status, updatedAt',
+    });
   }
 }
 
@@ -281,6 +359,8 @@ export async function deleteChapter(id: string): Promise<void> {
       narrativeDb.chapterDependencies,
       narrativeDb.timelineFacts,
       narrativeDb.propagationTasks,
+      narrativeDb.narrativeStateMutations,
+      narrativeDb.narrativeStateEvidence,
     ],
     async () => {
       await narrativeDb.chapters.delete(id);
@@ -291,6 +371,8 @@ export async function deleteChapter(id: string): Promise<void> {
         .filter((fact) => fact.sourceChapterId === id)
         .delete();
       await narrativeDb.propagationTasks.where('chapterId').equals(id).delete();
+      await narrativeDb.narrativeStateMutations.where('chapterId').equals(id).delete();
+      await narrativeDb.narrativeStateEvidence.where('chapterId').equals(id).delete();
     }
   );
 }
@@ -686,6 +768,184 @@ export async function getProjectNarrativeCommunities(projectId: string): Promise
     .then((communities) => communities.reverse());
 }
 
+export async function storeNarrativePredicateDefinitions(
+  definitions: NarrativePredicateDefinition[]
+): Promise<void> {
+  if (definitions.length === 0) return;
+  await narrativeDb.narrativePredicateDefinitions.bulkPut(definitions);
+}
+
+export async function getProjectNarrativePredicateDefinitions(
+  projectId: string
+): Promise<NarrativePredicateDefinition[]> {
+  const definitions = await narrativeDb.narrativePredicateDefinitions.toArray();
+  return definitions.filter((definition) => definition.projectId == null || definition.projectId === projectId);
+}
+
+export async function getNarrativePredicateDefinition(
+  projectId: string,
+  predicate: string
+): Promise<NarrativePredicateDefinition | undefined> {
+  const projectDefinition = await narrativeDb.narrativePredicateDefinitions
+    .where('[projectId+predicate]')
+    .equals([projectId, predicate])
+    .first();
+  if (projectDefinition) return projectDefinition;
+
+  const definitions = await narrativeDb.narrativePredicateDefinitions
+    .where('predicate')
+    .equals(predicate)
+    .toArray();
+  return definitions.find((definition) => definition.projectId == null);
+}
+
+export async function replaceProjectNarrativeStateFacts(
+  projectId: string,
+  facts: NarrativeStateFact[]
+): Promise<void> {
+  await narrativeDb.transaction('rw', [narrativeDb.narrativeStateFacts], async () => {
+    await narrativeDb.narrativeStateFacts.where('projectId').equals(projectId).delete();
+    if (facts.length > 0) {
+      await narrativeDb.narrativeStateFacts.bulkPut(facts);
+    }
+  });
+}
+
+export async function storeNarrativeStateFacts(facts: NarrativeStateFact[]): Promise<void> {
+  if (facts.length === 0) return;
+  await narrativeDb.narrativeStateFacts.bulkPut(facts);
+}
+
+export async function getProjectNarrativeStateFacts(projectId: string): Promise<NarrativeStateFact[]> {
+  return narrativeDb.narrativeStateFacts.where('projectId').equals(projectId).sortBy('updatedAt');
+}
+
+export async function getActiveNarrativeStateFactsAtChapter(
+  projectId: string,
+  chapterIndex: number
+): Promise<NarrativeStateFact[]> {
+  const facts = await getProjectNarrativeStateFacts(projectId);
+  const activeFacts = facts.filter((fact) => {
+    if (fact.status !== 'active') return false;
+    if (fact.validFromChapter > chapterIndex) return false;
+    return fact.validToChapter == null || fact.validToChapter >= chapterIndex;
+  });
+
+  const deduped = new Map<string, NarrativeStateFact>();
+  activeFacts.forEach((fact) => {
+    const key = `${fact.subjectId}::${fact.predicate}`;
+    const current = deduped.get(key);
+    if (
+      !current ||
+      fact.validFromChapter > current.validFromChapter ||
+      (fact.validFromChapter === current.validFromChapter && fact.updatedAt > current.updatedAt)
+    ) {
+      deduped.set(key, fact);
+    }
+  });
+
+  return Array.from(deduped.values());
+}
+
+export async function storeNarrativeStateMutations(
+  mutations: NarrativeStateMutation[]
+): Promise<void> {
+  if (mutations.length === 0) return;
+  await narrativeDb.narrativeStateMutations.bulkPut(mutations);
+}
+
+export async function getProjectNarrativeStateMutations(
+  projectId: string
+): Promise<NarrativeStateMutation[]> {
+  return narrativeDb.narrativeStateMutations.where('projectId').equals(projectId).sortBy('createdAt');
+}
+
+export async function getChapterNarrativeStateMutations(
+  projectId: string,
+  chapterId: string
+): Promise<NarrativeStateMutation[]> {
+  return narrativeDb.narrativeStateMutations
+    .where('[projectId+chapterId]')
+    .equals([projectId, chapterId])
+    .sortBy('createdAt');
+}
+
+export async function storeNarrativeStateEvidence(
+  evidenceRecords: NarrativeStateEvidence[]
+): Promise<void> {
+  if (evidenceRecords.length === 0) return;
+  await narrativeDb.narrativeStateEvidence.bulkPut(evidenceRecords);
+}
+
+export async function replaceNarrativeStateForChapter(
+  projectId: string,
+  chapterId: string,
+  chapterIndex: number,
+  facts: NarrativeStateFact[],
+  mutations: NarrativeStateMutation[],
+  evidenceRecords: NarrativeStateEvidence[],
+): Promise<void> {
+  await narrativeDb.transaction(
+    'rw',
+    [
+      narrativeDb.narrativeStateFacts,
+      narrativeDb.narrativeStateMutations,
+      narrativeDb.narrativeStateEvidence,
+    ],
+    async () => {
+      const existingMutations = await narrativeDb.narrativeStateMutations
+        .where('[projectId+chapterId]')
+        .equals([projectId, chapterId])
+        .toArray();
+      const existingMutationIds = new Set(existingMutations.map((mutation) => mutation.id));
+
+      await narrativeDb.narrativeStateMutations
+        .where('[projectId+chapterId]')
+        .equals([projectId, chapterId])
+        .delete();
+      await narrativeDb.narrativeStateEvidence
+        .where('[projectId+chapterId]')
+        .equals([projectId, chapterId])
+        .delete();
+
+      const existingFacts = await narrativeDb.narrativeStateFacts
+        .where('projectId')
+        .equals(projectId)
+        .toArray();
+
+      const factIdsToDelete = existingFacts
+        .filter((fact) => {
+          if (fact.validFromChapter !== chapterIndex) return false;
+          if (fact.mutationIds.some((mutationId) => existingMutationIds.has(mutationId))) return true;
+          return fact.evidenceIds.some((evidenceId) =>
+            evidenceRecords.some((evidence) => evidence.id === evidenceId)
+          );
+        })
+        .map((fact) => fact.id);
+
+      if (factIdsToDelete.length > 0) {
+        await narrativeDb.narrativeStateFacts.bulkDelete(factIdsToDelete);
+      }
+
+      if (evidenceRecords.length > 0) {
+        await narrativeDb.narrativeStateEvidence.bulkPut(evidenceRecords);
+      }
+      if (mutations.length > 0) {
+        await narrativeDb.narrativeStateMutations.bulkPut(mutations);
+      }
+      if (facts.length > 0) {
+        await narrativeDb.narrativeStateFacts.bulkPut(facts);
+      }
+    }
+  );
+}
+
+export async function getProjectNarrativeStateEvidence(
+  projectId: string
+): Promise<NarrativeStateEvidence[]> {
+  return narrativeDb.narrativeStateEvidence.where('projectId').equals(projectId).sortBy('createdAt');
+}
+
 export async function storeSnapshot(snapshot: EntitySnapshot): Promise<void> {
   await narrativeDb.entitySnapshots.put(snapshot);
 }
@@ -771,6 +1031,10 @@ export async function deleteProjectData(projectId: string): Promise<void> {
       narrativeDb.narrativeNodes,
       narrativeDb.narrativeEdges,
       narrativeDb.narrativeCommunities,
+      narrativeDb.narrativePredicateDefinitions,
+      narrativeDb.narrativeStateFacts,
+      narrativeDb.narrativeStateMutations,
+      narrativeDb.narrativeStateEvidence,
       narrativeDb.summaryCache,
       narrativeDb.memoryEmbeddings,
     ],
@@ -795,6 +1059,10 @@ export async function deleteProjectData(projectId: string): Promise<void> {
       await narrativeDb.narrativeNodes.where('projectId').equals(projectId).delete();
       await narrativeDb.narrativeEdges.where('projectId').equals(projectId).delete();
       await narrativeDb.narrativeCommunities.where('projectId').equals(projectId).delete();
+      await narrativeDb.narrativePredicateDefinitions.where('projectId').equals(projectId).delete();
+      await narrativeDb.narrativeStateFacts.where('projectId').equals(projectId).delete();
+      await narrativeDb.narrativeStateMutations.where('projectId').equals(projectId).delete();
+      await narrativeDb.narrativeStateEvidence.where('projectId').equals(projectId).delete();
       await narrativeDb.summaryCache.where('projectId').equals(projectId).delete();
       await narrativeDb.memoryEmbeddings.where('projectId').equals(projectId).delete();
     }
@@ -821,6 +1089,10 @@ export async function clearDerivedMemoryProjectData(projectId: string): Promise<
       narrativeDb.narrativeNodes,
       narrativeDb.narrativeEdges,
       narrativeDb.narrativeCommunities,
+      narrativeDb.narrativePredicateDefinitions,
+      narrativeDb.narrativeStateFacts,
+      narrativeDb.narrativeStateMutations,
+      narrativeDb.narrativeStateEvidence,
       narrativeDb.summaryCache,
       narrativeDb.memoryEmbeddings,
     ],
@@ -841,6 +1113,10 @@ export async function clearDerivedMemoryProjectData(projectId: string): Promise<
       await narrativeDb.narrativeNodes.where('projectId').equals(projectId).delete();
       await narrativeDb.narrativeEdges.where('projectId').equals(projectId).delete();
       await narrativeDb.narrativeCommunities.where('projectId').equals(projectId).delete();
+      await narrativeDb.narrativePredicateDefinitions.where('projectId').equals(projectId).delete();
+      await narrativeDb.narrativeStateFacts.where('projectId').equals(projectId).delete();
+      await narrativeDb.narrativeStateMutations.where('projectId').equals(projectId).delete();
+      await narrativeDb.narrativeStateEvidence.where('projectId').equals(projectId).delete();
       await narrativeDb.summaryCache.where('projectId').equals(projectId).delete();
       await narrativeDb.memoryEmbeddings.where('projectId').equals(projectId).delete();
     }
@@ -858,6 +1134,10 @@ export async function clearProjectChapterDerivedMemory(projectId: string): Promi
       narrativeDb.narrativeNodes,
       narrativeDb.narrativeEdges,
       narrativeDb.narrativeCommunities,
+      narrativeDb.narrativePredicateDefinitions,
+      narrativeDb.narrativeStateFacts,
+      narrativeDb.narrativeStateMutations,
+      narrativeDb.narrativeStateEvidence,
       narrativeDb.summaryCache,
       narrativeDb.memoryEmbeddings,
     ],
@@ -869,6 +1149,10 @@ export async function clearProjectChapterDerivedMemory(projectId: string): Promi
       await narrativeDb.narrativeNodes.where('projectId').equals(projectId).delete();
       await narrativeDb.narrativeEdges.where('projectId').equals(projectId).delete();
       await narrativeDb.narrativeCommunities.where('projectId').equals(projectId).delete();
+      await narrativeDb.narrativePredicateDefinitions.where('projectId').equals(projectId).delete();
+      await narrativeDb.narrativeStateFacts.where('projectId').equals(projectId).delete();
+      await narrativeDb.narrativeStateMutations.where('projectId').equals(projectId).delete();
+      await narrativeDb.narrativeStateEvidence.where('projectId').equals(projectId).delete();
       await narrativeDb.summaryCache.where('projectId').equals(projectId).delete();
       await narrativeDb.memoryEmbeddings.where('projectId').equals(projectId).delete();
     }

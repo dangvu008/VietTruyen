@@ -74,4 +74,66 @@ export const URBAN_BRAINWAVE_TEMPLATE: StoryTemplate = {
   ],
 
   constraintPacks: ['Pack M04', 'Pack M05', 'Pack U02'],
+
+  characterArchetypes: [
+    {
+      role: 'Chính — Giác tỉnh giả',
+      narrativeFunction: 'Phát hiện và đối đầu dị thường, dẫn dắt khám phá chân tướng',
+      personalityHint: 'Bình tĩnh trong chaos, logic mạnh, đôi khi liều lĩnh',
+      primaryArc: 'Quyển 1: Nhập Môn',
+      suggestedCount: [1, 1],
+    },
+    {
+      role: 'Đồng hành — Đồng đội tổ chức',
+      narrativeFunction: 'Hỗ trợ MC, bổ sung năng lực, tạo dynamics team',
+      personalityHint: 'Chuyên nghiệp, có chuyên môn bổ trợ (y tế/vũ khí/tin học)',
+      primaryArc: 'Quyển 2: Trưởng Thành',
+      suggestedCount: [2, 4],
+    },
+    {
+      role: 'Mentor — Thủ lĩnh tổ chức bí mật',
+      narrativeFunction: 'Cung cấp thông tin, hướng dẫn MC, giữ bí mật lớn',
+      personalityHint: 'Nghiêm túc, biết nhiều hơn nói ra, đáng tin cậy — hoặc không',
+      primaryArc: 'Quyển 1: Nhập Môn',
+      suggestedCount: [1, 1],
+    },
+    {
+      role: 'Phản diện — Thực thể dị thường',
+      narrativeFunction: 'Đại diện cho mối đe dọa siêu nhiên, leo thang qua từng arc',
+      personalityHint: 'Có logic riêng (không đơn thuần xấu xa), tuân theo quy tắc',
+      suggestedCount: [3, 5],
+    },
+    {
+      role: 'Nền sống động — Tuyến tin tức/người thường',
+      narrativeFunction: 'Phản ánh tác động dị thường lên xã hội, tạo stakes thực tế',
+      personalityHint: 'Phóng viên, cảnh sát, bác sĩ — đại diện thế giới bình thường',
+      suggestedCount: [2, 5],
+    },
+    {
+      role: 'Hài hước — Dân thường bị kéo vào',
+      narrativeFunction: 'Comic relief, đối lập hài hước giữa nhật thường và dị thường',
+      personalityHint: 'Bình thường nhưng sống sót kỳ lạ, lạc quan, hay than phiền',
+      suggestedCount: [1, 2],
+    },
+    {
+      role: 'Kẻ phản bội — Nội gián tổ chức',
+      narrativeFunction: 'Twist lớn, phá vỡ an toàn cảm, buộc MC tự lập hơn',
+      personalityHint: 'Đáng tin cậy ban đầu, có động cơ riêng bị lợi dụng',
+      primaryArc: 'Quyển 3: Thâm Nhập',
+      suggestedCount: [1, 1],
+    },
+    {
+      role: 'Bí ẩn — Kẻ biết chân tướng',
+      narrativeFunction: 'Rải manh mối, xuất hiện ở những thời điểm then chốt, reveal muộn',
+      personalityHint: 'Kỳ lạ, nói năng ẩn ý, không thuộc phe nào rõ ràng',
+      primaryArc: 'Quyển 4: Đối Kháng',
+      suggestedCount: [1, 1],
+    },
+  ],
+
+  characterScaleHint: {
+    per100Chapters: 5,
+    minTotal: 10,
+    maxTotal: 30,
+  },
 };

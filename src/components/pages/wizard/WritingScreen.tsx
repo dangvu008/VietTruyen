@@ -94,7 +94,10 @@ export default function WritingScreen() {
         aiState.models,
         undefined,
         aiState.activeModelId,
-        aiState.taskModelOverrides
+        aiState.taskModelOverrides,
+        aiState.modelHealth,
+        [],
+        aiState.preferredProvider
       );
       if (!model) throw new Error('Chưa cấu hình AI model.');
       const result = await callAiModelTracked({

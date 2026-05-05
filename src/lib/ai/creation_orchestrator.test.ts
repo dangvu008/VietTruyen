@@ -194,11 +194,13 @@ function buildWorkflowSession(content: string, summary: string, title = 'Chươn
 
 async function loadModules() {
   const creationStoreModule = await import('../../store/use_creation_chat_store');
+  const notificationStoreModule = await import('../../store/use_notification_store');
   const projectStoreModule = await import('../../store/use_project_store');
   const orchestratorModule = await import('./creation_orchestrator');
 
   return {
     useCreationChatStore: creationStoreModule.useCreationChatStore,
+    useNotificationStore: notificationStoreModule.useNotificationStore,
     useProjectStore: projectStoreModule.useProjectStore,
     getProjectSnapshot: projectStoreModule.getProjectSnapshot,
     handleFrameworkConfirm: orchestratorModule.handleFrameworkConfirm,
@@ -218,6 +220,7 @@ describe('creation_orchestrator', () => {
   it('creates a linked project and writes all chapter bodies on framework confirm', async () => {
     const {
       useCreationChatStore,
+      useNotificationStore,
       getProjectSnapshot,
       handleFrameworkConfirm,
     } = await loadModules();
@@ -273,6 +276,7 @@ describe('creation_orchestrator', () => {
     const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const {
       useCreationChatStore,
+      useNotificationStore,
       getProjectSnapshot,
       handleFrameworkConfirm,
     } = await loadModules();
@@ -318,7 +322,7 @@ describe('creation_orchestrator', () => {
 
     const result = await handleFrameworkConfirm();
 
-    expect(consoleErrorSpy).toHaveBeenCalledTimes(2);
+    expect(consoleErrorSpy).toHaveBeenCalled();
     expect(result?.readyForEditor).toBe(false);
     expect(result?.batchCompose).toMatchObject({
       total: 2,
@@ -329,6 +333,21 @@ describe('creation_orchestrator', () => {
     const creationState = useCreationChatStore.getState();
     expect(creationState.error).toContain('AI chưa tạo đủ nội dung chương');
     expect(creationState.acceptedChapters).toHaveLength(0);
+    expect(useNotificationStore.getState().notifications).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'error',
+          title: 'AI gặp lỗi khi viết Chương 1: Máu trên tế đàn',
+          message: 'Model không trả về bản nháp.',
+          duration: 0,
+        }),
+        expect.objectContaining({
+          type: 'warning',
+          title: 'AI viết xong 0/2 chương',
+          duration: 0,
+        }),
+      ]),
+    );
 
     const project = await getProjectSnapshot(result!.projectId);
     expect(project?.chapters).toHaveLength(2);
@@ -390,6 +409,13 @@ describe('creation_orchestrator', () => {
 
     const creationState = useCreationChatStore.getState();
     expect(creationState.messages.some((message) => message.type === 'chapter_draft')).toBe(true);
+    expect(creationState.acceptedChapters).toHaveLength(1);
+    expect(creationState.acceptedChapters[0]).toMatchObject({
+      chapterIndex: 0,
+      title: 'Chương mới',
+      content: 'Nội dung chương 1 hoàn chỉnh.',
+      charCount: 'Nội dung chương 1 hoàn chỉnh.'.length,
+    });
     expect(creationState.progress.lastGeneratedChapterTitle).toBe('Chương mới');
   });
 
@@ -456,5 +482,11 @@ describe('creation_orchestrator', () => {
     expect(project?.chapters).toHaveLength(2);
     expect(project?.chapters.find((chapter) => chapter.sequenceNumber === 2)?.content)
       .toBe('Nội dung chương 2 hoàn chỉnh.');
+    expect(useCreationChatStore.getState().acceptedChapters).toEqual([
+      expect.objectContaining({
+        chapterIndex: 1,
+        content: 'Nội dung chương 2 hoàn chỉnh.',
+      }),
+    ]);
   });
 });

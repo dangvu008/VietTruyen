@@ -5,6 +5,7 @@ import type { Chapter } from '../types/story';
 const mocks = vi.hoisted(() => {
   const provider = {
     getProjectChapters: vi.fn(async (): Promise<Chapter[]> => []),
+    getChapter: vi.fn(async (_projectId: string, _chapterId: string): Promise<Chapter | null> => null),
     saveProject: vi.fn(async () => undefined),
     replaceProjectChapters: vi.fn(async () => undefined),
   };
@@ -52,7 +53,7 @@ function createStorageMock(): Storage {
   };
 }
 
-function buildChapter(): Chapter {
+function buildChapter(overrides: Partial<Chapter> = {}): Chapter {
   return {
     id: 'chapter-uploaded-1',
     title: 'Chương 1',
@@ -62,6 +63,7 @@ function buildChapter(): Chapter {
     status: 'draft',
     createdAt: '2026-04-24T00:00:00.000Z',
     updatedAt: '2026-04-24T00:00:00.000Z',
+    ...overrides,
   };
 }
 
@@ -70,6 +72,7 @@ describe('use_project_store', () => {
     vi.resetModules();
     vi.clearAllMocks();
     mocks.provider.getProjectChapters.mockResolvedValue([]);
+    mocks.provider.getChapter.mockResolvedValue(null);
     vi.stubGlobal('localStorage', createStorageMock());
   });
 
@@ -94,6 +97,32 @@ describe('use_project_store', () => {
       expect.objectContaining({
         id: chapter.id,
         content: chapter.content,
+      }),
+    ]);
+  });
+
+  it('sanitizes leaked AI ledger metadata before persisting chapters', async () => {
+    const { useProjectStore } = await import('./use_project_store');
+    const projectId = useProjectStore.getState().createProject('Chuong bi ban payload');
+    const contaminatedChapter = buildChapter({
+      content: `@@LEDGER@@
+{"summary":"Lục Phong chạm vào cấm chế.","beatStatus":"hit","usedCharacterNames":["Lục Phong"],"introducedEntities":[],"foreshadowPlanted":[],"preservedAnchorIds":[]}
+@@CONTENT@@
+Lục Phong chạm tay lên vách đá lạnh buốt, nghe từng mạch linh lực rít qua kẽ tay.`,
+    });
+
+    await useProjectStore
+      .getState()
+      .replaceProjectChapters(projectId, [contaminatedChapter], { storageMode: 'provider' });
+
+    expect(mocks.replaceStoredProjectChapters).toHaveBeenCalledWith(projectId, [
+      expect.objectContaining({
+        content: 'Lục Phong chạm tay lên vách đá lạnh buốt, nghe từng mạch linh lực rít qua kẽ tay.',
+      }),
+    ]);
+    expect(mocks.provider.replaceProjectChapters).toHaveBeenCalledWith(projectId, [
+      expect.objectContaining({
+        content: 'Lục Phong chạm tay lên vách đá lạnh buốt, nghe từng mạch linh lực rít qua kẽ tay.',
       }),
     ]);
   });
@@ -133,6 +162,7 @@ describe('use_project_store', () => {
         index: 0,
       },
     ]);
+    mocks.provider.getProjectChapters.mockClear();
 
     await useProjectStore.getState().hydrateProjectChapters(projectId);
 
@@ -146,5 +176,366 @@ describe('use_project_store', () => {
       content: chapter.content,
       summary: chapter.summary,
     });
+  });
+
+  it('hydrates detailed content when provider returns summary-only chapters', async () => {
+    const { useProjectStore } = await import('./use_project_store');
+    const projectId = useProjectStore.getState().createProject('Truyện có summary');
+    const chapter = buildChapter();
+    const summaryOnlyChapter = buildChapter({
+      content: '',
+      summary: 'Summary từ provider vẫn còn nhưng thiếu bản thảo chi tiết.',
+    });
+
+    useProjectStore.setState((state) => ({
+      projects: state.projects.map((project) =>
+        project.id === projectId
+          ? {
+              ...project,
+              chapters: [summaryOnlyChapter],
+              storageMode: 'provider',
+            }
+          : project
+      ),
+    }));
+
+    mocks.provider.getProjectChapters.mockResolvedValue([summaryOnlyChapter]);
+    mocks.getProjectChapters.mockResolvedValue([
+      {
+        ...chapter,
+        projectId,
+        index: 0,
+      },
+    ]);
+
+    await useProjectStore.getState().hydrateProjectChapters(projectId);
+
+    const hydrated = useProjectStore
+      .getState()
+      .projects.find((project) => project.id === projectId)
+      ?.chapters[0];
+
+    expect(hydrated).toMatchObject({
+      id: chapter.id,
+      content: chapter.content,
+    });
+  });
+
+  it('preserves generated chapter content when replacing with metadata-only chapter shells', async () => {
+    const { useProjectStore } = await import('./use_project_store');
+    const projectId = useProjectStore.getState().createProject('Truyện AI');
+    const chapter = buildChapter();
+
+    await useProjectStore
+      .getState()
+      .replaceProjectChapters(projectId, [chapter], { storageMode: 'indexeddb' });
+
+    const shellChapter = buildChapter({
+      id: 'chapter-shell-1',
+      title: 'Tiêu đề cập nhật từ khung truyện',
+      content: '',
+      summary: undefined,
+      sequenceNumber: 1,
+    });
+
+    await useProjectStore
+      .getState()
+      .replaceProjectChapters(projectId, [shellChapter], { storageMode: 'indexeddb' });
+
+    const persistedCalls = mocks.replaceStoredProjectChapters.mock.calls as unknown as Array<
+      [string, StoredChapter[]]
+    >;
+    const persistedCall = persistedCalls[persistedCalls.length - 1];
+    expect(persistedCall[1][0]).toMatchObject({
+      id: shellChapter.id,
+      title: shellChapter.title,
+      content: chapter.content,
+      summary: chapter.summary,
+    });
+
+    const stored = useProjectStore
+      .getState()
+      .projects.find((project) => project.id === projectId)
+      ?.chapters[0];
+
+    expect(stored).toMatchObject({
+      id: shellChapter.id,
+      title: shellChapter.title,
+      content: chapter.content,
+      summary: chapter.summary,
+    });
+  });
+
+  it('recovers AI-generated chapter details from creation chat when storage only has empty shells', async () => {
+    const { useProjectStore } = await import('./use_project_store');
+    const projectId = useProjectStore.getState().createProject('Ký ức Thép');
+    const shellChapter = buildChapter({
+      id: 'chapter-shell-1',
+      title: 'Nghịch Áp Thâm Hải',
+      content: '',
+      summary: undefined,
+      sequenceNumber: 1,
+    });
+    const recoveredContent = 'AI đã viết đầy đủ nội dung chi tiết chương Nghịch Áp Thâm Hải.';
+
+    useProjectStore.setState((state) => ({
+      projects: state.projects.map((project) =>
+        project.id === projectId
+          ? {
+              ...project,
+              chapters: [shellChapter],
+              storageMode: 'indexeddb',
+            }
+          : project
+      ),
+    }));
+
+    localStorage.setItem(
+      'viettruyen-creation-chat',
+      JSON.stringify({
+        state: {
+          progress: { linkedProjectId: projectId },
+          acceptedChapters: [
+            {
+              id: 'accepted-1',
+              chapterIndex: 0,
+              title: shellChapter.title,
+              content: recoveredContent,
+              charCount: recoveredContent.length,
+              createdAt: '2026-05-03T10:00:00.000Z',
+              updatedAt: '2026-05-03T10:00:00.000Z',
+            },
+          ],
+          messages: [],
+        },
+      }),
+    );
+    mocks.getProjectChapters.mockResolvedValue([]);
+    mocks.provider.getProjectChapters.mockResolvedValue([]);
+
+    await useProjectStore.getState().hydrateProjectChapters(projectId);
+
+    const hydrated = useProjectStore
+      .getState()
+      .projects.find((project) => project.id === projectId)
+      ?.chapters[0];
+
+    expect(hydrated).toMatchObject({
+      id: shellChapter.id,
+      title: shellChapter.title,
+      content: recoveredContent,
+    });
+    expect(mocks.replaceStoredProjectChapters).toHaveBeenCalledWith(projectId, [
+      expect.objectContaining({
+        id: shellChapter.id,
+        content: recoveredContent,
+      }),
+    ]);
+  });
+
+  it('skips provider chapter fetch during hydration when IndexedDB already has payload', async () => {
+    const { useProjectStore } = await import('./use_project_store');
+    const projectId = useProjectStore.getState().createProject('Ban local day du');
+    const chapter = buildChapter();
+
+    useProjectStore.setState((state) => ({
+      projects: state.projects.map((project) =>
+        project.id === projectId
+          ? {
+              ...project,
+              chapters: [{ ...chapter, content: '', summary: undefined }],
+              storageMode: 'provider',
+            }
+          : project
+      ),
+    }));
+
+    mocks.getProjectChapters.mockResolvedValue([
+      {
+        ...chapter,
+        projectId,
+        index: 0,
+      },
+    ]);
+
+    await useProjectStore.getState().hydrateProjectChapters(projectId);
+
+    expect(
+      useProjectStore.getState().projects.find((project) => project.id === projectId)?.chapters[0]
+    ).toMatchObject({
+      id: chapter.id,
+      content: chapter.content,
+      summary: chapter.summary,
+    });
+  });
+
+  it('repairs missing uploaded chapter content from provider when IndexedDB cache is partial', async () => {
+    const { useProjectStore } = await import('./use_project_store');
+    const projectId = useProjectStore.getState().createProject('Ban upload bi thieu cache');
+    const firstChapter = buildChapter({
+      id: 'chapter-uploaded-1',
+      title: 'Chương 1',
+      content: 'Nội dung chương một đã lưu trong cache.',
+      sequenceNumber: 1,
+    });
+    const secondChapter = buildChapter({
+      id: 'chapter-uploaded-2',
+      title: 'Chương 2',
+      content: 'Nội dung chương hai chỉ còn trên provider.',
+      sequenceNumber: 2,
+    });
+
+    useProjectStore.setState((state) => ({
+      projects: state.projects.map((project) =>
+        project.id === projectId
+          ? {
+              ...project,
+              chapters: [
+                { ...firstChapter, content: '', summary: undefined },
+                { ...secondChapter, content: '', summary: undefined },
+              ],
+              storageMode: 'provider',
+            }
+          : project
+      ),
+    }));
+
+    mocks.getProjectChapters.mockResolvedValue([
+      {
+        ...firstChapter,
+        projectId,
+        index: 0,
+      },
+      {
+        ...secondChapter,
+        content: '',
+        summary: undefined,
+        projectId,
+        index: 1,
+      },
+    ]);
+    mocks.provider.getProjectChapters.mockResolvedValue([firstChapter, secondChapter]);
+
+    await useProjectStore.getState().hydrateProjectChapters(projectId);
+
+    const hydrated = useProjectStore
+      .getState()
+      .projects.find((project) => project.id === projectId)
+      ?.chapters;
+
+    expect(mocks.provider.getProjectChapters).toHaveBeenCalledWith(projectId);
+    expect(hydrated?.map((chapter) => chapter.content)).toEqual([
+      firstChapter.content,
+      secondChapter.content,
+    ]);
+  });
+
+  it('repairs missing chapter payloads via per-chapter provider reads when bulk hydration falls back empty', async () => {
+    const { useProjectStore } = await import('./use_project_store');
+    const projectId = useProjectStore.getState().createProject('Provider bulk read loi tam thoi');
+    const firstChapter = buildChapter({
+      id: 'chapter-uploaded-1',
+      title: 'Chương 1',
+      content: 'Nội dung chương một còn trong IndexedDB.',
+      sequenceNumber: 1,
+    });
+    const secondChapter = buildChapter({
+      id: 'chapter-uploaded-2',
+      title: 'Chương 2',
+      content: 'Nội dung chương hai chỉ còn lấy được bằng getChapter.',
+      sequenceNumber: 2,
+    });
+
+    useProjectStore.setState((state) => ({
+      projects: state.projects.map((project) =>
+        project.id === projectId
+          ? {
+              ...project,
+              chapters: [
+                { ...firstChapter, content: '', summary: undefined },
+                { ...secondChapter, content: '', summary: undefined },
+              ],
+              storageMode: 'provider',
+            }
+          : project
+      ),
+    }));
+
+    mocks.getProjectChapters.mockResolvedValue([
+      {
+        ...firstChapter,
+        projectId,
+        index: 0,
+      },
+      {
+        ...secondChapter,
+        content: '',
+        summary: undefined,
+        projectId,
+        index: 1,
+      },
+    ]);
+    mocks.provider.getProjectChapters.mockResolvedValue([]);
+    mocks.provider.getChapter.mockImplementation(async (_projectId: string, chapterId: string) => {
+      if (chapterId === secondChapter.id) {
+        return secondChapter;
+      }
+      return null;
+    });
+
+    await useProjectStore.getState().hydrateProjectChapters(projectId);
+
+    const hydrated = useProjectStore
+      .getState()
+      .projects.find((project) => project.id === projectId)
+      ?.chapters;
+
+    expect(mocks.provider.getChapter).toHaveBeenCalledWith(projectId, secondChapter.id);
+    expect(hydrated?.map((chapter) => chapter.content)).toEqual([
+      firstChapter.content,
+      secondChapter.content,
+    ]);
+  });
+
+  it('blocks legacy contaminated chapter payloads during hydration so readers never see them raw', async () => {
+    const { useProjectStore } = await import('./use_project_store');
+    const projectId = useProjectStore.getState().createProject('Legacy payload ban');
+    const contaminatedProviderChapter = buildChapter({
+      content: `@@LEDGER@@
+{"summary":"Lục Phong chạm vào cấm chế.","beatStatus":"hit","usedCharacterNames":["Lục Phong"],"introducedEntities":[],"foreshadowPlanted":[],"preservedAnchorIds":[]}`,
+    });
+
+    useProjectStore.setState((state) => ({
+      projects: state.projects.map((project) =>
+        project.id === projectId
+          ? {
+              ...project,
+              chapters: [{ ...contaminatedProviderChapter, content: '', summary: undefined }],
+              storageMode: 'provider',
+            }
+          : project
+      ),
+    }));
+
+    mocks.getProjectChapters.mockResolvedValue([
+      {
+        ...contaminatedProviderChapter,
+        content: '',
+        summary: undefined,
+        projectId,
+        index: 0,
+      },
+    ]);
+    mocks.provider.getProjectChapters.mockResolvedValue([contaminatedProviderChapter]);
+
+    await useProjectStore.getState().hydrateProjectChapters(projectId);
+
+    const hydrated = useProjectStore
+      .getState()
+      .projects.find((project) => project.id === projectId)
+      ?.chapters[0];
+
+    expect(hydrated?.content).toBe('');
+    expect(hydrated?.generationStatus).toBe('failed');
   });
 });

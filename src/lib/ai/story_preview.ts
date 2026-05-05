@@ -43,29 +43,28 @@ export function generatePreviewFromProject(project: Project, maxChars = 3500): s
 
 /**
  * Lấy `storyPreview` dựa trên project hiện tại.
- * Logic: nếu đã có preview cache thì gọi thẳng -> Không load full chapters từ Disk!
- * Chỉ khi cache trống, mới fetch full chapters, sinh ra preview, cache lại.
+ * Ưu tiên snapshot chương mới nhất để tránh cache storyPreview cũ làm AI phân tích lệch truyện.
+ * Cache chỉ là fallback khi snapshot hiện tại chưa có nội dung chương.
  */
 export async function getOrGenerateStoryPreview(projectId: string): Promise<string> {
   const store = useProjectStore.getState();
   const project = store.projects.find(p => p.id === projectId);
   if (!project) return '';
 
-  // Return cached result if exist to save I/O and processing operations
-  if (project.storyPreview && project.storyPreview.trim() !== '') {
-    return project.storyPreview;
-  }
-
-  // Reload the full snapshot because active `project.chapters` often has `content = ''` stripped
+  // Reload the full snapshot because active `project.chapters` often has `content = ''` stripped.
+  // If chapter content changed after a previous AI extraction, this regenerates from the true story.
   const fullProject = await getProjectSnapshot(projectId);
-  if (!fullProject) return '';
+  if (!fullProject) return project.storyPreview || '';
 
   const preview = generatePreviewFromProject(fullProject);
-  
-  // Update it back to store so it gets cached
+
+  // Update it back to store so the next screen has a fresh fallback.
   if (preview.trim() !== '') {
-    store.updateProject(projectId, { storyPreview: preview });
+    if (preview !== project.storyPreview) {
+      store.updateProject(projectId, { storyPreview: preview });
+    }
+    return preview;
   }
 
-  return preview;
+  return project.storyPreview || '';
 }

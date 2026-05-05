@@ -29,6 +29,8 @@ export function getLegacyHybridMemorySections(result: HybridMemoryResult): Legac
   return {
     hardCanon: [
       ...packBodies(result.canonPack),
+      ...packBodies(result.statePack),
+      ...packBodies(result.hookPack),
       ...packBodies(result.riskPack),
     ],
     graphContext: packLinesWithTitle(result.graphPack),

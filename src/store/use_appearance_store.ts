@@ -20,11 +20,16 @@ const EDITOR_FONT_SIZE_PIXELS: Record<EditorFontSize, string> = {
 interface StoredAppearancePreferences {
   theme: AppearanceTheme;
   editorFontSize: EditorFontSize;
+  readerFontSize: number;
 }
 
 interface AppearanceState extends StoredAppearancePreferences {
+  isReadingModeFullscreen: boolean;
   setTheme: (theme: AppearanceTheme) => void;
   setEditorFontSize: (size: EditorFontSize) => void;
+  setReaderFontSize: (size: number) => void;
+  setReadingModeFullscreen: (isFullscreen: boolean) => void;
+  toggleReadingModeFullscreen: () => void;
 }
 
 function isAppearanceTheme(value: string): value is AppearanceTheme {
@@ -39,7 +44,7 @@ function loadAppearancePreferences(): StoredAppearancePreferences {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) {
-      return { theme: 'dark', editorFontSize: 'medium' };
+      return { theme: 'dark', editorFontSize: 'medium', readerFontSize: 18 };
     }
 
     const parsed = JSON.parse(raw) as Partial<StoredAppearancePreferences>;
@@ -50,9 +55,11 @@ function loadAppearancePreferences(): StoredAppearancePreferences {
         parsed.editorFontSize && isEditorFontSize(parsed.editorFontSize)
           ? parsed.editorFontSize
           : 'medium',
+      readerFontSize:
+        typeof parsed.readerFontSize === 'number' ? parsed.readerFontSize : 18,
     };
   } catch {
-    return { theme: 'dark', editorFontSize: 'medium' };
+    return { theme: 'dark', editorFontSize: 'medium', readerFontSize: 18 };
   }
 }
 
@@ -84,14 +91,28 @@ const initialPreferences = loadAppearancePreferences();
 
 export const useAppearanceStore = create<AppearanceState>((set, get) => ({
   ...initialPreferences,
+  isReadingModeFullscreen: false,
 
   setTheme: (theme) => {
-    persistAppearancePreferences({ theme, editorFontSize: get().editorFontSize });
+    persistAppearancePreferences({ theme, editorFontSize: get().editorFontSize, readerFontSize: get().readerFontSize });
     set({ theme });
   },
 
   setEditorFontSize: (editorFontSize) => {
-    persistAppearancePreferences({ theme: get().theme, editorFontSize });
+    persistAppearancePreferences({ theme: get().theme, editorFontSize, readerFontSize: get().readerFontSize });
     set({ editorFontSize });
+  },
+
+  setReaderFontSize: (readerFontSize) => {
+    persistAppearancePreferences({ theme: get().theme, editorFontSize: get().editorFontSize, readerFontSize });
+    set({ readerFontSize });
+  },
+
+  setReadingModeFullscreen: (isFullscreen) => {
+    set({ isReadingModeFullscreen: isFullscreen });
+  },
+
+  toggleReadingModeFullscreen: () => {
+    set((state) => ({ isReadingModeFullscreen: !state.isReadingModeFullscreen }));
   },
 }));

@@ -165,6 +165,19 @@ Core fields:
 - rationale
 - confidence
 
+### 5. Narrative State Schema v1
+Add first-class continuity state records to `src/types/narrative_memory.ts` and Dexie:
+- `NarrativePredicateDefinition`
+- `NarrativeStateFact`
+- `NarrativeStateMutation`
+- `NarrativeStateEvidence`
+
+Design rules:
+- `predicate` is open-ended string with runtime registry normalization
+- canon state lives in `NarrativeStateFact`, not in embeddings
+- chapter extraction proposes `NarrativeStateMutation`, then rules decide commit/review
+- each state fact must retain evidence linkage for traceability
+
 ## Retrieval Intents
 Introduce explicit retrieval intents:
 - `writing_scene`

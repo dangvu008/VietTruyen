@@ -51,6 +51,8 @@ export interface RetrievalPackItem {
 
 export interface HybridMemoryResult {
   canonPack: RetrievalPackItem[];
+  statePack: RetrievalPackItem[];
+  hookPack: RetrievalPackItem[];
   graphPack: RetrievalPackItem[];
   semanticPack: RetrievalPackItem[];
   riskPack: RetrievalPackItem[];

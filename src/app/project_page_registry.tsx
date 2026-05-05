@@ -133,6 +133,7 @@ export function renderProjectPage({
           onAddChapter={projectActions.addChapter}
           onOpenAi={showAi}
           initialMode="detail"
+          onNavigate={onNavigate as any}
           onOpenCreationChat={onOpenCreationChat}
         />
       );

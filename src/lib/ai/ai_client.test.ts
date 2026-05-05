@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const getSession = vi.hoisted(() => vi.fn());
+const tauriInvoke = vi.hoisted(() => vi.fn());
+const tauriIsTauri = vi.hoisted(() => vi.fn(() => false));
 
 vi.mock('../supabase/supabase_client', () => ({
   SUPABASE_URL: 'https://mock.supabase.co',
@@ -10,6 +12,11 @@ vi.mock('../supabase/supabase_client', () => ({
       getSession,
     },
   },
+}));
+
+vi.mock('@tauri-apps/api/core', () => ({
+  invoke: tauriInvoke,
+  isTauri: tauriIsTauri,
 }));
 
 import { callAiProxy } from './ai_client';
@@ -46,6 +53,12 @@ describe('ai_client callAiProxy fallback behavior', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     vi.unstubAllEnvs();
+    tauriInvoke.mockReset();
+    tauriIsTauri.mockReset();
+    tauriIsTauri.mockReturnValue(false);
+    vi.stubEnv('VITE_LOCAL_AI_PROXY_URL', '');
+    vi.stubEnv('VITE_LOCAL_AI_PROXY_KEY', '');
+    vi.stubEnv('VITE_LOCAL_AI_PROXY_MODEL', '');
   });
 
   it('falls back to edge proxy when local proxy is down and user is authenticated', async () => {
@@ -78,7 +91,7 @@ describe('ai_client callAiProxy fallback behavior', () => {
     const result = await callAiProxy(BASE_OPTS);
     expect(result.text).toBe('edge-fallback-ok');
     expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(String(fetchMock.mock.calls[0][0])).toContain('/gemini-cli-oauth/v1/chat/completions');
+    expect(String(fetchMock.mock.calls[0][0])).toBe('http://localhost:20128/v1/chat/completions');
     expect(String(fetchMock.mock.calls[1][0])).toContain('/functions/v1/ai-proxy');
     expect(fetchMock.mock.calls[1][1]?.headers?.Authorization).toBe('Bearer session-token');
   });
@@ -112,7 +125,145 @@ describe('ai_client callAiProxy fallback behavior', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(String(fetchMock.mock.calls[0][0])).toBe('http://localhost:20128/v1/chat/completions');
     expect(fetchMock.mock.calls[0][1]?.headers?.Authorization).toBe('Bearer sk_9router');
-    expect(fetchMock.mock.calls[0][1]?.body).toContain('if/kimi-k2-thinking');
+    const requestBody = JSON.parse(String(fetchMock.mock.calls[0][1]?.body));
+    expect(requestBody.model).toBe('gemini-2.0-flash');
+    expect(requestBody.stream).toBe(false);
+  });
+
+  it('skips local proxy for explicit openrouter models when a direct key is available', async () => {
+    vi.stubEnv('VITE_USE_LOCAL_AI_PROXY', 'true');
+    vi.stubEnv('VITE_OPENROUTER_API_KEY', 'openrouter-direct-key');
+
+    const fetchMock = vi.fn().mockResolvedValueOnce(createResponse({
+      ok: true,
+      status: 200,
+      json: {
+        choices: [{ message: { content: 'openrouter-direct-ok' } }],
+        usage: {
+          prompt_tokens: 3,
+          completion_tokens: 4,
+          total_tokens: 7,
+        },
+      },
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    getSession.mockResolvedValue({
+      data: { session: null },
+    });
+
+    const result = await callAiProxy({
+      provider: 'openrouter',
+      modelId: 'anthropic/claude-sonnet-4',
+      systemPrompt: 'system',
+      userPrompt: 'user',
+    });
+
+    expect(result.text).toBe('openrouter-direct-ok');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(String(fetchMock.mock.calls[0][0])).toBe('https://openrouter.ai/api/v1/chat/completions');
+    expect(fetchMock.mock.calls[0][1]?.headers).toMatchObject({
+      Authorization: 'Bearer openrouter-direct-key',
+    });
+  });
+
+  it('uses sk_9router as the default local 9router key when no env override exists', async () => {
+    vi.stubEnv('VITE_USE_LOCAL_AI_PROXY', 'true');
+    vi.stubEnv('VITE_LOCAL_AI_PROXY_URL', 'http://localhost:20128/v1');
+    vi.stubEnv('VITE_LOCAL_AI_PROXY_KEY', '');
+
+    const fetchMock = vi.fn().mockResolvedValueOnce(createResponse({
+      ok: true,
+      status: 200,
+      json: {
+        choices: [{ message: { content: '9router-default-key-ok' } }],
+        usage: {
+          prompt_tokens: 5,
+          completion_tokens: 7,
+          total_tokens: 12,
+        },
+      },
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    getSession.mockResolvedValue({
+      data: { session: null },
+    });
+
+    const result = await callAiProxy(BASE_OPTS);
+
+    expect(result.text).toBe('9router-default-key-ok');
+    expect(fetchMock.mock.calls[0][1]?.headers?.Authorization).toBe('Bearer sk_9router');
+  });
+
+  it('asks Tauri to start 9router and retries local proxy once on desktop connectivity errors', async () => {
+    vi.stubEnv('VITE_USE_LOCAL_AI_PROXY', 'true');
+    vi.stubEnv('VITE_LOCAL_AI_PROXY_URL', 'http://localhost:20128/v1');
+    tauriIsTauri.mockReturnValue(true);
+    tauriInvoke.mockResolvedValue(undefined);
+
+    const fetchMock = vi.fn()
+      .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+      .mockResolvedValueOnce(createResponse({
+        ok: true,
+        status: 200,
+        json: {
+          choices: [{ message: { content: 'restarted-ok' } }],
+          usage: {
+            prompt_tokens: 7,
+            completion_tokens: 9,
+            total_tokens: 16,
+          },
+        },
+      }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    getSession.mockResolvedValue({
+      data: { session: null },
+    });
+
+    const result = await callAiProxy(BASE_OPTS);
+
+    expect(result.text).toBe('restarted-ok');
+    expect(tauriInvoke).toHaveBeenCalledWith('ensure_nine_router_started');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('preserves synced 9router model ids with provider prefixes', async () => {
+    vi.stubEnv('VITE_USE_LOCAL_AI_PROXY', 'true');
+    vi.stubEnv('VITE_LOCAL_AI_PROXY_URL', 'http://localhost:20128/v1');
+    vi.stubEnv('VITE_LOCAL_AI_PROXY_KEY', 'sk_9router');
+
+    const fetchMock = vi.fn().mockResolvedValueOnce(createResponse({
+      ok: true,
+      status: 200,
+      json: {
+        choices: [{ message: { content: '9router-prefixed-ok' } }],
+        usage: {
+          prompt_tokens: 11,
+          completion_tokens: 13,
+          total_tokens: 24,
+        },
+      },
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    getSession.mockResolvedValue({
+      data: { session: null },
+    });
+
+    const result = await callAiProxy({
+      ...BASE_OPTS,
+      provider: 'nine-router',
+      modelId: 'cx/gpt-5.3-codex-low',
+      apiKey: 'sk_9router',
+    });
+
+    expect(result.text).toBe('9router-prefixed-ok');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const requestBody = JSON.parse(String(fetchMock.mock.calls[0][1]?.body));
+    expect(requestBody.model).toBe('cx/gpt-5.3-codex-low');
+    expect(requestBody.stream).toBe(false);
   });
 
   it('fails fast for guest mode when local proxy is down and no direct key exists', async () => {
@@ -150,6 +301,33 @@ describe('ai_client callAiProxy fallback behavior', () => {
     });
 
     await expect(callAiProxy(BASE_OPTS)).rejects.toThrow('Local AI Proxy Error: 500 server exploded');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(getSession).not.toHaveBeenCalled();
+  });
+
+  it('does not fallback when a local proxy request is user-aborted', async () => {
+    vi.stubEnv('VITE_USE_LOCAL_AI_PROXY', 'true');
+
+    const fetchMock = vi.fn((_input: RequestInfo | URL, init?: RequestInit) => (
+      new Promise<Response>((_resolve, reject) => {
+        const signal = init?.signal as AbortSignal | undefined;
+        signal?.addEventListener('abort', () => {
+          reject(new DOMException('The operation was aborted.', 'AbortError'));
+        }, { once: true });
+      })
+    ));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const controller = new AbortController();
+    const promise = callAiProxy({
+      ...BASE_OPTS,
+      signal: controller.signal,
+    });
+    const expectation = expect(promise).rejects.toThrow(/aborted/i);
+
+    controller.abort();
+
+    await expectation;
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(getSession).not.toHaveBeenCalled();
   });
@@ -202,6 +380,42 @@ describe('ai_client callAiProxy fallback behavior', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(String(fetchMock.mock.calls[0][0])).toBe('https://openrouter.ai/api/v1/chat/completions');
     expect(fetchMock.mock.calls[0][1]?.headers?.Authorization).toBe('Bearer openrouter-direct-key');
+  });
+
+  it('aborts direct provider requests through the caller signal', async () => {
+    vi.stubEnv('VITE_USE_LOCAL_AI_PROXY', 'false');
+
+    const fetchMock = vi.fn((_input: RequestInfo | URL, init?: RequestInit) => (
+      new Promise<Response>((_resolve, reject) => {
+        const signal = init?.signal as AbortSignal | undefined;
+        signal?.addEventListener('abort', () => {
+          reject(new DOMException('The operation was aborted.', 'AbortError'));
+        }, { once: true });
+      })
+    ));
+    vi.stubGlobal('fetch', fetchMock);
+
+    getSession.mockResolvedValue({
+      data: { session: null },
+    });
+
+    const controller = new AbortController();
+    const promise = callAiProxy({
+      ...BASE_OPTS,
+      provider: 'openrouter',
+      modelId: 'openai/gpt-4o-mini',
+      apiKey: 'openrouter-direct-key',
+      signal: controller.signal,
+    });
+    for (let index = 0; index < 5 && fetchMock.mock.calls.length === 0; index += 1) {
+      await Promise.resolve();
+    }
+    const expectation = expect(promise).rejects.toThrow(/aborted/i);
+
+    controller.abort();
+
+    await expectation;
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it('normalizes legacy OpenRouter Claude ids before sending the request', async () => {
@@ -313,12 +527,11 @@ describe('ai_client callAiProxy fallback behavior', () => {
     })).rejects.toThrow('timed out sau 1 giây');
   }, 4000);
 
-  it('still falls through local proxy connectivity errors after wrapping them', async () => {
+  it('skips local proxy wrapping when an explicit direct provider key is supplied', async () => {
     vi.stubEnv('VITE_USE_LOCAL_AI_PROXY', 'true');
     vi.stubEnv('VITE_LOCAL_AI_PROXY_URL', 'http://localhost:3030');
 
     const fetchMock = vi.fn()
-      .mockRejectedValueOnce(new TypeError('Failed to fetch'))
       .mockRejectedValueOnce(new TypeError('Failed to fetch'));
     vi.stubGlobal('fetch', fetchMock);
 
@@ -332,7 +545,8 @@ describe('ai_client callAiProxy fallback behavior', () => {
       modelId: 'gpt-4o-mini',
       apiKey: 'hocai-direct-key',
     })).rejects.toThrow('Không kết nối được tới provider "hocai"');
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(String(fetchMock.mock.calls[0][0])).toBe('https://api.hocai.vn/v1/chat/completions');
   });
 
   it('forwards generation params to edge proxy body', async () => {

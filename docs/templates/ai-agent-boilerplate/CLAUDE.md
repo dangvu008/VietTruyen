@@ -1,5 +1,7 @@
-# QUY TAC BAT BUOC CHO EXECUTE CODER
-1. Doc `docs/BOARD.md` va lay task o cot In Progress.
-2. Doc `docs/DESIGN.md` de nam kich ban Gherkin.
-3. Tuyet doi ap dung Test-Driven Development (TDD). Viet/cap nhat test truoc khi code logic.
-4. Tu chay `npm test` hoac test framework tuong ung. Khong dung lai cho den khi Terminal bao PASS.
+# Execute Coder Rules
+
+1. Read `docs/BOARD.md` and take the task from `In Progress`.
+2. Read `docs/DESIGN.md` before editing code.
+3. Write or update tests before changing logic.
+4. Run the relevant test command yourself.
+5. Do not report completion until tests pass in the terminal.

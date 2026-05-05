@@ -15,7 +15,15 @@
 
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { SUPABASE_ANON_KEY, SUPABASE_URL, supabase } from '../supabase/supabase_client';
+import {
+  getConfiguredLocalAiProxyKey,
+  getConfiguredLocalAiProxyUrl,
+  isOpenAiCompatibleLocalProxyUrl,
+  resolveLocalAiProxyModelId,
+  tryEnsureLocalNineRouterStarted,
+} from './local_proxy_runtime';
 import { normalizeModelIdForProvider } from './model_aliases';
+import { NINE_ROUTER_PROVIDER_ID } from './nine_router_catalog';
 
 export interface ProxyResponse {
   text: string;
@@ -44,28 +52,21 @@ const OPENAI_COMPAT_BASE_URLS: Record<string, string> = {
 
 const DEFAULT_AI_REQUEST_TIMEOUT_MS = 90000;
 
-function getLocalProxyUrl(): string {
-  const rawUrl = import.meta.env.VITE_LOCAL_AI_PROXY_URL || 'http://localhost:3030';
-  return rawUrl.replace(/\/+$/, '');
+interface AiProxyCallOptions {
+  provider: string;
+  modelId: string;
+  systemPrompt: string;
+  userPrompt: string;
+  temperature?: number;
+  topP?: number;
+  responseFormat?: string;
+  baseUrl?: string;
+  apiKey?: string;
+  signal?: AbortSignal;
 }
 
-function getLocalProxyKey(): string {
-  return import.meta.env.VITE_LOCAL_AI_PROXY_KEY || 'local-dummy-key';
-}
-
-function isNineRouterProxyUrl(url: string): boolean {
-  return /\/v1$/i.test(url);
-}
-
-function getLocalProxyModelId(requestedModelId: string): string {
-  const explicitModel = import.meta.env.VITE_LOCAL_AI_PROXY_MODEL?.trim();
-  if (explicitModel) return explicitModel;
-
-  if (/^(cc|if|qw|glm|ds|kimi|kmc)\//i.test(requestedModelId)) {
-    return requestedModelId;
-  }
-
-  return 'if/kimi-k2-thinking';
+function getLocalProxyUrl(explicitBaseUrl?: string): string {
+  return getConfiguredLocalAiProxyUrl(explicitBaseUrl);
 }
 
 function getAiRequestTimeoutMs(): number {
@@ -83,45 +84,76 @@ function buildAiTimeoutError(target: string): Error {
   );
 }
 
+function buildAiAbortError(): DOMException {
+  return new DOMException('The operation was aborted.', 'AbortError');
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof DOMException && error.name === 'AbortError';
+}
+
 async function fetchWithAiTimeout(
   url: string,
   init: RequestInit,
-  target: string
+  target: string,
+  externalSignal?: AbortSignal,
 ): Promise<Response> {
   const controller = new AbortController();
   const timeoutMs = getAiRequestTimeoutMs();
+  let didTimeout = false;
 
   return await new Promise<Response>((resolve, reject) => {
+    if (externalSignal?.aborted) {
+      reject(buildAiAbortError());
+      return;
+    }
+
+    const handleExternalAbort = () => {
+      controller.abort(externalSignal?.reason);
+    };
     const timeoutId = globalThis.setTimeout(() => {
+      didTimeout = true;
       controller.abort();
       reject(buildAiTimeoutError(target));
     }, timeoutMs);
+    externalSignal?.addEventListener('abort', handleExternalAbort, { once: true });
 
     fetch(url, { ...init, signal: controller.signal })
       .then(resolve)
       .catch((error) => {
-        if (error instanceof DOMException && error.name === 'AbortError') {
-          reject(buildAiTimeoutError(target));
+        if (isAbortError(error)) {
+          reject(didTimeout ? buildAiTimeoutError(target) : buildAiAbortError());
           return;
         }
         reject(error);
       })
       .finally(() => {
         globalThis.clearTimeout(timeoutId);
+        externalSignal?.removeEventListener('abort', handleExternalAbort);
       });
   });
 }
 
-async function withAiTimeout<T>(task: Promise<T>, target: string): Promise<T> {
+async function withAiTimeout<T>(task: Promise<T>, target: string, externalSignal?: AbortSignal): Promise<T> {
   const timeoutMs = getAiRequestTimeoutMs();
 
   return await new Promise<T>((resolve, reject) => {
+    if (externalSignal?.aborted) {
+      reject(buildAiAbortError());
+      return;
+    }
+
+    const handleExternalAbort = () => {
+      reject(buildAiAbortError());
+    };
     const timeoutId = globalThis.setTimeout(() => {
       reject(buildAiTimeoutError(target));
     }, timeoutMs);
+    externalSignal?.addEventListener('abort', handleExternalAbort, { once: true });
 
     task.then(resolve, reject).finally(() => {
       globalThis.clearTimeout(timeoutId);
+      externalSignal?.removeEventListener('abort', handleExternalAbort);
     });
   });
 }
@@ -159,27 +191,30 @@ export async function callAiModel(
  * Call AI proxy with full response (includes token usage data).
  * Use this when you need token tracking info from server.
  */
-export async function callAiProxy(opts: {
-  provider: string;
-  modelId: string;
-  systemPrompt: string;
-  userPrompt: string;
-  temperature?: number;
-  topP?: number;
-  responseFormat?: string;
-  baseUrl?: string;
-  apiKey?: string;
-}): Promise<ProxyResponse> {
+export async function callAiProxy(opts: AiProxyCallOptions): Promise<ProxyResponse> {
   const normalizedModelId = normalizeModelIdForProvider(opts.provider, opts.modelId);
   const resolvedOpts = normalizedModelId === opts.modelId
     ? opts
     : { ...opts, modelId: normalizedModelId };
   const directApiKey = _resolveDirectApiKey(opts.provider, opts.apiKey);
 
-  if (import.meta.env.VITE_USE_LOCAL_AI_PROXY === 'true') {
+  if (_shouldAttemptLocalProxy(resolvedOpts.provider, directApiKey)) {
     try {
       return await _callLocalProxy(resolvedOpts);
-    } catch (error) {
+    } catch (initialError) {
+      let error = initialError;
+      if (isLocalProxyConnectivityError(error)) {
+        const localProxyUrl = getLocalProxyUrl(resolvedOpts.baseUrl);
+        const didAttemptRestart = await tryEnsureLocalNineRouterStarted(localProxyUrl);
+        if (didAttemptRestart) {
+          try {
+            return await _callLocalProxy(resolvedOpts);
+          } catch (retryError) {
+            error = retryError;
+          }
+        }
+      }
+
       // Only fallback for connectivity/network failures.
       if (!isLocalProxyConnectivityError(error)) {
         throw error;
@@ -218,6 +253,12 @@ export async function callAiProxy(opts: {
   throw _buildGuestMissingDirectKeyError(opts.provider);
 }
 
+function _shouldAttemptLocalProxy(provider: string, directApiKey: string | null): boolean {
+  if (import.meta.env.VITE_USE_LOCAL_AI_PROXY !== 'true') return false;
+  if (provider === NINE_ROUTER_PROVIDER_ID) return true;
+  return !directApiKey;
+}
+
 async function _getAccessToken(): Promise<string | null> {
   const { data: { session } } = await supabase.auth.getSession();
   return session?.access_token ?? null;
@@ -250,17 +291,7 @@ function _resolveDirectApiKey(provider: string, explicitApiKey?: string): string
 }
 
 async function _handleEdgeFallback(
-  opts: {
-    provider: string;
-    modelId: string;
-    systemPrompt: string;
-    userPrompt: string;
-    temperature?: number;
-    topP?: number;
-    responseFormat?: string;
-    baseUrl?: string;
-    apiKey?: string;
-  },
+  opts: AiProxyCallOptions,
   error: unknown,
   directApiKey: string | null
 ): Promise<ProxyResponse> {
@@ -289,13 +320,13 @@ function _buildGuestMissingDirectKeyError(provider: string): Error {
   );
 }
 
-function _buildLocalProxyUnavailableError(originalError?: unknown): Error {
+function _buildLocalProxyUnavailableError(originalError?: unknown, baseUrl?: string): Error {
   const suffix = originalError instanceof Error && originalError.message
     ? ` Chi tiết kỹ thuật: ${originalError.message}`
     : '';
 
   return new Error(
-    `Local AI Proxy không phản hồi tại ${getLocalProxyUrl()}. Hãy bật proxy ở cổng 3030 hoặc tắt VITE_USE_LOCAL_AI_PROXY để dùng provider trực tiếp.${suffix}`
+    `Local AI Proxy không phản hồi tại ${getLocalProxyUrl(baseUrl)}. Nếu đang dùng app desktop, VietTruyen sẽ thử bật lại 9router tự động; nếu vẫn lỗi, hãy kiểm tra proxy hoặc tắt VITE_USE_LOCAL_AI_PROXY để dùng provider trực tiếp.${suffix}`
   );
 }
 
@@ -339,17 +370,7 @@ function isLocalProxyConnectivityError(error: unknown): boolean {
 }
 
 async function _callEdgeProxy(
-  opts: {
-    provider: string;
-    modelId: string;
-    systemPrompt: string;
-    userPrompt: string;
-    temperature?: number;
-    topP?: number;
-    responseFormat?: string;
-    baseUrl?: string;
-    apiKey?: string;
-  },
+  opts: AiProxyCallOptions,
   authToken: string
 ): Promise<ProxyResponse> {
   const res = await fetchWithAiTimeout(
@@ -373,7 +394,8 @@ async function _callEdgeProxy(
         apiKey: opts.apiKey,
       }),
     },
-    'Supabase AI proxy'
+    'Supabase AI proxy',
+    opts.signal,
   );
 
   if (!res.ok) {
@@ -400,16 +422,7 @@ async function _callEdgeProxy(
 }
 
 async function _callProviderDirect(
-  opts: {
-    provider: string;
-    modelId: string;
-    systemPrompt: string;
-    userPrompt: string;
-    temperature?: number;
-    topP?: number;
-    responseFormat?: string;
-    baseUrl?: string;
-  },
+  opts: AiProxyCallOptions,
   apiKey: string
 ): Promise<ProxyResponse> {
   if (opts.provider === 'gemini') {
@@ -424,13 +437,7 @@ async function _callProviderDirect(
 }
 
 async function _callGeminiDirect(
-  opts: {
-    modelId: string;
-    systemPrompt: string;
-    userPrompt: string;
-    temperature?: number;
-    topP?: number;
-  },
+  opts: AiProxyCallOptions,
   apiKey: string
 ): Promise<ProxyResponse> {
   try {
@@ -444,7 +451,8 @@ async function _callGeminiDirect(
     });
     const result = await withAiTimeout(
       model.generateContent(`${opts.systemPrompt}\n\n${opts.userPrompt}`),
-      `Gemini model ${opts.modelId}`
+      `Gemini model ${opts.modelId}`,
+      opts.signal,
     );
     const response = result.response;
     const usage = response.usageMetadata;
@@ -468,14 +476,7 @@ async function _callGeminiDirect(
 }
 
 async function _callClaudeDirect(
-  opts: {
-    modelId: string;
-    systemPrompt: string;
-    userPrompt: string;
-    temperature?: number;
-    topP?: number;
-    baseUrl?: string;
-  },
+  opts: AiProxyCallOptions,
   apiKey: string
 ): Promise<ProxyResponse> {
   const baseUrl = _normalizeBaseUrl(opts.baseUrl || 'https://api.anthropic.com/v1');
@@ -496,7 +497,7 @@ async function _callClaudeDirect(
         top_p: opts.topP,
         messages: [{ role: 'user', content: opts.userPrompt }],
       }),
-    }, `Claude provider ${opts.modelId}`);
+    }, `Claude provider ${opts.modelId}`, opts.signal);
   } catch (error) {
     if (isLocalProxyConnectivityError(error)) {
       throw _buildProviderConnectivityError('claude', error);
@@ -527,16 +528,7 @@ async function _callClaudeDirect(
 }
 
 async function _callOpenAiCompatibleDirect(
-  opts: {
-    provider: string;
-    modelId: string;
-    systemPrompt: string;
-    userPrompt: string;
-    temperature?: number;
-    topP?: number;
-    responseFormat?: string;
-    baseUrl?: string;
-  },
+  opts: AiProxyCallOptions,
   apiKey: string
 ): Promise<ProxyResponse> {
   const resolvedBaseUrl = opts.baseUrl
@@ -572,7 +564,7 @@ async function _callOpenAiCompatibleDirect(
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify(body),
-    }, `${opts.provider} provider ${opts.modelId}`);
+    }, `${opts.provider} provider ${opts.modelId}`, opts.signal);
   } catch (error) {
     if (isLocalProxyConnectivityError(error)) {
       throw _buildProviderConnectivityError(opts.provider, error);
@@ -604,21 +596,14 @@ async function _callOpenAiCompatibleDirect(
 /**
  * Helper to call local AIClient-2-API for unmetered local testing
  */
-async function _callLocalProxy(opts: {
-  provider: string;
-  modelId: string;
-  systemPrompt: string;
-  userPrompt: string;
-  temperature?: number;
-  topP?: number;
-}): Promise<ProxyResponse> {
-  const localProxyUrl = getLocalProxyUrl();
-  const localProxyKey = getLocalProxyKey();
-  const isNineRouter = isNineRouterProxyUrl(localProxyUrl);
+async function _callLocalProxy(opts: AiProxyCallOptions): Promise<ProxyResponse> {
+  const localProxyUrl = getLocalProxyUrl(opts.baseUrl);
+  const localProxyKey = getConfiguredLocalAiProxyKey(opts.apiKey);
+  const isNineRouter = isOpenAiCompatibleLocalProxyUrl(localProxyUrl);
   const endpoint = isNineRouter
     ? `${localProxyUrl}/chat/completions`
     : `${localProxyUrl}/${opts.modelId.includes('claude') ? 'claude-kiro-oauth' : 'gemini-cli-oauth'}/v1/chat/completions`;
-  const modelId = isNineRouter ? getLocalProxyModelId(opts.modelId) : opts.modelId;
+  const modelId = isNineRouter ? resolveLocalAiProxyModelId(opts.modelId) : opts.modelId;
 
   let res: Response;
   try {
@@ -632,15 +617,16 @@ async function _callLocalProxy(opts: {
         model: modelId,
         temperature: opts.temperature,
         top_p: opts.topP,
+        stream: false,
         messages: [
           { role: 'system', content: opts.systemPrompt },
           { role: 'user', content: opts.userPrompt }
         ]
       }),
-    }, isNineRouter ? '9Router local proxy' : 'Local AI Proxy');
+    }, isNineRouter ? '9Router local proxy' : 'Local AI Proxy', opts.signal);
   } catch (error) {
     if (isLocalProxyConnectivityError(error)) {
-      throw _buildLocalProxyUnavailableError(error);
+      throw _buildLocalProxyUnavailableError(error, opts.baseUrl);
     }
     throw error;
   }

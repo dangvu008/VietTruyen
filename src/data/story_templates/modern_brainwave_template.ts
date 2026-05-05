@@ -20,60 +20,154 @@ export const MODERN_BRAINWAVE_TEMPLATE: StoryTemplate = {
   ],
   "subGenres": [
     {
-      "name": "Hiện Đại Ngôn Tình Não Động",
-      "description": "现实关系 + 规则/异象 + 情感反转。当超自然规则入侵现代爱情，感情与规则如何共存？",
-      "coreAppeal": "现实关系 + 规则/异象 + 情感反转。当超自然规则入侵现代爱情，感情与规则如何共存？"
+      "name": "规则恋爱流",
+      "description": "恋爱被某种规则约束",
+      "coreAppeal": "规则利用、规则突破、真心战胜规则",
+      "referenceWorks": [
+        "从结婚开始恋爱",
+        "亲爱的小孩",
+        "我的前半生"
+      ]
+    },
+    {
+      "name": "契约情缘流",
+      "description": "因契约/交易开始的感情",
+      "coreAppeal": "假戏真做、契约反转、真心流露",
+      "referenceWorks": [
+        "何以笙箫默",
+        "杉杉来了",
+        "微微一笑很倾城"
+      ]
+    },
+    {
+      "name": "重生复仇流",
+      "description": "重生后改变命运，收获真爱",
+      "coreAppeal": "避坑抓机、复仇成功、真爱相伴",
+      "referenceWorks": [
+        "重生之名流巨星",
+        "庶女攻略",
+        "重生之嫡女祸妃"
+      ]
+    },
+    {
+      "name": "异能恋爱流",
+      "description": "拥有特殊能力的现代爱情",
+      "coreAppeal": "能力助攻、身份秘密、能力与爱情",
+      "referenceWorks": [
+        "读心",
+        "时间规划局",
+        "关于我转生变成史莱姆这档事"
+      ]
     }
   ],
-  "worldRules": [],
-  "coolPatterns": [],
-  "conflictPatterns": [],
+  "worldRules": [
+    {
+      "name": "规则恋爱流",
+      "description": "**特点**: 恋爱被某种规则约束 **核心爽点**: 规则利用、规则突破、真心战胜规则 **代表作**: 《从结婚开始恋爱》《亲爱的小孩》《我的前半生》"
+    }
+  ],
+  "coolPatterns": [
+    {
+      "name": "规则突破",
+      "scenario": "用真心打破规则限制",
+      "appeal": "爱情战胜一切",
+      "keyNote": "要有足够的情感铺垫"
+    },
+    {
+      "name": "身份揭露",
+      "scenario": "隐藏的身份/能力被揭露",
+      "appeal": "反转惊喜，打脸众人",
+      "keyNote": "要有伏笔"
+    },
+    {
+      "name": "命运改写",
+      "scenario": "改变原本的悲剧命运",
+      "appeal": "避开悲剧，收获幸福",
+      "keyNote": "要有对比"
+    },
+    {
+      "name": "真心证明",
+      "scenario": "通过考验证明真心",
+      "appeal": "感动、甜蜜、圆满",
+      "keyNote": "考验要有意义"
+    }
+  ],
+  "conflictPatterns": [
+    {
+      "type": "情感与规则的冲突",
+      "source": "冲突类型 / 表现 / 解决方式 ---------- / ------ / ---------- 规则禁止 / 不能在一起 / 打破规则 规则强制 / 必须分开 / 找到漏洞 规则考验 / 选择题 / 证明真心 规则代价 / 在一起有代价 / 愿意承受",
+      "resolution": "冲突类型 / 表现 / 解决方式 ---------- / ------ / ---------- 规则禁止 / 不能在一起 / 打破规则 规则强制 / 必须分开 / 找到漏洞 规则考验 / 选择题 / 证明真心 规则代价 / 在一起有代价 / 愿意承受"
+    }
+  ],
   "outlineArcs": [
     {
       "title": "卷一：相遇 (1-50章)",
-      "chapterRange": "1-100",
+      "chapterRange": "1-50",
       "coreFocus": "因规则/能力相遇",
       "coreConflict": "",
       "climax": "发现规则/能力"
     },
     {
       "title": "卷二：相知 (51-120章)",
-      "chapterRange": "1-100",
+      "chapterRange": "51-120",
       "coreFocus": "在规则下相处",
       "coreConflict": "",
       "climax": "确认心意"
     },
     {
       "title": "卷三：考验 (121-200章)",
-      "chapterRange": "1-100",
+      "chapterRange": "121-200",
       "coreFocus": "规则与感情冲突",
       "coreConflict": "",
       "climax": "面临抉择"
     },
     {
       "title": "卷四：突破 (201-280章)",
-      "chapterRange": "1-100",
+      "chapterRange": "201-280",
       "coreFocus": "打破规则，选择真心",
       "coreConflict": "",
       "climax": "规则突破"
     },
     {
       "title": "卷五：圆满 (281-350章)",
-      "chapterRange": "1-100",
+      "chapterRange": "281-350",
       "coreFocus": "有情人终成眷属",
       "coreConflict": "",
       "climax": "圆满结局"
     }
   ],
+  "targetWordCount": "800.000 chữ",
+  "targetChapterCount": 350,
   "pitfalls": [
     {
-      "description": "Thiết lập trước sau mâu thuẫn.",
+      "description": "规则过玄",
+      "severity": "critical"
+    },
+    {
+      "description": "情感线失真",
+      "severity": "critical"
+    },
+    {
+      "description": "规则随意改变",
+      "severity": "critical"
+    },
+    {
+      "description": "代价不兑现",
       "severity": "critical"
     }
   ],
   "bestPractices": [
     {
-      "description": "Thiết lập tự nhất quán."
+      "description": "规则与现实融合"
+    },
+    {
+      "description": "情感发展自然"
+    },
+    {
+      "description": "规则自洽一致"
+    },
+    {
+      "description": "代价明确兑现"
     }
   ],
   "entityTags": [

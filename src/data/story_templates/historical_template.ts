@@ -20,60 +20,179 @@ export const HISTORICAL_TEMPLATE: StoryTemplate = {
   ],
   "subGenres": [
     {
-      "name": "Lịch Sử Cổ Đại",
-      "description": "大时代背景 + 权谋博弈 + 格局升级。在历史的洪流中，书写个人的传奇与时代的变迁。",
-      "coreAppeal": "大时代背景 + 权谋博弈 + 格局升级。在历史的洪流中，书写个人的传奇与时代的变迁。"
+      "name": "争霸权谋流",
+      "description": "乱世争霸，逐鹿天下",
+      "coreAppeal": "战略碾压、收服人才、统一天下",
+      "referenceWorks": [
+        "覆汉",
+        "三国之最风流",
+        "汉乡",
+        "秦吏"
+      ]
+    },
+    {
+      "name": "仕途升迁流",
+      "description": "官场沉浮，步步高升",
+      "coreAppeal": "政治博弈、晋升打脸、权倾朝野",
+      "referenceWorks": [
+        "官居一品",
+        "宰执天下",
+        "大明王侯",
+        "上品寒士"
+      ]
+    },
+    {
+      "name": "科技种田流",
+      "description": "用现代知识改变历史",
+      "coreAppeal": "科技碾压、内政建设、富国强兵",
+      "referenceWorks": [
+        "新宋",
+        "唐砖",
+        "赘婿",
+        "回到明朝当王爷"
+      ]
+    },
+    {
+      "name": "军事征战流",
+      "description": "沙场征战，名将之路",
+      "coreAppeal": "战术碾压、以少胜多、封狼居胥",
+      "referenceWorks": [
+        "大唐双龙传",
+        "窃明",
+        "明朝那些事儿"
+      ]
     }
   ],
-  "worldRules": [],
-  "coolPatterns": [],
-  "conflictPatterns": [],
+  "worldRules": [
+    {
+      "name": "朝代特色",
+      "description": "朝代 / 特点 / 核心矛盾 ------ / ------ / ---------- 秦汉 / 大一统初建 / 中央vs地方 三国 / 群雄割据 / 争霸统一 隋唐 / 盛世开放 / 门阀vs科举 宋朝 / 文治武弱 / 内忧外患 明朝 / 皇权集中 / 党争内耗 清朝 / 闭关锁国 / 变革图存"
+    },
+    {
+      "name": "社会阶层",
+      "description": "阶层 / 特点 / 上升通道 ------ / ------ / ---------- 皇族 / 最高权力 / 继承/篡位 世家 / 门阀势力 / 联姻/功勋 士人 / 读书人 / 科举/举荐 商人 / 有财无权 / 捐官/依附 农民 / 社会基础 / 军功/读书"
+    },
+    {
+      "name": "权力体系",
+      "description": "机构 / 职能 / 权力 ------ / ------ / ------ 中书省 / 决策 / 核心 门下省 / 审议 / 制衡 尚书省 / 执行 / 实权 御史台 / 监察 / 弹劾 军机处 / 军政 / 机密 --"
+    }
+  ],
+  "coolPatterns": [
+    {
+      "name": "科举逆袭",
+      "scenario": "寒门子弟金榜题名",
+      "appeal": "打脸权贵，一朝成名",
+      "keyNote": "要有铺垫，展示努力"
+    },
+    {
+      "name": "战场封神",
+      "scenario": "关键战役以少胜多",
+      "appeal": "战术碾压，名震天下"
+    },
+    {
+      "name": "朝堂翻盘",
+      "scenario": "被弹劾/陷害后反击",
+      "appeal": "证据确凿，对手落马",
+      "keyNote": "要有布局，不能太巧合"
+    },
+    {
+      "name": "收服人才",
+      "scenario": "历史名人投奔主角",
+      "appeal": "人才济济，众星捧月",
+      "keyNote": "要有合理的吸引点"
+    }
+  ],
+  "conflictPatterns": [
+    {
+      "type": "卷一：入局 (1-80章)",
+      "source": "底层/边缘",
+      "resolution": "初露锋芒，站稳脚跟"
+    },
+    {
+      "type": "卷二：崛起 (81-200章)",
+      "source": "中层官员/地方势力",
+      "resolution": "获得重要职位/地盘"
+    },
+    {
+      "type": "卷三：争锋 (201-400章)",
+      "source": "一方大员/诸侯",
+      "resolution": "击败主要对手"
+    },
+    {
+      "type": "卷四：争霸 (401-600章)",
+      "source": "顶级势力",
+      "resolution": "决定性战役/政变"
+    }
+  ],
   "outlineArcs": [
     {
       "title": "卷一：入局 (1-80章)",
-      "chapterRange": "1-100",
+      "chapterRange": "1-80",
       "coreFocus": "主角进入历史舞台",
       "coreConflict": "底层/边缘",
       "climax": "初露锋芒，站稳脚跟"
     },
     {
       "title": "卷二：崛起 (81-200章)",
-      "chapterRange": "1-100",
+      "chapterRange": "81-200",
       "coreFocus": "积累实力，扩大影响",
       "coreConflict": "中层官员/地方势力",
       "climax": "获得重要职位/地盘"
     },
     {
       "title": "卷三：争锋 (201-400章)",
-      "chapterRange": "1-100",
+      "chapterRange": "201-400",
       "coreFocus": "与主要对手正面交锋",
       "coreConflict": "一方大员/诸侯",
       "climax": "击败主要对手"
     },
     {
       "title": "卷四：争霸 (401-600章)",
-      "chapterRange": "1-100",
+      "chapterRange": "401-600",
       "coreFocus": "逐鹿天下",
       "coreConflict": "顶级势力",
       "climax": "决定性战役/政变"
     },
     {
       "title": "卷五：定鼎 (601-700章)",
-      "chapterRange": "1-100",
+      "chapterRange": "601-700",
       "coreFocus": "统一/改革，建立新秩序",
       "coreConflict": "最高权力",
       "climax": "圆满结局"
     }
   ],
+  "targetWordCount": "2.000.000 chữ",
+  "targetChapterCount": 700,
   "pitfalls": [
     {
-      "description": "Thiết lập trước sau mâu thuẫn.",
+      "description": "史实硬伤太多",
+      "severity": "critical"
+    },
+    {
+      "description": "现代思维太重",
+      "severity": "critical"
+    },
+    {
+      "description": "升级太快太顺",
+      "severity": "critical"
+    },
+    {
+      "description": "配角工具人化",
       "severity": "critical"
     }
   ],
   "bestPractices": [
     {
-      "description": "Thiết lập tự nhất quán."
+      "description": "基本史实准确"
+    },
+    {
+      "description": "思维符合时代"
+    },
+    {
+      "description": "有挫折有代价"
+    },
+    {
+      "description": "配角有血有肉"
     }
   ],
   "entityTags": [
@@ -118,6 +237,10 @@ export const HISTORICAL_TEMPLATE: StoryTemplate = {
         "opposition"
       ]
     }
+  ],
+  "constraintPacks": [
+    "Pack M08",
+    "Pack U01"
   ],
   "languageRegister": {
     "eraLabel": "cổ đại / lịch sử / triều đại",
@@ -178,9 +301,5 @@ export const HISTORICAL_TEMPLATE: StoryTemplate = {
         "note": "\"Ta - ngươi\" có thể là địch ý, nhưng cũng có thể là thế trên-dưới hoặc cố tình giữ lạnh khoảng cách."
       }
     ]
-  },
-  "constraintPacks": [
-    "Pack M08",
-    "Pack U01"
-  ]
+  }
 };

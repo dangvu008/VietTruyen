@@ -4,7 +4,7 @@
  * Layer: UI Root
  * Domain: App → [routing, layout, state orchestration]
  */
-import React, { Suspense, useEffect, useMemo, useState } from 'react';
+import React, { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { Bell, Sparkles } from 'lucide-react';
 import { shallow } from 'zustand/shallow';
 
@@ -24,19 +24,24 @@ import { DEFAULT_PROJECT_TAB, isGlobalTab } from './types/navigation';
 
 import { useTranslation } from './hooks/use_translation';
 import { useAiStore } from './store/use_ai_store';
+import { useAiActivityStore } from './store/use_ai_activity_store';
 import { applyAppearanceToDocument, useAppearanceStore } from './store/use_appearance_store';
 import { useAppSessionStore } from './store/use_app_session_store';
 import { useAuthStore } from './store/use_auth_store';
+import { useCreationChatStore } from './store/use_creation_chat_store';
+import { useGenerationStore } from './store/use_generation_store';
 import { useProjectStore } from './store/use_project_store';
 import { getUnreadCount, useNotificationStore } from './store/use_notification_store';
 import { useStorageStore } from './store/use_storage_store';
 import { selectActiveProject, selectProjectActions, selectProjectMeta } from './store/selectors';
 
 import { isAiRuntimeReady, isLocalAiProxyEnabled, resolveAiRuntimeMode } from './lib/ai/ai_runtime_mode';
-import { getRecommendedProjectTab } from './lib/navigation/project_workflow';
+import { traceStoryDebugEvent } from './lib/debug/story_debug_trace';
+import { getRecommendedProjectTab, shouldOpenCreationChatForProject } from './lib/navigation/project_workflow';
 import { renderGlobalPage } from './app/global_page_registry';
 import { renderProjectPage } from './app/project_page_registry';
 import { StorageContext } from './lib/storage/storage_context';
+import { useModelHealthSync } from './hooks/use_model_health_sync';
 
 // ─── Loading fallback ───
 
@@ -145,32 +150,109 @@ const App: React.FC = () => {
   );
   const aiConfigured = isAiRuntimeReady(aiRuntimeMode);
   const assistantActions: AssistantAction[] = [];
+  const authSessionKey = authLoading
+    ? 'loading'
+    : isAuthenticated && user
+      ? `user:${user.id}`
+      : isGuest
+        ? 'guest'
+        : 'anonymous';
+  const previousAuthSessionKey = useRef<string | null>(null);
 
-  useEffect(() => { initAuth(); }, [initAuth]);
+  useEffect(() => initAuth(), [initAuth]);
+
+  // [Domain:AI] STEP — Proactive health check on boot + periodic polling
+  useModelHealthSync();
+
   useEffect(() => {
     applyAppearanceToDocument(theme, editorFontSize);
   }, [theme, editorFontSize]);
 
+  useEffect(() => {
+    if (authSessionKey === 'loading') return;
+    if (previousAuthSessionKey.current === null) {
+      previousAuthSessionKey.current = authSessionKey;
+      return;
+    }
+    if (previousAuthSessionKey.current === authSessionKey) return;
+
+    traceStoryDebugEvent({
+      domain: 'session',
+      action: 'auth_session.changed',
+      level: 'info',
+      summary: 'Auth session changed; transient AI state will be reset while persisted debug trace remains.',
+      details: {
+        previousAuthSessionKey: previousAuthSessionKey.current,
+        nextAuthSessionKey: authSessionKey,
+        activeProjectId: activeProject?.id ?? null,
+      },
+    });
+    useGenerationStore.getState().reset();
+    useAiActivityStore.getState().reset();
+    setShowAi(false);
+    previousAuthSessionKey.current = authSessionKey;
+  }, [authSessionKey]);
+
   // ── Storage Provider Init ──
   const storageProvider = useStorageStore((state) => state.provider);
   const initStorageProvider = useStorageStore((state) => state.initProvider);
+  const resetStorageProvider = useStorageStore((state) => state.resetProvider);
 
   useEffect(() => {
-    if (!isAuthenticated && !isGuest) return;
-    const userId = user?.id || 'guest';
-    initStorageProvider(userId).catch((error) => {
+    if (!isAuthenticated || !user?.id) {
+      resetStorageProvider().catch((error) => {
+        console.error('[App] StorageProvider reset failed:', error);
+      });
+      return;
+    }
+
+    initStorageProvider(user.id).catch((error) => {
       console.error('[App] StorageProvider init failed:', error);
     });
-  }, [isAuthenticated, isGuest, user?.id, initStorageProvider]);
+  }, [isAuthenticated, isGuest, user?.id, initStorageProvider, resetStorageProvider]);
 
   // ─── Navigation Handlers ───
+
+  const openCreationChatForProject = (project: NonNullable<typeof activeProject>) => {
+    const creationChat = useCreationChatStore.getState();
+
+    if (creationChat.progress.linkedProjectId !== project.id) {
+      creationChat.reset();
+      const nextCreationChat = useCreationChatStore.getState();
+      nextCreationChat.linkProject(project.id);
+
+      if (project.title && project.title !== 'Tác phẩm mới' && project.title !== 'Dự án mới') {
+        nextCreationChat.addUserText(
+          `Tôi muốn phát triển tác phẩm "${project.title}". Hãy hỏi tôi vài câu để chốt ý tưởng ban đầu.`,
+        );
+      }
+    }
+
+    setGlobalTab('creation-chat');
+    setActiveShell('global');
+  };
 
   const handleEnterProject = (projectId?: string, preferredTab?: ProjectTabId) => {
     if (projectId) projectActions.setActiveProject(projectId);
 
     const targetProject = projectId
-      ? projects.find((project) => project.id === projectId)
+      ? useProjectStore.getState().projects.find((project) => project.id === projectId)
       : activeProject;
+
+    if (targetProject) {
+      const creationChat = useCreationChatStore.getState();
+      const shouldResumeCreationChat = shouldOpenCreationChatForProject(targetProject, {
+        linkedProjectId: creationChat.progress.linkedProjectId,
+        frameworkConfirmed: creationChat.frameworkConfirmed,
+        isBatchComposing: creationChat.isBatchComposing,
+        batchCompose: creationChat.progress.batchCompose,
+      });
+
+      if (shouldResumeCreationChat) {
+        openCreationChatForProject(targetProject);
+        return;
+      }
+    }
 
     setProjectTab(preferredTab ?? getRecommendedProjectTab(targetProject) ?? DEFAULT_PROJECT_TAB);
     setActiveShell('project');

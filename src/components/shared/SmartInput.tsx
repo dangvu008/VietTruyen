@@ -22,6 +22,12 @@ interface SmartInputProps {
   onResult: (data: any) => void;
   /** Label hiện trên heading */
   label?: string;
+  /** Cho phép chạy khi textarea trống, dùng cho flow đã có dữ liệu context sẵn. */
+  allowEmptyAnalysis?: boolean;
+  /** Text thay thế gửi vào prompt khi textarea trống. */
+  emptyAnalysisText?: string;
+  /** Hint dưới textarea. */
+  helperText?: string;
 }
 
 export const SmartInput: React.FC<SmartInputProps> = ({
@@ -29,17 +35,23 @@ export const SmartInput: React.FC<SmartInputProps> = ({
   buildPrompt,
   onResult,
   label = 'Mô tả ý tưởng của bạn',
+  allowEmptyAnalysis = false,
+  emptyAnalysisText = '',
+  helperText = 'Viết bất kỳ điều gì → AI sẽ tự phân tích và điền vào form bên dưới',
 }) => {
   const [text, setText] = useState('');
   const [expanded, setExpanded] = useState(true);
   const [parseError, setParseError] = useState<string | null>(null);
   const ai = useAiSuggest();
+  const trimmedText = text.trim();
+  const canAnalyze = !ai.isLoading && (trimmedText.length > 0 || allowEmptyAnalysis);
 
   const handleAnalyze = async () => {
-    if (!text.trim()) return;
+    const submittedText = trimmedText || emptyAnalysisText.trim();
+    if (!submittedText) return;
     setParseError(null);
 
-    const prompt = await buildPrompt(text);
+    const prompt = await buildPrompt(submittedText);
     const result = await ai.suggest(prompt);
 
     if (result) {
@@ -92,12 +104,12 @@ export const SmartInput: React.FC<SmartInputProps> = ({
 
           <div className="flex items-center justify-between">
             <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
-              Viết bất kỳ điều gì → AI sẽ tự phân tích và điền vào form bên dưới
+              {helperText}
             </span>
             <button
               type="button"
               onClick={handleAnalyze}
-              disabled={ai.isLoading || !text.trim()}
+              disabled={!canAnalyze}
               className="smart-input-btn"
             >
               {ai.isLoading ? (

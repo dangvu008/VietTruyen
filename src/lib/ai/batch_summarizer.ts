@@ -13,20 +13,17 @@
  */
 import { callAiModelTracked } from './tracked_ai_client';
 import type { AiModel, Chapter } from '../../types/story';
+import { buildJsonArraySystem } from './prompt_standard';
 
-const BATCH_SYSTEM = `Bạn là trợ lý tóm tắt chương truyện. Nhiệm vụ: tóm tắt NHIỀU chương cùng lúc.
-
-QUY TẮC:
-1. Mỗi chương tóm tắt trong 100-150 chữ tiếng Việt.
-2. Bao gồm: sự kiện chính, nhân vật, thay đổi trạng thái.
-3. Trả về JSON ARRAY theo đúng thứ tự input.
-4. KHÔNG thêm bình luận. CHỈ tóm tắt.¹
-
-FORMAT OUTPUT (JSON):
-[
-  { "id": "chapter_id_1", "summary": "tóm tắt chương 1..." },
-  { "id": "chapter_id_2", "summary": "tóm tắt chương 2..." }
-]`;
+const BATCH_SYSTEM = buildJsonArraySystem(
+  'Batch chapter summarizer',
+  'Summarize multiple chapters in one response and preserve input order',
+  [
+    'Each summary should be 100-150 Vietnamese words.',
+    'Include major events, key characters, and state changes.',
+    'Return one object per chapter: {"id":"...","summary":"..."}.',
+  ],
+);
 
 const MAX_BATCH_SIZE = 5;
 const MAX_CHARS_PER_CHAPTER = 4000;

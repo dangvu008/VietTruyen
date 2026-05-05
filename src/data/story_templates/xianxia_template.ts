@@ -166,9 +166,77 @@ export const XIANXIA_TEMPLATE: StoryTemplate = {
   entityTags: [
     { type: '功法', nameVi: 'Công pháp', attributes: ['hiệu quả', 'tầng cấp', 'phẩm cấp', 'thuộc tính'] },
     { type: '法宝', nameVi: 'Pháp bảo', attributes: ['chức năng', 'tầng cấp', 'phẩm cấp', 'ngoại hình'] },
-    { type: '势力', nameVi: 'Thế lực', attributes: ['quan hệ với MC', 'tầng cấp', 'chính/ma', 'công pháp cốt lõi'] },
+    { type: 'quyền lực', nameVi: 'Thế lực', attributes: ['quan hệ với MC', 'tầng cấp', 'chính/ma', 'công pháp cốt lõi'] },
     { type: '妖兽', nameVi: 'Yêu thú', attributes: ['đặc điểm', 'cảnh giới', 'vật phẩm rơi'] },
   ],
 
   constraintPacks: ['Pack M01', 'Pack M02', 'Pack U03'],
+
+  characterArchetypes: [
+    {
+      role: 'Chính — Tán tu quật cường',
+      narrativeFunction: 'Nghịch thiên cải mệnh, dẫn dắt toàn bộ cốt truyện',
+      personalityHint: 'Thận trọng, mưu trí, không tin ai dễ dàng',
+      primaryArc: 'Quyển 1: Tông Môn Phong Vân',
+      suggestedCount: [1, 1],
+    },
+    {
+      role: 'Đồng hành — Huynh đệ kết nghĩa',
+      narrativeFunction: 'Tạo tình cảm, hy sinh để thúc đẩy MC trưởng thành',
+      personalityHint: 'Trung thành, nóng nảy, giỏi 1 lĩnh vực (luyện đan/trận pháp)',
+      primaryArc: 'Quyển 1: Tông Môn Phong Vân',
+      suggestedCount: [1, 3],
+    },
+    {
+      role: 'Phản diện leo thang',
+      narrativeFunction: 'Mỗi arc có 1 phản diện mạnh hơn, tạo áp lực leo thang liên tục',
+      personalityHint: 'Kiêu ngạo, tham lam quyền lực, coi thường MC ban đầu',
+      suggestedCount: [3, 6],
+    },
+    {
+      role: 'Mentor — Lão quái giang hồ',
+      narrativeFunction: 'Truyền thừa, gợi mở bí mật thế giới, hy sinh tạo bước ngoặt',
+      personalityHint: 'Bí ẩn, nói ít hiểu nhiều, quá khứ u ám',
+      primaryArc: 'Quyển 1: Tông Môn Phong Vân',
+      suggestedCount: [1, 2],
+    },
+    {
+      role: 'Tình yêu — Nữ tu tiên',
+      narrativeFunction: 'Điểm mềm mại trong thế giới tàn khốc, tạo động lực cho MC',
+      personalityHint: 'Độc lập, tài năng ngang MC, không yếu đuối',
+      suggestedCount: [1, 2],
+    },
+    {
+      role: 'Hài hước — Tán tu bạn đường',
+      narrativeFunction: 'Giảm tension sau arc nặng, comic relief nhưng có chiều sâu',
+      personalityHint: 'Ba hoa, tham sống sợ chết nhưng lúc cần thì đứng ra',
+      suggestedCount: [1, 1],
+    },
+    {
+      role: 'Kẻ phản bội — Sư huynh/đồng môn',
+      narrativeFunction: 'Twist plot, phá vỡ trust, thúc đẩy MC cảnh giác hơn',
+      personalityHint: 'Ban đầu tốt, dần lộ bản chất vì lợi ích',
+      primaryArc: 'Quyển 2: Huyết Sắc Thí Luyện',
+      suggestedCount: [1, 2],
+    },
+    {
+      role: 'Nền sống động — Tán tu/Tiểu nhị quán trà',
+      narrativeFunction: 'Cung cấp tin đồn, tạo bầu không khí thế giới sống động',
+      personalityHint: 'Giang hồ, sặc mùi thế tục, biết nhiều chuyện',
+      suggestedCount: [2, 5],
+    },
+    {
+      role: 'Ẩn boss — Tông chủ bí ẩn',
+      narrativeFunction: 'Reveal muộn, đảo lộn nhận thức, là phản diện thật sự hoặc đồng minh bất ngờ',
+      personalityHint: 'Ôn hòa bề ngoài, cực kỳ thâm hiểm hoặc có nỗi khổ riêng',
+      primaryArc: 'Quyển 4: Giới Vực Chiến Tranh',
+      suggestedCount: [1, 1],
+    },
+  ],
+
+  characterScaleHint: {
+    per100Chapters: 6,
+    minTotal: 12,
+    maxTotal: 40,
+  },
 };

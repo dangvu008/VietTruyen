@@ -107,18 +107,22 @@ describe('OpenRouterEmbeddingAdapter', () => {
 });
 
 describe('embedding_initializer — 3-tier priority', () => {
-  const originalGemini = import.meta.env.VITE_GEMINI_API_KEY;
-  const originalOpenRouter = import.meta.env.VITE_OPENROUTER_API_KEY;
+  const env = import.meta.env as ImportMetaEnv & {
+    VITE_GEMINI_API_KEY: string;
+    VITE_OPENROUTER_API_KEY: string;
+  };
+  const originalGemini = env.VITE_GEMINI_API_KEY;
+  const originalOpenRouter = env.VITE_OPENROUTER_API_KEY;
 
   beforeEach(() => {
     resetEmbeddingInitializer();
-    import.meta.env.VITE_GEMINI_API_KEY = '';
-    import.meta.env.VITE_OPENROUTER_API_KEY = '';
+    env.VITE_GEMINI_API_KEY = '';
+    env.VITE_OPENROUTER_API_KEY = '';
   });
 
   afterEach(() => {
-    import.meta.env.VITE_GEMINI_API_KEY = originalGemini;
-    import.meta.env.VITE_OPENROUTER_API_KEY = originalOpenRouter;
+    env.VITE_GEMINI_API_KEY = originalGemini;
+    env.VITE_OPENROUTER_API_KEY = originalOpenRouter;
     resetEmbeddingInitializer();
   });
 
@@ -129,14 +133,14 @@ describe('embedding_initializer — 3-tier priority', () => {
   });
 
   it('tier 1: activates Gemini when VITE_GEMINI_API_KEY is set', () => {
-    import.meta.env.VITE_GEMINI_API_KEY = 'test-gemini-key';
+    env.VITE_GEMINI_API_KEY = 'test-gemini-key';
     const type = initializeEmbeddingAdapter();
     expect(type).toBe('gemini');
     expect(getActiveEmbeddingDimension()).toBe(GEMINI_EMBEDDING_DIMENSION);
   });
 
   it('tier 2: activates OpenRouter when only VITE_OPENROUTER_API_KEY is set', () => {
-    import.meta.env.VITE_OPENROUTER_API_KEY = 'sk-or-v1-test-key';
+    env.VITE_OPENROUTER_API_KEY = 'sk-or-v1-test-key';
     const type = initializeEmbeddingAdapter();
     expect(type).toBe('openrouter');
     expect(getActiveEmbeddingAdapterType()).toBe('openrouter');
@@ -144,14 +148,14 @@ describe('embedding_initializer — 3-tier priority', () => {
   });
 
   it('tier 1 wins: prefers Gemini over OpenRouter when both are set', () => {
-    import.meta.env.VITE_GEMINI_API_KEY = 'test-gemini-key';
-    import.meta.env.VITE_OPENROUTER_API_KEY = 'sk-or-v1-test-key';
+    env.VITE_GEMINI_API_KEY = 'test-gemini-key';
+    env.VITE_OPENROUTER_API_KEY = 'sk-or-v1-test-key';
     const type = initializeEmbeddingAdapter();
     expect(type).toBe('gemini');
   });
 
   it('is idempotent — second call returns cached result', () => {
-    import.meta.env.VITE_OPENROUTER_API_KEY = 'sk-or-key';
+    env.VITE_OPENROUTER_API_KEY = 'sk-or-key';
     const first = initializeEmbeddingAdapter();
     const second = initializeEmbeddingAdapter();
     expect(first).toBe(second);

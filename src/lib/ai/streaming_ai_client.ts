@@ -15,13 +15,21 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { useAiStore } from '../../store/use_ai_store';
 import { useAuthStore } from '../../store/use_auth_store';
+import {
+  getConfiguredLocalAiProxyKey,
+  getConfiguredLocalAiProxyUrl,
+  isOpenAiCompatibleLocalProxyUrl,
+  resolveLocalAiProxyModelId,
+} from './local_proxy_runtime';
 import { normalizeModelIdForProvider } from './model_aliases';
 import { useTokenStore } from '../../store/use_token_store';
 import { useAiActivityStore } from '../../store/use_ai_activity_store';
 import { COST_PER_1M_INPUT, COST_PER_1M_OUTPUT } from '../../types/token_tracker';
-import type { AiTaskType } from './model_router';
+import { getModelForTask, type AiTaskType } from './model_router';
+import { NINE_ROUTER_PROVIDER_ID } from './nine_router_catalog';
 import type { TokenUsageRecord } from '../../types/token_tracker';
 import { createId } from '../../core/id';
+import { previewDebugText, traceStoryDebugEvent } from '../debug/story_debug_trace';
 
 // ─── Types ──────────────────────────────────────────────
 
@@ -61,6 +69,109 @@ const OPENAI_COMPAT_BASE_URLS: Record<string, string> = {
 
 const DEFAULT_STREAM_TIMEOUT_MS = 120_000;
 
+interface StreamWatchdog {
+  signal: AbortSignal;
+  kick: () => void;
+  cleanup: () => void;
+  timedOut: () => boolean;
+  throwIfAborted: (target: string) => void;
+  race: <T>(promise: Promise<T>, target: string) => Promise<T>;
+}
+
+function getStreamTimeoutMs(): number {
+  const rawValue = Number(
+    import.meta.env.VITE_AI_STREAM_TIMEOUT_MS
+    ?? import.meta.env.VITE_AI_REQUEST_TIMEOUT_MS
+  );
+  if (!Number.isFinite(rawValue) || rawValue < 100) {
+    return DEFAULT_STREAM_TIMEOUT_MS;
+  }
+  return rawValue;
+}
+
+function buildStreamTimeoutError(target: string): Error {
+  const timeoutMs = getStreamTimeoutMs();
+  return new Error(
+    `Luồng AI bị timed out sau ${Math.round(timeoutMs / 1000)} giây khi chờ dữ liệu từ ${target}. Hãy thử lại hoặc giảm độ dài prompt.`
+  );
+}
+
+function createStreamWatchdog(externalSignal?: AbortSignal): StreamWatchdog {
+  const controller = new AbortController();
+  const timeoutMs = getStreamTimeoutMs();
+  let timeoutId: ReturnType<typeof globalThis.setTimeout> | null = null;
+  let didTimeout = false;
+
+  const scheduleTimeout = () => {
+    if (timeoutId) {
+      globalThis.clearTimeout(timeoutId);
+    }
+    timeoutId = globalThis.setTimeout(() => {
+      didTimeout = true;
+      controller.abort();
+    }, timeoutMs);
+  };
+
+  const handleExternalAbort = () => {
+    controller.abort(externalSignal?.reason);
+  };
+
+  if (externalSignal) {
+    if (externalSignal.aborted) {
+      handleExternalAbort();
+    } else {
+      externalSignal.addEventListener('abort', handleExternalAbort, { once: true });
+    }
+  }
+
+  scheduleTimeout();
+
+  return {
+    signal: controller.signal,
+    kick: scheduleTimeout,
+    cleanup: () => {
+      if (timeoutId) {
+        globalThis.clearTimeout(timeoutId);
+        timeoutId = null;
+      }
+      if (externalSignal) {
+        externalSignal.removeEventListener('abort', handleExternalAbort);
+      }
+    },
+    timedOut: () => didTimeout,
+    throwIfAborted: (target: string) => {
+      if (!controller.signal.aborted) return;
+      if (didTimeout) {
+        throw buildStreamTimeoutError(target);
+      }
+      throw new DOMException('The operation was aborted.', 'AbortError');
+    },
+    race: async <T>(promise: Promise<T>, target: string): Promise<T> => {
+      if (controller.signal.aborted) {
+        if (didTimeout) {
+          throw buildStreamTimeoutError(target);
+        }
+        throw new DOMException('The operation was aborted.', 'AbortError');
+      }
+
+      return await new Promise<T>((resolve, reject) => {
+        const handleAbort = () => {
+          if (didTimeout) {
+            reject(buildStreamTimeoutError(target));
+            return;
+          }
+          reject(new DOMException('The operation was aborted.', 'AbortError'));
+        };
+
+        controller.signal.addEventListener('abort', handleAbort, { once: true });
+        promise.then(resolve, reject).finally(() => {
+          controller.signal.removeEventListener('abort', handleAbort);
+        });
+      });
+    },
+  };
+}
+
 // ─── Main Entry Point ───────────────────────────────────
 
 /**
@@ -78,6 +189,26 @@ export async function callAiStreaming(opts: StreamingCallOptions): Promise<Strea
   const startTime = performance.now();
   const activityStore = useAiActivityStore.getState();
   const activityCallId = createId();
+  const debugCallId = createId();
+  traceStoryDebugEvent({
+    domain: 'ai',
+    action: 'stream.start',
+    level: 'info',
+    summary: `AI streaming call started for ${opts.taskType}.`,
+    details: {
+      callId: debugCallId,
+      activityCallId,
+      taskType: opts.taskType,
+      provider: resolvedOpts.provider,
+      modelId: resolvedOpts.modelId,
+      modelName: resolvedOpts.modelName,
+      baseUrl: resolvedOpts.baseUrl,
+      systemPromptChars: resolvedOpts.systemPrompt.length,
+      userPromptChars: resolvedOpts.userPrompt.length,
+      systemPromptPreview: previewDebugText(resolvedOpts.systemPrompt),
+      userPromptPreview: previewDebugText(resolvedOpts.userPrompt),
+    },
+  });
 
   // [Domain:AI] STEP — Broadcast activity start for live UI
   activityStore.startCall({
@@ -95,6 +226,22 @@ export async function callAiStreaming(opts: StreamingCallOptions): Promise<Strea
     ...resolvedOpts,
     onChunk: (chunk: string, accumulated: string) => {
       originalOnChunk(chunk, accumulated);
+      traceStoryDebugEvent({
+        domain: 'ai',
+        action: 'stream.chunk',
+        level: 'info',
+        summary: `AI stream emitted ${chunk.length} chars (${accumulated.length} total).`,
+        details: {
+          callId: debugCallId,
+          activityCallId,
+          taskType: opts.taskType,
+          provider: resolvedOpts.provider,
+          modelId: resolvedOpts.modelId,
+          chunkChars: chunk.length,
+          accumulatedChars: accumulated.length,
+          chunkPreview: previewDebugText(chunk, 400),
+        },
+      });
       // Update live streaming progress
       activityStore.updateStreamProgress(
         activityCallId,
@@ -107,11 +254,30 @@ export async function callAiStreaming(opts: StreamingCallOptions): Promise<Strea
   let result: StreamingResult;
   try {
     // [Domain:AI] STEP 1 — Try local proxy streaming if enabled
-    if (import.meta.env.VITE_USE_LOCAL_AI_PROXY === 'true') {
+    if (_shouldAttemptLocalProxy(wrappedOpts.provider, directApiKey)) {
       const localResult = await _tryLocalProxyStreaming(wrappedOpts);
       if (localResult) {
         _recordStreamingUsage(opts, localResult, startTime);
         _endStreamActivity(activityCallId, opts, localResult, startTime);
+        traceStoryDebugEvent({
+          domain: 'ai',
+          action: 'stream.success',
+          level: localResult.completed ? 'info' : 'warn',
+          summary: localResult.completed
+            ? `AI local-proxy stream completed for ${opts.taskType}.`
+            : `AI local-proxy stream stopped before completion for ${opts.taskType}.`,
+          details: {
+            callId: debugCallId,
+            activityCallId,
+            provider: wrappedOpts.provider,
+            modelId: wrappedOpts.modelId,
+            completed: localResult.completed,
+            outputChars: localResult.text.length,
+            usage: localResult.usage,
+            durationMs: Math.round(performance.now() - startTime),
+            responsePreview: previewDebugText(localResult.text),
+          },
+        });
         return localResult;
       }
     }
@@ -121,6 +287,50 @@ export async function callAiStreaming(opts: StreamingCallOptions): Promise<Strea
       result = await _callProviderStreaming(wrappedOpts, directApiKey);
       _recordStreamingUsage(opts, result, startTime);
       _endStreamActivity(activityCallId, opts, result, startTime);
+      traceStoryDebugEvent({
+        domain: 'ai',
+        action: 'stream.success',
+        level: result.completed ? 'info' : 'warn',
+        summary: result.completed
+          ? `AI stream completed for ${opts.taskType}.`
+          : `AI stream stopped before completion for ${opts.taskType}.`,
+        details: {
+          callId: debugCallId,
+          activityCallId,
+          provider: wrappedOpts.provider,
+          modelId: wrappedOpts.modelId,
+          completed: result.completed,
+          outputChars: result.text.length,
+          usage: result.usage,
+          durationMs: Math.round(performance.now() - startTime),
+          responsePreview: previewDebugText(result.text),
+        },
+      });
+      return result;
+    }
+
+    const fallback = _pickDirectStreamingFallback(wrappedOpts);
+    if (fallback) {
+      result = await _callProviderStreaming(fallback.opts, fallback.apiKey);
+      _recordStreamingUsage(fallback.opts, result, startTime);
+      _endStreamActivity(activityCallId, fallback.opts, result, startTime);
+      traceStoryDebugEvent({
+        domain: 'ai',
+        action: 'stream.fallback_success',
+        level: result.completed ? 'info' : 'warn',
+        summary: `AI stream used fallback provider ${fallback.opts.provider}.`,
+        details: {
+          callId: debugCallId,
+          activityCallId,
+          provider: fallback.opts.provider,
+          modelId: fallback.opts.modelId,
+          completed: result.completed,
+          outputChars: result.text.length,
+          usage: result.usage,
+          durationMs: Math.round(performance.now() - startTime),
+          responsePreview: previewDebugText(result.text),
+        },
+      });
       return result;
     }
 
@@ -130,6 +340,19 @@ export async function callAiStreaming(opts: StreamingCallOptions): Promise<Strea
       durationMs: Math.round(performance.now() - startTime),
       estimatedCost: 0, cached: false,
     });
+    traceStoryDebugEvent({
+      domain: 'ai',
+      action: 'stream.failed',
+      level: 'error',
+      summary: `AI streaming has no API key for provider ${opts.provider}.`,
+      details: {
+        callId: debugCallId,
+        activityCallId,
+        provider: opts.provider,
+        modelId: opts.modelId,
+        taskType: opts.taskType,
+      },
+    });
     throw new Error(
       `Streaming chưa có API key cho provider "${opts.provider}". Vui lòng thêm key trong Cài đặt AI.`
     );
@@ -138,6 +361,21 @@ export async function callAiStreaming(opts: StreamingCallOptions): Promise<Strea
       inputTokens: 0, outputTokens: 0,
       durationMs: Math.round(performance.now() - startTime),
       estimatedCost: 0, cached: false,
+    });
+    traceStoryDebugEvent({
+      domain: 'ai',
+      action: 'stream.failed',
+      level: 'error',
+      summary: `AI stream failed for ${opts.taskType}.`,
+      details: {
+        callId: debugCallId,
+        activityCallId,
+        provider: resolvedOpts.provider,
+        modelId: resolvedOpts.modelId,
+        taskType: opts.taskType,
+        durationMs: Math.round(performance.now() - startTime),
+        error,
+      },
     });
     throw error;
   }
@@ -163,6 +401,7 @@ async function _streamGemini(
   opts: StreamingCallOptions,
   apiKey: string,
 ): Promise<StreamingResult> {
+  const watchdog = createStreamWatchdog(opts.signal);
   const client = new GoogleGenerativeAI(apiKey);
   const model = client.getGenerativeModel({
     model: opts.modelId,
@@ -172,20 +411,25 @@ async function _streamGemini(
     },
   });
 
-  const result = await model.generateContentStream(
-    `${opts.systemPrompt}\n\n${opts.userPrompt}`,
-  );
-
   let accumulated = '';
   let inputTokens = 0;
   let outputTokens = 0;
 
   try {
-    for await (const chunk of result.stream) {
-      // [Domain:AI] STEP — Check abort before processing chunk
-      if (opts.signal?.aborted) {
-        return { text: accumulated, completed: false, usage: { inputTokens, outputTokens } };
-      }
+    const result = await watchdog.race(
+      model.generateContentStream(`${opts.systemPrompt}\n\n${opts.userPrompt}`),
+      `Gemini model ${opts.modelId}`,
+    );
+    const iterator = result.stream[Symbol.asyncIterator]();
+
+    while (true) {
+      watchdog.throwIfAborted(`Gemini model ${opts.modelId}`);
+      const { done, value: chunk } = await watchdog.race(
+        iterator.next(),
+        `Gemini model ${opts.modelId}`,
+      );
+      if (done) break;
+      watchdog.kick();
 
       const chunkText = chunk.text?.() ?? '';
       if (chunkText) {
@@ -200,6 +444,12 @@ async function _streamGemini(
       }
     }
   } catch (error) {
+    if (watchdog.timedOut()) {
+      if (accumulated.length > 0) {
+        return { text: accumulated, completed: false, usage: { inputTokens, outputTokens } };
+      }
+      throw buildStreamTimeoutError(`Gemini model ${opts.modelId}`);
+    }
     if (_isAbortError(error)) {
       return { text: accumulated, completed: false, usage: { inputTokens, outputTokens } };
     }
@@ -207,6 +457,8 @@ async function _streamGemini(
       return { text: accumulated, completed: false, usage: { inputTokens, outputTokens } };
     }
     throw error;
+  } finally {
+    watchdog.cleanup();
   }
 
   return { text: accumulated, completed: true, usage: { inputTokens, outputTokens } };
@@ -217,33 +469,45 @@ async function _streamClaude(
   opts: StreamingCallOptions,
   apiKey: string,
 ): Promise<StreamingResult> {
+  const watchdog = createStreamWatchdog(opts.signal);
   const baseUrl = (opts.baseUrl || 'https://api.anthropic.com/v1').replace(/\/+$/, '');
 
-  const response = await fetch(`${baseUrl}/messages`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify({
-      model: opts.modelId,
-      system: opts.systemPrompt,
-      max_tokens: 4096,
-      temperature: opts.temperature,
-      top_p: opts.topP,
-      stream: true,
-      messages: [{ role: 'user', content: opts.userPrompt }],
-    }),
-    signal: opts.signal,
-  });
+  try {
+    const response = await watchdog.race(fetch(`${baseUrl}/messages`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model: opts.modelId,
+        system: opts.systemPrompt,
+        max_tokens: 4096,
+        temperature: opts.temperature,
+        top_p: opts.topP,
+        stream: true,
+        messages: [{ role: 'user', content: opts.userPrompt }],
+      }),
+      signal: watchdog.signal,
+    }), `Claude provider ${opts.modelId}`);
+    watchdog.kick();
 
-  if (!response.ok) {
-    const errText = await response.text();
-    throw new Error(`Claude streaming error: ${response.status} ${errText}`);
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`Claude streaming error: ${response.status} ${errText}`);
+    }
+
+    return await _parseSSEStream(
+      response,
+      opts,
+      'claude',
+      watchdog,
+      `Claude provider ${opts.modelId}`,
+    );
+  } finally {
+    watchdog.cleanup();
   }
-
-  return _parseSSEStream(response, opts, 'claude');
 }
 
 /** OpenAI-compatible streaming (OpenRouter, HocAI, OpenAI) */
@@ -251,6 +515,7 @@ async function _streamOpenAiCompatible(
   opts: StreamingCallOptions,
   apiKey: string,
 ): Promise<StreamingResult> {
+  const watchdog = createStreamWatchdog(opts.signal);
   const baseUrl = opts.baseUrl
     ? opts.baseUrl.replace(/\/+$/, '')
     : OPENAI_COMPAT_BASE_URLS[opts.provider];
@@ -259,31 +524,42 @@ async function _streamOpenAiCompatible(
     throw new Error(`Streaming chưa hỗ trợ provider "${opts.provider}" (thiếu baseUrl).`);
   }
 
-  const response = await fetch(`${baseUrl}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: opts.modelId,
-      temperature: opts.temperature,
-      top_p: opts.topP,
-      stream: true,
-      messages: [
-        { role: 'system', content: opts.systemPrompt },
-        { role: 'user', content: opts.userPrompt },
-      ],
-    }),
-    signal: opts.signal,
-  });
+  try {
+    const response = await watchdog.race(fetch(`${baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: opts.modelId,
+        temperature: opts.temperature,
+        top_p: opts.topP,
+        stream: true,
+        messages: [
+          { role: 'system', content: opts.systemPrompt },
+          { role: 'user', content: opts.userPrompt },
+        ],
+      }),
+      signal: watchdog.signal,
+    }), `${opts.provider} provider ${opts.modelId}`);
+    watchdog.kick();
 
-  if (!response.ok) {
-    const errText = await response.text();
-    throw new Error(`Streaming error: ${response.status} ${errText}`);
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`Streaming error: ${response.status} ${errText}`);
+    }
+
+    return await _parseSSEStream(
+      response,
+      opts,
+      'openai',
+      watchdog,
+      `${opts.provider} provider ${opts.modelId}`,
+    );
+  } finally {
+    watchdog.cleanup();
   }
-
-  return _parseSSEStream(response, opts, 'openai');
 }
 
 // ─── SSE Stream Parser ──────────────────────────────────
@@ -294,6 +570,8 @@ async function _parseSSEStream(
   response: Response,
   opts: StreamingCallOptions,
   format: SSEFormat,
+  watchdog: StreamWatchdog,
+  target: string,
 ): Promise<StreamingResult> {
   const reader = response.body?.getReader();
   if (!reader) {
@@ -305,16 +583,15 @@ async function _parseSSEStream(
   let inputTokens = 0;
   let outputTokens = 0;
   let buffer = '';
+  let stoppedByOutputLimit = false;
 
   try {
     while (true) {
-      if (opts.signal?.aborted) {
-        reader.cancel();
-        return { text: accumulated, completed: false, usage: { inputTokens, outputTokens } };
-      }
+      watchdog.throwIfAborted(target);
 
-      const { done, value } = await reader.read();
+      const { done, value } = await watchdog.race(reader.read(), target);
       if (done) break;
+      watchdog.kick();
 
       buffer += decoder.decode(value, { stream: true });
 
@@ -327,7 +604,7 @@ async function _parseSSEStream(
         if (!trimmed || trimmed === 'event: ping') continue;
 
         if (trimmed === 'data: [DONE]') {
-          return { text: accumulated, completed: true, usage: { inputTokens, outputTokens } };
+          return { text: accumulated, completed: !stoppedByOutputLimit, usage: { inputTokens, outputTokens } };
         }
 
         if (!trimmed.startsWith('data: ')) continue;
@@ -336,6 +613,11 @@ async function _parseSSEStream(
         try {
           const parsed = JSON.parse(jsonStr);
           const chunkText = _extractChunkText(parsed, format);
+          const stopReason = _extractStopReason(parsed, format);
+
+          if (stopReason && _isOutputLimitStopReason(stopReason)) {
+            stoppedByOutputLimit = true;
+          }
 
           if (chunkText) {
             accumulated += chunkText;
@@ -354,6 +636,12 @@ async function _parseSSEStream(
       }
     }
   } catch (error) {
+    if (watchdog.timedOut()) {
+      if (accumulated.length > 0) {
+        return { text: accumulated, completed: false, usage: { inputTokens, outputTokens } };
+      }
+      throw buildStreamTimeoutError(target);
+    }
     if (_isAbortError(error)) {
       return { text: accumulated, completed: false, usage: { inputTokens, outputTokens } };
     }
@@ -366,7 +654,7 @@ async function _parseSSEStream(
     reader.releaseLock();
   }
 
-  return { text: accumulated, completed: true, usage: { inputTokens, outputTokens } };
+  return { text: accumulated, completed: !stoppedByOutputLimit, usage: { inputTokens, outputTokens } };
 }
 
 function _extractChunkText(parsed: Record<string, unknown>, format: SSEFormat): string {
@@ -413,33 +701,50 @@ function _extractUsage(
   return null;
 }
 
+function _extractStopReason(parsed: Record<string, unknown>, format: SSEFormat): string | undefined {
+  if (format === 'claude' && parsed.type === 'message_delta') {
+    const delta = parsed.delta as Record<string, unknown> | undefined;
+    return typeof delta?.stop_reason === 'string' ? delta.stop_reason : undefined;
+  }
+
+  if (format === 'openai') {
+    const choices = parsed.choices as Array<Record<string, unknown>> | undefined;
+    const reason = choices?.[0]?.finish_reason;
+    return typeof reason === 'string' ? reason : undefined;
+  }
+
+  return undefined;
+}
+
+function _isOutputLimitStopReason(reason: string): boolean {
+  return ['length', 'max_tokens', 'model_length'].includes(reason);
+}
+
 // ─── Local Proxy Streaming ──────────────────────────────
 
 async function _tryLocalProxyStreaming(
   opts: StreamingCallOptions,
 ): Promise<StreamingResult | null> {
-  const localProxyUrl = (import.meta.env.VITE_LOCAL_AI_PROXY_URL || 'http://localhost:3030').replace(/\/+$/, '');
-  const localProxyKey = import.meta.env.VITE_LOCAL_AI_PROXY_KEY || 'local-dummy-key';
-  const isNineRouter = /\/v1$/i.test(localProxyUrl);
+  const watchdog = createStreamWatchdog(opts.signal);
+  const localProxyUrl = getConfiguredLocalAiProxyUrl(opts.baseUrl);
+  const localProxyKey = getConfiguredLocalAiProxyKey(opts.apiKey);
+  const isNineRouter = isOpenAiCompatibleLocalProxyUrl(localProxyUrl);
   const endpoint = isNineRouter
     ? `${localProxyUrl}/chat/completions`
     : `${localProxyUrl}/${opts.modelId.includes('claude') ? 'claude-kiro-oauth' : 'gemini-cli-oauth'}/v1/chat/completions`;
-  const modelId = (() => {
-    const explicitModel = import.meta.env.VITE_LOCAL_AI_PROXY_MODEL?.trim();
-    if (explicitModel) return explicitModel;
-    if (/^(cc|if|qw|glm|ds|kimi|kmc)\//i.test(opts.modelId)) return opts.modelId;
-    return 'if/kimi-k2-thinking';
-  })();
+  const modelId = isNineRouter
+    ? resolveLocalAiProxyModelId(opts.modelId)
+    : opts.modelId;
 
   try {
-    const response = await fetch(endpoint, {
+    const response = await watchdog.race(fetch(endpoint, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${localProxyKey}`,
       },
       body: JSON.stringify({
-        model: isNineRouter ? modelId : opts.modelId,
+        model: modelId,
         temperature: opts.temperature,
         top_p: opts.topP,
         stream: true,
@@ -448,16 +753,22 @@ async function _tryLocalProxyStreaming(
           { role: 'user', content: opts.userPrompt },
         ],
       }),
-      signal: opts.signal,
-    });
+      signal: watchdog.signal,
+    }), `Local AI Proxy ${modelId}`);
+    watchdog.kick();
 
     if (!response.ok) {
       return null; // Fallback to direct
     }
 
-    return _parseSSEStream(response, opts, 'openai');
-  } catch {
+    return await _parseSSEStream(response, opts, 'openai', watchdog, `Local AI Proxy ${modelId}`);
+  } catch (error) {
+    if (_isAbortError(error) || _isStreamTimeoutError(error)) {
+      throw error;
+    }
     return null; // Connectivity error — fallback to direct
+  } finally {
+    watchdog.cleanup();
   }
 }
 
@@ -469,7 +780,18 @@ function _isAbortError(error: unknown): boolean {
   return false;
 }
 
+function _isStreamTimeoutError(error: unknown): boolean {
+  return error instanceof Error && error.message.includes('Luồng AI bị timed out');
+}
+
+function _shouldAttemptLocalProxy(provider: string, directApiKey: string | null): boolean {
+  if (import.meta.env.VITE_USE_LOCAL_AI_PROXY !== 'true') return false;
+  if (provider === NINE_ROUTER_PROVIDER_ID) return true;
+  return !directApiKey;
+}
+
 function _resolveDirectApiKey(provider: string, explicitApiKey?: string): string | null {
+  if (provider === NINE_ROUTER_PROVIDER_ID) return null;
   if (explicitApiKey?.trim()) return explicitApiKey.trim();
 
   const storeKeys = useAiStore.getState().apiKeys;
@@ -485,6 +807,53 @@ function _resolveDirectApiKey(provider: string, explicitApiKey?: string): string
   };
 
   return envKeyMap[provider]?.trim() || null;
+}
+
+function _getDirectKeyMap(excludedProvider?: string): Record<string, string> {
+  const providers = ['hocai', 'openrouter', 'openai', 'gemini', 'claude'];
+  return Object.fromEntries(
+    providers.flatMap((provider) => {
+      if (provider === excludedProvider) return [];
+      const key = _resolveDirectApiKey(provider);
+      return key ? [[provider, key]] : [];
+    })
+  );
+}
+
+function _pickDirectStreamingFallback(
+  opts: StreamingCallOptions,
+): { opts: StreamingCallOptions; apiKey: string } | null {
+  const directKeys = _getDirectKeyMap(opts.provider);
+  if (Object.keys(directKeys).length === 0) return null;
+
+  const aiState = useAiStore.getState();
+  const fallbackModel = getModelForTask(
+    opts.taskType,
+    aiState.models,
+    directKeys,
+    'auto',
+    aiState.taskModelOverrides,
+    aiState.modelHealth,
+    [],
+    aiState.preferredProvider,
+  );
+  if (!fallbackModel) return null;
+
+  const apiKey = directKeys[fallbackModel.provider];
+  if (!apiKey) return null;
+
+  const modelId = normalizeModelIdForProvider(fallbackModel.provider, fallbackModel.modelId);
+  return {
+    apiKey,
+    opts: {
+      ...opts,
+      provider: fallbackModel.provider,
+      modelId,
+      modelName: fallbackModel.name || fallbackModel.modelId,
+      baseUrl: fallbackModel.baseUrl,
+      apiKey,
+    },
+  };
 }
 
 function _recordStreamingUsage(

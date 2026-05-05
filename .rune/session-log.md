@@ -14,3 +14,6 @@
 [2026-04-27 21:32] — Integrated Novel Polish into the adaptation screen as an inline preflight tool with result preview, copy/prompt injection actions, and shared caller-configurable UI labels.
 [2026-04-28 06:05] — Verified writer continuity `P1-1` is already implemented in production code and added direct HSC regression tests plus targeted integration verification for `publish_pipeline` and `memory_indexer`.
 [2026-04-28 06:10] — Implemented `P1-2` by making plot Q&A consult local hybrid memory before shallow heuristics or AI, and added focused regressions for local-first answers and AI fallback.
+[2026-05-02 08:46] — Added `viettruyen-canon-v1` hybrid export: zip package with Markdown canon docs, JSON snapshots, context-map indexes, and a lightweight story graph, exposed via ExportPage as `CANON ZIP`.
+[2026-05-04 05:26] — Added persistent story debug trace across AI generation, streaming, workflow, storage persist/hydrate, auth login/logout, and close/reload lifecycle; verified with focused Vitest and build.
+[2026-05-05 21:23] — Added Chữa Canon plot direction preview before rewrite queue: AI proposes 2-3 route choices, the selected direction is persisted on SurgerySpec, and rewrite/QA tasks receive that direction as guidance.

@@ -7,6 +7,15 @@
 
 import type { CheckerReport } from './checker_types';
 import type { StrandTracker } from '../../types/strand_weave';
+import type { Chapter } from '../../types/story';
+import type { StrandWeaveMetrics } from '../../types/story_system';
+import {
+  calculateStrandWeaveMetrics,
+  generateStrandWeaveReport,
+  classifyChapterStrand,
+  DEFAULT_STRAND_WEAVE_CONFIG,
+  type StrandWeaveConfig
+} from '../../lib/strand_weave_system';
 
 const SYSTEM_PROMPT = `Bạn là chuyên gia phân tích nhịp độ truyện (Pacing Checker).
 Nhiệm vụ: Đánh giá sự cân bằng của các tuyến truyện (Strand Weave) để tránh làm độc giả mệt mỏi.
@@ -91,4 +100,66 @@ export function parsePacingReport(aiResponse: string): CheckerReport {
   } catch (err) {
     throw new Error('Failed to parse Pacing Checker response');
   }
+}
+
+/**
+ * Enhanced pacing check using Strand Weave System
+ * This provides automated analysis without requiring AI calls
+ */
+export function checkPacingWithStrandWeaveSystem(
+  chapters: Chapter[],
+  config: StrandWeaveConfig = DEFAULT_STRAND_WEAVE_CONFIG
+): {
+  metrics: StrandWeaveMetrics;
+  compliance: boolean;
+  issues: Array<{
+    severity: 'low' | 'medium' | 'high';
+    description: string;
+    suggestion: string;
+  }>;
+  recommendation: string;
+} {
+  const report = generateStrandWeaveReport(chapters, config);
+  const issues: Array<{
+    severity: 'low' | 'medium' | 'high';
+    description: string;
+    suggestion: string;
+  }> = [];
+
+  // Convert compliance details to issues
+  for (const detail of report.compliance.details) {
+    if (detail.includes('redline')) {
+      issues.push({
+        severity: 'high',
+        description: detail,
+        suggestion: `Cần điều chỉnh ngay lập tức để tuân thủ quy tắc Strand Weave`
+      });
+    } else if (detail.includes('deviates')) {
+      issues.push({
+        severity: 'medium',
+        description: detail,
+        suggestion: `Cân nhắc điều chỉnh tỷ lệ trong các chương tới`
+      });
+    }
+  }
+
+  return {
+    metrics: report.metrics,
+    compliance: report.compliance.overall,
+    issues,
+    recommendation: `Khuyến nghị: ${report.recommendation.next_strand.toUpperCase()} - ${report.recommendation.reason}`
+  };
+}
+
+/**
+ * Classify a chapter's strand type automatically
+ */
+export function autoClassifyChapterStrand(
+  chapter: Chapter,
+  projectContext?: {
+    hasRomance: boolean;
+    hasWorldBuilding: boolean;
+  }
+): 'quest' | 'fire' | 'constellation' {
+  return classifyChapterStrand(chapter, projectContext);
 }

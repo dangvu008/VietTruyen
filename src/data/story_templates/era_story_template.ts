@@ -20,60 +20,171 @@ export const ERA_STORY_TEMPLATE: StoryTemplate = {
   ],
   "subGenres": [
     {
-      "name": "Niên Đại / Thời Kỳ Đặc Biệt",
-      "description": "时代背景 + 生活奋斗 + 情感共鸣。在特定年代的洪流中，书写小人物的奋斗史诗。",
-      "coreAppeal": "时代背景 + 生活奋斗 + 情感共鸣。在特定年代的洪流中，书写小人物的奋斗史诗。"
+      "name": "六七十年代流",
+      "description": "计划经济，上山下乡，物资匮乏",
+      "coreAppeal": "空间囤货、知识碾压、改善生活",
+      "referenceWorks": [
+        "穿越七零做军嫂",
+        "七零年代小日子",
+        "重生六零好时光"
+      ]
+    },
+    {
+      "name": "八九十年代流",
+      "description": "改革开放，下海经商，时代变革",
+      "coreAppeal": "抓住机遇、创业致富、时代红利",
+      "referenceWorks": [
+        "重生八零之娇妻如雪",
+        "八零年代女首富"
+      ]
+    },
+    {
+      "name": "民国年代流",
+      "description": "乱世风云，家族兴衰，爱恨情仇",
+      "coreAppeal": "乱世生存、家族崛起、爱情坚守",
+      "referenceWorks": [
+        "民国大小姐",
+        "乱世佳人"
+      ]
+    },
+    {
+      "name": "建国初期流",
+      "description": "百废待兴，建设热潮，理想主义",
+      "coreAppeal": "技术贡献、建设成就、时代荣光",
+      "referenceWorks": [
+        "穿越五零年代当军嫂"
+      ]
     }
   ],
-  "worldRules": [],
-  "coolPatterns": [],
-  "conflictPatterns": [],
+  "worldRules": [
+    {
+      "name": "六七十年代特征",
+      "description": "要素 / 特点 / 影响 ------ / ------ / ------ 经济 / 计划经济，凭票供应 / 物资紧缺 政治 / 运动频繁 / 需要谨慎 社会 / 集体主义 / 个人服从集体 婚姻 / 组织介绍 / 感情次要 工作 / 分配制度 / 铁饭碗"
+    },
+    {
+      "name": "八九十年代特征",
+      "description": "要素 / 特点 / 影响 ------ / ------ / ------ 经济 / 改革开放 / 机遇涌现 政治 / 相对宽松 / 可以经商 社会 / 观念转变 / 个人奋斗 婚姻 / 自由恋爱 / 感情为主 工作 / 下海潮 / 打破铁饭碗"
+    },
+    {
+      "name": "资源体系",
+      "description": "**票证**: 粮票、布票、肉票（六七十年代） **关系**: 人脉是最重要的资源 **信息**: 政策信息、商业机会 **技能**: 手艺、知识、文化 --"
+    }
+  ],
+  "coolPatterns": [
+    {
+      "name": "空间囤货",
+      "scenario": "主角有空间，提前囤积物资",
+      "appeal": "别人饿肚子，主角吃香喝辣",
+      "keyNote": "要隐藏好，不能太张扬"
+    },
+    {
+      "name": "知识碾压",
+      "scenario": "用现代知识解决问题",
+      "appeal": "别人不会的，主角轻松搞定"
+    },
+    {
+      "name": "抓住机遇",
+      "scenario": "利用先知抓住时代机遇",
+      "appeal": "提前布局，赚取第一桶金"
+    },
+    {
+      "name": "打脸极品",
+      "scenario": "极品亲戚/邻居欺负主角",
+      "appeal": "主角发达后，对方后悔莫及",
+      "keyNote": "要有铺垫，不能太刻意"
+    }
+  ],
+  "conflictPatterns": [
+    {
+      "type": "卷一：立足 (1-60章)",
+      "source": "底层",
+      "resolution": "站稳脚跟，改善生活"
+    },
+    {
+      "type": "卷二：发展 (61-150章)",
+      "source": "中下层",
+      "resolution": "获得第一桶金"
+    },
+    {
+      "type": "卷三：崛起 (151-250章)",
+      "source": "中层",
+      "resolution": "成为当地富户"
+    },
+    {
+      "type": "卷四：巅峰 (251-350章)",
+      "source": "上层",
+      "resolution": "达到人生巅峰"
+    }
+  ],
   "outlineArcs": [
     {
       "title": "卷一：立足 (1-60章)",
-      "chapterRange": "1-100",
+      "chapterRange": "1-60",
       "coreFocus": "穿越/重生，适应环境",
       "coreConflict": "底层",
       "climax": "站稳脚跟，改善生活"
     },
     {
       "title": "卷二：发展 (61-150章)",
-      "chapterRange": "1-100",
+      "chapterRange": "61-150",
       "coreFocus": "抓住机遇，开始积累",
       "coreConflict": "中下层",
       "climax": "获得第一桶金"
     },
     {
       "title": "卷三：崛起 (151-250章)",
-      "chapterRange": "1-100",
+      "chapterRange": "151-250",
       "coreFocus": "事业发展，地位提升",
       "coreConflict": "中层",
       "climax": "成为当地富户"
     },
     {
       "title": "卷四：巅峰 (251-350章)",
-      "chapterRange": "1-100",
+      "chapterRange": "251-350",
       "coreFocus": "事业巅峰，家庭圆满",
       "coreConflict": "上层",
       "climax": "达到人生巅峰"
     },
     {
       "title": "卷五：圆满 (351-400章)",
-      "chapterRange": "1-100",
+      "chapterRange": "351-400",
       "coreFocus": "子孙满堂，安享晚年",
       "coreConflict": "顶层",
       "climax": "圆满结局"
     }
   ],
+  "targetWordCount": "1.000.000 chữ",
+  "targetChapterCount": 400,
   "pitfalls": [
     {
-      "description": "Thiết lập trước sau mâu thuẫn.",
+      "description": "年代感薄弱，像现代文",
+      "severity": "critical"
+    },
+    {
+      "description": "政治敏感内容",
+      "severity": "critical"
+    },
+    {
+      "description": "金手指太明显",
+      "severity": "critical"
+    },
+    {
+      "description": "情节拖沓",
       "severity": "critical"
     }
   ],
   "bestPractices": [
     {
-      "description": "Thiết lập tự nhất quán."
+      "description": "注重年代细节"
+    },
+    {
+      "description": "避开敏感话题"
+    },
+    {
+      "description": "金手指要隐藏"
+    },
+    {
+      "description": "节奏要紧凑"
     }
   ],
   "entityTags": [

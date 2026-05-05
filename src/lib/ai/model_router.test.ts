@@ -47,14 +47,14 @@ const TEST_MODELS: AiModel[] = [
     id: 'creative-cheap',
     name: 'Creative Cheap',
     provider: 'openrouter',
-    modelId: 'mistralai/mistral-small-creative',
+    modelId: 'mistralai/mistral-small-2603',
     description: 'Creative writing model',
     isCustom: false,
     tier: 'quality',
-    inputCostPer1M: 0.10,
-    outputCostPer1M: 0.30,
-    contextWindow: 32768,
-    capabilities: ['cheap', 'creative_writing', 'editing'],
+    inputCostPer1M: 0.15,
+    outputCostPer1M: 0.60,
+    contextWindow: 262144,
+    capabilities: ['cheap', 'creative_writing', 'editing', 'long_context', 'reasoning', 'vietnamese'],
   },
 ];
 
@@ -89,6 +89,22 @@ describe('getModelForTask', () => {
     expect(model?.id).toBe('creative-cheap');
     expect(estimateModelTaskCost('write_chapter', model!))
       .toBeLessThan(estimateModelTaskCost('write_chapter', TEST_MODELS[2]));
+  });
+
+  it('limits smart routing to the preferred provider when that provider has available models', () => {
+    const model = getModelForTask(
+      'write_chapter',
+      TEST_MODELS,
+      undefined,
+      'auto',
+      {},
+      {},
+      [],
+      'hocai'
+    );
+
+    expect(model?.provider).toBe('hocai');
+    expect(model?.id).toBe('balanced-mid');
   });
 
   it('prefers long-context cheap models for summarization over tiny story models', () => {
@@ -146,7 +162,8 @@ describe('getModelForTask', () => {
       'auto'
     );
 
-    expect(model?.id).toBe('openrouter-deepseek-v3');
+    expect(model?.id).not.toBe('openrouter-deepseek-v4-flash');
+    expect(model?.id).toBe('creative-cheap');
   });
 
   it('falls back to an available tier when task override is filtered out', () => {
@@ -159,5 +176,60 @@ describe('getModelForTask', () => {
     );
 
     expect(model?.id).toBe('flash-fast');
+  });
+
+  it('skips models that are in cooldown or unavailable', () => {
+    const model = getModelForTask(
+      'write_chapter',
+      TEST_MODELS,
+      undefined,
+      'auto',
+      {},
+      {
+        'creative-cheap': {
+          status: 'cooldown',
+          unavailableUntil: '2999-01-01T00:00:00.000Z',
+          lastError: 'rate limited',
+          updatedAt: '2026-05-01T00:00:00.000Z',
+        },
+        'quality-pro': {
+          status: 'unavailable',
+          lastError: 'auth failed',
+          updatedAt: '2026-05-01T00:00:00.000Z',
+        },
+      }
+    );
+
+    expect(model?.id).toBe('balanced-mid');
+  });
+
+  it('skips a 9router model when its upstream provider is unavailable', () => {
+    const nineRouterModel: AiModel = {
+      id: 'nine-router-if-kimi-k2-thinking',
+      name: 'if/kimi-k2-thinking (9router)',
+      provider: 'nine-router',
+      modelId: 'if/kimi-k2-thinking',
+      description: '',
+      isCustom: true,
+      tier: 'quality',
+      capabilities: ['reasoning', 'creative_writing'],
+    };
+
+    const model = getModelForTask(
+      'write_chapter',
+      [nineRouterModel, TEST_MODELS[1]],
+      undefined,
+      'auto',
+      {},
+      {
+        'nine-router-if': {
+          status: 'unavailable',
+          lastError: 'provider failed',
+          updatedAt: '2026-05-01T00:00:00.000Z',
+        },
+      }
+    );
+
+    expect(model?.id).toBe('balanced-mid');
   });
 });

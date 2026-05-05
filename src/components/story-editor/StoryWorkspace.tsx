@@ -12,6 +12,7 @@ import { ChapterEditorPane } from './ChapterEditorPane';
 import { AIAssistantPanel } from './AIAssistantPanel';
 import { EditorStatusBar } from './EditorStatusBar';
 import { AutosaveRecoveryBanner } from './AutosaveRecoveryBanner';
+import VersionHistoryPanel from '../shared/VersionHistoryPanel';
 import type {
   AIReviewSummary,
   ChatMessage,
@@ -19,6 +20,8 @@ import type {
   EditorAiProposal,
   EditorMode,
   EditorSelection,
+  EditorSelectionIntent,
+  EditorSelectionIntentRequest,
   ProjectInfo,
   PromptScope,
 } from './editor_types';
@@ -31,12 +34,25 @@ import { useCreationChatStore } from '../../store/use_creation_chat_store';
 import { useStoryEditorChatStore } from '../../store/use_story_editor_chat_store';
 import { useWorkflowSessionStore } from '../../store/use_workflow_session_store';
 import { useNotificationStore } from '../../store/use_notification_store';
+import { useAppearanceStore } from '../../store/use_appearance_store';
 import { useProjectStore, getProjectSnapshot } from '../../store/use_project_store';
 import { sortChaptersBySequence } from '../../lib/memory/chapter_order';
 import { resolveFocusedFragmentSelection } from './editor_prompt_context';
-import { buildStoryEditorSeedMessages } from './story_editor_chat_history';
+import {
+  buildStoryEditorSeedMessages,
+  mergeStoryEditorChatMessages,
+} from './story_editor_chat_history';
+import { applyEditorDraftInsertion } from './editor_draft_insertion';
 import { describeCreationProgress } from '../../lib/creation/creation_progress';
+import { restoreImportedProjectFromSnapshot } from '../../lib/adaptation/imported_project_recovery';
 import { isImportedProject } from '../../lib/project/project_display_stats';
+import { useTemplateStore } from '../../store/use_template_store';
+import { extractWriterVisibleContent } from '../../lib/ai/writer_response_content';
+import { resolveExtractedTemplateFromSource } from '../../lib/story_templates/shared_template_registry';
+import {
+  buildProjectTemplateSourceText,
+  countProjectTemplateChapterContentChars,
+} from '../../lib/story_templates/project_template_source';
 import { useAutosave } from '../../hooks/use_autosave';
 import {
   getDrafts,
@@ -47,6 +63,10 @@ import {
   type AutosaveDraft,
 } from '../../lib/storage/autosave_draft_store';
 import { useGenerationStore } from '../../store/use_generation_store';
+import type { QualityMode } from '../../types/workflow';
+import type { PendingHook, PropagationTask } from '../../types/narrative_memory';
+import { getChapterContinuityTasks } from '../../lib/memory/memory_query';
+import { getOpenHooksForProject } from '../../lib/memory/pending_hooks_repository';
 
 interface Props {
   project: Project;
@@ -89,9 +109,15 @@ export default function StoryWorkspace({
   const [selectionMap, setSelectionMap] = useState<Record<string, EditorSelection | null>>({});
   const [proposalMap, setProposalMap] = useState<Record<string, EditorAiProposal | null>>({});
   const [assistantPrefill, setAssistantPrefill] = useState('');
+  const [selectionIntentRequest, setSelectionIntentRequest] = useState<EditorSelectionIntentRequest | null>(null);
   const [isReloadingChapterContent, setIsReloadingChapterContent] = useState(false);
+  const [isRestoringImportedSource, setIsRestoringImportedSource] = useState(false);
   const [isHydrating, setIsHydrating] = useState(true);
   const [batchProgress, setBatchProgress] = useState<{ current: number; total: number; isRunning: boolean } | null>(null);
+  const [qualityMode, setQualityMode] = useState<QualityMode>('quality');
+  const [showVersionHistory, setShowVersionHistory] = useState(false);
+  const [isSavingTemplate, setIsSavingTemplate] = useState(false);
+  const [templateSaveLabel, setTemplateSaveLabel] = useState('');
 
   // ── Session Tracking ──
   const [sessionStartTime] = useState(() => Date.now());
@@ -100,10 +126,13 @@ export default function StoryWorkspace({
 
   // ── Autosave Recovery State ──
   const [recoveryDrafts, setRecoveryDrafts] = useState<AutosaveDraft[]>([]);
+  const [chapterContinuityTasks, setChapterContinuityTasks] = useState<PropagationTask[]>([]);
+  const [openHooks, setOpenHooks] = useState<PendingHook[]>([]);
 
   // ── Store actions ──
   const insertChapter = useProjectStore((state) => state.insertChapter);
   const removeChapter = useProjectStore((state) => state.removeChapter);
+  const updateChapter = useProjectStore((state) => state.updateChapter);
   const replaceChapters = useProjectStore((state) => state.replaceProjectChapters);
 
   // ── Token Tracking (real data from store) ──
@@ -117,8 +146,8 @@ export default function StoryWorkspace({
     progress: state.progress,
     draftSavedAt: state.draftSavedAt,
   }));
+  const syncEditorTextMessages = useCreationChatStore((state) => state.syncEditorTextMessages);
   const setChapterMessages = useStoryEditorChatStore((state) => state.setChapterMessages);
-  const seedChapterMessages = useStoryEditorChatStore((state) => state.seedChapterMessages);
   const startWorkflowIntent = useWorkflowSessionStore((state) => state.startIntent);
   // [Domain:StoryEditor] Scratch streaming state from generation store
   const isScratchStreaming = useGenerationStore((s) => s.isScratchStreaming);
@@ -130,17 +159,24 @@ export default function StoryWorkspace({
   const pushNotification = useNotificationStore((state) => state.push);
   const hydrateProjectChapters = useProjectStore((state) => state.hydrateProjectChapters);
   const replaceProjectChapters = useProjectStore((state) => state.replaceProjectChapters);
-  const activeMessages = useStoryEditorChatStore((state) =>
+  const activeStoredMessages = useStoryEditorChatStore((state) =>
     activeChapterId
       ? state.chapterMessagesByProject[project.id]?.[activeChapterId] || []
       : [],
   );
   const creationSeedMessages = useMemo(
     () =>
-      creationSession.linkedProjectId === project.id
-        ? buildStoryEditorSeedMessages(creationSession.messages)
+      creationSession.linkedProjectId === project.id && activeChapterId
+        ? buildStoryEditorSeedMessages(creationSession.messages, {
+            projectId: project.id,
+            chapterId: activeChapterId,
+          })
         : [],
-    [creationSession.linkedProjectId, creationSession.messages, project.id],
+    [activeChapterId, creationSession.linkedProjectId, creationSession.messages, project.id],
+  );
+  const activeMessages = useMemo(
+    () => mergeStoryEditorChatMessages(creationSeedMessages, activeStoredMessages),
+    [activeStoredMessages, creationSeedMessages],
   );
 
   const activeChapter = useMemo(
@@ -192,6 +228,31 @@ export default function StoryWorkspace({
       setRecoveryDrafts(drafts);
     }
   }, [project.id]);
+
+  useEffect(() => {
+    if (!activeChapterId) {
+      setChapterContinuityTasks([]);
+      setOpenHooks([]);
+      return;
+    }
+
+    let cancelled = false;
+    const loadContinuityContext = async () => {
+      const [tasks, hooks] = await Promise.all([
+        getChapterContinuityTasks(project.id, activeChapterId).catch(() => []),
+        getOpenHooksForProject(project.id).catch(() => []),
+      ]);
+
+      if (cancelled) return;
+      setChapterContinuityTasks(tasks);
+      setOpenHooks(hooks);
+    };
+
+    void loadContinuityContext();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeChapterId, project.id, project.updatedAt]);
 
   // [Domain:StoryEditor] STEP — Register autosave listener for streaming chunks
   // Fires every chunk: debounces to write localStorage every ~500ms max.
@@ -308,6 +369,16 @@ export default function StoryWorkspace({
     return localTitles[activeChapterId] ?? activeChapter?.title ?? '';
   }, [activeChapterId, localTitles, activeChapter]);
 
+  const storySourceChapters = useMemo(
+    () =>
+      chapters.map((chapter) => ({
+        ...chapter,
+        content: localContents[chapter.id] ?? chapter.content ?? '',
+        title: localTitles[chapter.id] ?? chapter.title,
+      })),
+    [chapters, localContents, localTitles],
+  );
+
   const activeSelection = useMemo(
     () => (activeChapterId ? selectionMap[activeChapterId] ?? null : null),
     [activeChapterId, selectionMap],
@@ -347,10 +418,19 @@ export default function StoryWorkspace({
     const map: Record<string, ChapterUIStatus> = {};
     for (const ch of chapters) {
       const hasDirty = ch.id in localContents && localContents[ch.id] !== ch.content;
-      map[ch.id] = deriveChapterUIStatus(ch, Boolean(proposalMap[ch.id]), hasDirty);
+      let status = deriveChapterUIStatus(ch, Boolean(proposalMap[ch.id]), hasDirty);
+
+      // [Domain:StoryEditor] FIX RC-3 visual — During hydration, chapters appear 'empty'
+      // because localStorage strips content. Override to 'ai-draft' so UI shows
+      // "AI nháp" (loading indicator) instead of misleading "Trống"
+      if (isHydrating && status === 'empty') {
+        status = 'ai-draft';
+      }
+
+      map[ch.id] = status;
     }
     return map;
-  }, [chapters, localContents, proposalMap]);
+  }, [chapters, isHydrating, localContents, proposalMap]);
 
   const projectInfo: ProjectInfo = useMemo(
     () => ({ id: project.id, title: project.title }),
@@ -364,11 +444,6 @@ export default function StoryWorkspace({
       draftSavedAt: creationSession.draftSavedAt,
     };
   }, [creationSession.draftSavedAt, creationSession.linkedProjectId, creationSession.progress, project.id]);
-
-  useEffect(() => {
-    if (!activeChapterId || creationSeedMessages.length === 0) return;
-    seedChapterMessages(project.id, activeChapterId, creationSeedMessages);
-  }, [activeChapterId, creationSeedMessages, project.id, seedChapterMessages]);
 
   // [Domain:StoryEditor] STEP 2 — Derive volume/part label from MasterOutline
   const partLabel = useMemo(() => {
@@ -403,8 +478,9 @@ export default function StoryWorkspace({
     (messages: ChatMessage[]) => {
       if (!activeChapterId) return;
       setChapterMessages(project.id, activeChapterId, messages);
+      syncEditorTextMessages(project.id, activeChapterId, messages);
     },
-    [activeChapterId, project.id, setChapterMessages],
+    [activeChapterId, project.id, setChapterMessages, syncEditorTextMessages],
   );
 
   const reviewSummary = useMemo<AIReviewSummary | undefined>(() => {
@@ -412,8 +488,9 @@ export default function StoryWorkspace({
     if (!source.trim()) return undefined;
 
     const trimmed = source.replace(/\s+/g, ' ').trim();
-    const summary = activeChapter?.summary || `${trimmed.slice(0, 170)}${trimmed.length > 170 ? '…' : ''}`;
+    const summaryBase = activeChapter?.summary || `${trimmed.slice(0, 170)}${trimmed.length > 170 ? '…' : ''}`;
     const warnings: AIReviewSummary['warnings'] = [];
+    const revisionTasks: string[] = [];
 
     if (wordCount > 0 && wordCount < 400) {
       warnings.push({
@@ -442,6 +519,31 @@ export default function StoryWorkspace({
       });
     }
 
+    chapterContinuityTasks.slice(0, 3).forEach((task) => {
+      warnings.push({
+        id: `continuity-${task.id}`,
+        type: task.attributeKey.toLowerCase().includes('time') ? 'timeline' : 'continuity',
+        message: task.recommendedAction,
+        severity: task.severity === 'breaking' ? 'high' : task.severity === 'warning' ? 'medium' : 'low',
+      });
+      revisionTasks.push(`Vá continuity Ch.${task.chapterIndex}: ${task.recommendedAction}`);
+    });
+
+    openHooks
+      .filter((hook) => !activeChapter || hook.plantedChapterIndex <= (activeChapter.sequenceNumber ?? 0))
+      .slice(0, 2)
+      .forEach((hook) => {
+        warnings.push({
+          id: `hook-${hook.id}`,
+          type: 'hook',
+          message: hook.expectedPayoffBy
+            ? `Hook chưa thanh toán trước Ch.${hook.expectedPayoffBy}: ${hook.description}`
+            : `Hook đang mở: ${hook.description}`,
+          severity: hook.expectedPayoffBy && activeChapter && hook.expectedPayoffBy <= (activeChapter.sequenceNumber ?? 0) + 1 ? 'high' : 'medium',
+        });
+        revisionTasks.push(`Giữ hoặc thanh toán hook: ${hook.description}`);
+      });
+
     if (!warnings.length) {
       warnings.push({
         id: 'voice',
@@ -451,6 +553,12 @@ export default function StoryWorkspace({
       });
     }
 
+    const summary = [
+      summaryBase,
+      chapterContinuityTasks.length > 0 ? `Có ${chapterContinuityTasks.length} cảnh báo continuity cần rà.` : '',
+      openHooks.length > 0 ? `${openHooks.length} hook vẫn đang mở.` : '',
+    ].filter(Boolean).join(' ');
+
     return {
       summary,
       warnings,
@@ -458,9 +566,11 @@ export default function StoryWorkspace({
       notes: [
         'Tăng căng thẳng ở cuối chương để giữ hook.',
         'Nếu có phóng tác, giữ sự kiện chính nhưng đổi nhịp và giọng kể.',
+        ...revisionTasks,
       ],
+      revisionTasks,
     };
-  }, [activeChapter?.summary, activeProposal, resolvedContent, wordCount]);
+  }, [activeChapter, activeProposal, chapterContinuityTasks, openHooks, resolvedContent, wordCount]);
 
   // ── Handlers ──
 
@@ -479,6 +589,43 @@ export default function StoryWorkspace({
     },
     [activeChapterId],
   );
+
+  const handleRenameActiveChapter = useCallback(async (title: string) => {
+    const nextTitle = title.trim();
+    if (!activeChapterId || !activeChapter || !nextTitle) return;
+
+    const previousLocalTitle = localTitles[activeChapterId];
+    const savedAt = new Date().toISOString();
+
+    setLocalTitles((prev) => ({
+      ...prev,
+      [activeChapterId]: nextTitle,
+    }));
+
+    try {
+      await onUpdateChapter(project.id, activeChapterId, {
+        title: nextTitle,
+        updatedAt: savedAt,
+      });
+      setLocalTitles((prev) => {
+        const next = { ...prev };
+        delete next[activeChapterId];
+        return next;
+      });
+      setLastSavedAt(savedAt);
+    } catch (error) {
+      setLocalTitles((prev) => {
+        const next = { ...prev };
+        if (previousLocalTitle == null) {
+          delete next[activeChapterId];
+        } else {
+          next[activeChapterId] = previousLocalTitle;
+        }
+        return next;
+      });
+      throw error;
+    }
+  }, [activeChapter, activeChapterId, localTitles, onUpdateChapter, project.id]);
 
   const handleSelectionChange = useCallback(
     (selection: EditorSelection | null) => {
@@ -545,31 +692,50 @@ export default function StoryWorkspace({
     setLastSavedAt(savedAt);
   }, [activeChapter, activeChapterId, localContents, localTitles, onUpdateChapter, project.id]);
 
+  const createDraftChapterAtEnd = useCallback(() => {
+    const id = createId();
+    const sequenceNumber = chapters.length + 1;
+    const newChapter: Chapter = {
+      id,
+      title: `Chương ${sequenceNumber}`,
+      content: '',
+      sequenceNumber,
+      status: 'draft',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    void onAddChapter(project.id, newChapter);
+    setActiveChapterId(id);
+    return id;
+  }, [chapters.length, onAddChapter, project.id]);
+
   const handleAiProposal = useCallback(
     ({
       content,
       scope,
       prompt,
+      selection,
     }: {
       content: string;
       scope: PromptScope;
       prompt: string;
+      selection?: EditorSelection;
     }) => {
       let targetId = activeChapterId;
 
       if (!targetId) {
-        targetId = createId();
-        const newChapter: Chapter = {
-          id: targetId,
-          title: `Chương ${chapters.length + 1}`,
-          content: '',
-          status: 'draft',
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        };
-        void onAddChapter(project.id, newChapter);
-        setActiveChapterId(targetId);
+        targetId = createDraftChapterAtEnd();
       }
+
+      const resolvedSelection =
+        scope === 'fragment'
+          ? selection
+            ?? resolveFocusedFragmentSelection(
+                localContents[targetId!] ?? activeChapter?.content ?? '',
+                activeSelection,
+              )
+            ?? undefined
+          : undefined;
 
       setProposalMap((prev) => ({
         ...prev,
@@ -578,48 +744,146 @@ export default function StoryWorkspace({
           scope,
           prompt,
           createdAt: new Date().toISOString(),
-          selection:
-            scope === 'fragment'
-              ? resolveFocusedFragmentSelection(
-                  localContents[targetId!] ?? activeChapter?.content ?? '',
-                  activeSelection,
-                ) ?? undefined
-              : undefined,
+          selection: resolvedSelection,
         },
       }));
       setCurrentMode('review');
     },
-    [activeChapterId, activeSelection, chapters.length, onAddChapter, project.id],
+    [activeChapter?.content, activeChapterId, activeSelection, createDraftChapterAtEnd, localContents],
   );
+
+  const applyProposalToDraft = useCallback((
+    proposal: Pick<EditorAiProposal, 'content' | 'scope' | 'selection'>,
+    targetChapterId = activeChapterId,
+  ) => {
+    if (!targetChapterId) return;
+
+    const targetChapter = chapters.find((chapter) => chapter.id === targetChapterId) ?? null;
+    const currentContent = localContents[targetChapterId] ?? targetChapter?.content ?? '';
+    const nextContent = applyEditorDraftInsertion(currentContent, proposal);
+    const savedAt = new Date().toISOString();
+
+    setLocalContents((prev) => ({
+      ...prev,
+      [targetChapterId]: nextContent,
+    }));
+
+    const replacesWholeChapter =
+      proposal.scope === 'fragment'
+      && Boolean(proposal.selection)
+      && (proposal.selection?.start ?? -1) <= 0
+      && (proposal.selection?.end ?? 0) >= currentContent.length;
+
+    setCurrentMode(proposal.scope === 'fragment' && !replacesWholeChapter ? 'detail' : 'write');
+    setActiveChapterId(targetChapterId);
+
+    void Promise.resolve(
+      onUpdateChapter(project.id, targetChapterId, {
+        content: nextContent,
+        status: 'draft',
+        updatedAt: savedAt,
+      }),
+    ).then(() => {
+      setLocalContents((prev) => {
+        const next = { ...prev };
+        delete next[targetChapterId];
+        return next;
+      });
+      setLastSavedAt(savedAt);
+      clearChapterDraft(targetChapterId);
+    }).catch((error: unknown) => {
+      console.error('[applyProposalToDraft] Failed to persist accepted AI proposal:', error);
+      pushNotification({
+        type: 'error',
+        title: 'Chưa lưu được bản thảo',
+        message: 'Nội dung đã được chèn vào editor tạm thời, nhưng chưa ghi được vào kho lưu trữ.',
+      });
+    });
+  }, [
+    activeChapterId,
+    chapters,
+    clearChapterDraft,
+    localContents,
+    onUpdateChapter,
+    project.id,
+    pushNotification,
+  ]);
 
   const handleAcceptProposal = useCallback(() => {
     if (!activeChapterId || !activeProposal) return;
 
-    setLocalContents((prev) => {
-      const current = prev[activeChapterId] ?? activeChapter?.content ?? '';
-      let nextContent = current;
-
-      if (activeProposal.scope === 'fragment' && activeProposal.selection) {
-        const { start, end } = activeProposal.selection;
-        nextContent = `${current.slice(0, start)}${activeProposal.content}${current.slice(end)}`;
-      } else {
-        nextContent = current.trim()
-          ? `${current.trim()}\n\n${activeProposal.content}`
-          : activeProposal.content;
-      }
-
-      return {
-        ...prev,
-        [activeChapterId]: nextContent,
-      };
-    });
+    applyProposalToDraft(activeProposal);
 
     setProposalMap((prev) => ({
       ...prev,
       [activeChapterId]: null,
     }));
-    setCurrentMode(activeProposal.scope === 'fragment' ? 'detail' : 'write');
-  }, [activeChapter?.content, activeChapterId, activeProposal]);
+  }, [activeChapterId, activeProposal, applyProposalToDraft]);
+
+  const handleApplyRewrite = useCallback(
+    ({
+      content,
+      scope,
+      selection,
+    }: {
+      content: string;
+      scope: PromptScope;
+      prompt: string;
+      selection?: EditorSelection;
+    }) => {
+      const targetId = activeChapterId ?? createDraftChapterAtEnd();
+      const targetChapter = chapters.find((chapter) => chapter.id === targetId) ?? null;
+      const resolvedSelection =
+        scope === 'fragment'
+          ? selection
+            ?? resolveFocusedFragmentSelection(
+                localContents[targetId] ?? targetChapter?.content ?? '',
+                activeSelection,
+              )
+            ?? undefined
+          : undefined;
+
+      applyProposalToDraft({
+        content,
+        scope,
+        selection: resolvedSelection,
+      }, targetId);
+
+      setProposalMap((prev) => ({
+        ...prev,
+        [targetId]: null,
+      }));
+    },
+    [activeChapterId, activeSelection, applyProposalToDraft, chapters, createDraftChapterAtEnd, localContents],
+  );
+
+  const handleApplyStoryRewrite = useCallback(
+    ({
+      chapters: rewrittenChapters,
+    }: {
+      chapters: Array<{ chapterId: string; title: string; content: string }>;
+      prompt: string;
+    }) => {
+      if (rewrittenChapters.length === 0) return;
+
+      setLocalContents((prev) => {
+        const next = { ...prev };
+        for (const rewrittenChapter of rewrittenChapters) {
+          next[rewrittenChapter.chapterId] = rewrittenChapter.content;
+        }
+        return next;
+      });
+
+      if (activeChapterId && rewrittenChapters.some((chapter) => chapter.chapterId === activeChapterId)) {
+        setProposalMap((prev) => ({
+          ...prev,
+          [activeChapterId]: null,
+        }));
+        setCurrentMode('write');
+      }
+    },
+    [activeChapterId],
+  );
 
   const handleRejectProposal = useCallback(() => {
     if (!activeChapterId) return;
@@ -630,12 +894,32 @@ export default function StoryWorkspace({
     setCurrentMode('write');
   }, [activeChapterId]);
 
+  const handleRestoreVersion = useCallback((content: string, title: string) => {
+    if (!activeChapterId) return;
+
+    setLocalContents((prev) => ({
+      ...prev,
+      [activeChapterId]: content,
+    }));
+    setLocalTitles((prev) => ({
+      ...prev,
+      [activeChapterId]: title,
+    }));
+    setProposalMap((prev) => ({
+      ...prev,
+      [activeChapterId]: null,
+    }));
+    setCurrentMode('write');
+    setShowVersionHistory(false);
+  }, [activeChapterId]);
+
   const handleInsertChapter = useCallback((sequenceNumber: number) => {
     const id = createId();
     const newChapter: Chapter = {
       id,
       title: `Chương ${sequenceNumber}`,
       content: '',
+      sequenceNumber,
       status: 'draft',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -647,31 +931,38 @@ export default function StoryWorkspace({
   }, [insertChapter, project.id]);
 
   const handleCreateNew = useCallback(() => {
-    const id = createId();
-    const newChapter: Chapter = {
-      id,
-      title: `Chương ${chapters.length + 1}`,
-      content: '',
-      status: 'draft',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-    void onAddChapter(project.id, newChapter);
+    const id = createDraftChapterAtEnd();
     setActiveChapterId(id);
     setCurrentMode('write');
-  }, [chapters.length, onAddChapter, project.id]);
+  }, [createDraftChapterAtEnd]);
 
-  const handleGenerateFromScratch = useCallback(async () => {
-    if (!activeChapterId || !activeChapter || isScratchStreaming) return;
+  interface ChapterGenerationRunOptions {
+    workflowQualityMode?: QualityMode;
+  }
+
+  const handleGenerateFromScratch = useCallback(async (
+    targetChapterId?: string,
+    options?: ChapterGenerationRunOptions,
+  ) => {
+    const resolvedChapterId = targetChapterId ?? activeChapterId;
+    const targetChapter = chapters.find((chapter) => chapter.id === resolvedChapterId);
+    if (!resolvedChapterId || !targetChapter || isScratchStreaming) return;
+    const runQualityMode = options?.workflowQualityMode ?? qualityMode;
 
     const targetChapterIndex = Math.max(
       0,
-      (activeChapter.sequenceNumber ?? chapters.findIndex((chapter) => chapter.id === activeChapterId) + 1) - 1,
+      (targetChapter.sequenceNumber ?? chapters.findIndex((chapter) => chapter.id === resolvedChapterId) + 1) - 1,
     );
 
     // [Domain:StoryEditor] STEP 1 — Start scratch stream WITH chapterId for job tracking
-    const controller = startScratchStream(activeChapterId);
-    const capturedChapterId = activeChapterId;
+    const controller = startScratchStream(resolvedChapterId);
+    const capturedChapterId = resolvedChapterId;
+    const generationStartedAt = new Date().toISOString();
+    await onUpdateChapter(project.id, capturedChapterId, {
+      generationStatus: 'generating',
+      generationStartedAt,
+      updatedAt: generationStartedAt,
+    });
 
     // [Domain:StoryEditor] STEP 2 — Clear existing content and show streaming in editor immediately
     setLocalContents((prev) => ({ ...prev, [capturedChapterId]: '' }));
@@ -691,19 +982,18 @@ export default function StoryWorkspace({
             targetChapterIndex,
             mode: targetChapterIndex === 0 ? 'create' : 'continue',
             tensionLevel: 'nudge',
-            prompt: activeChapter.summary?.trim() || undefined,
+            prompt: targetChapter.summary?.trim() || undefined,
             notes: 'Chương hiện tại đang rỗng. Hãy dựng lại từ đầu, bám sát canon, nhân vật, thế giới và outline đã chốt.',
             styleInstruction: project.writingStyle || undefined,
-            skipReview: true,
-            skipPolish: true,
-            qualityMode: 'fast',
+            qualityMode: runQualityMode,
           },
         },
         {
           // [Domain:StoryEditor] STEP 3 — Each chunk streams directly into editor content
           onChunk: (_chunk: string, accumulated: string) => {
             appendScratchChunk(_chunk);
-            setLocalContents((prev) => ({ ...prev, [capturedChapterId]: accumulated }));
+            const displayContent = extractWriterVisibleContent(accumulated);
+            setLocalContents((prev) => ({ ...prev, [capturedChapterId]: displayContent }));
           },
           signal: controller.signal,
         },
@@ -711,13 +1001,21 @@ export default function StoryWorkspace({
 
       // [Domain:StoryEditor] STEP 4 — Pipeline done; persist final content to store
       const writeResult = session.artifacts.chapterWriteResult;
-      const finalContent = writeResult?.content?.trim()
+      let finalContent = writeResult?.content?.trim()
         ? writeResult.content
         : useGenerationStore.getState().scratchStreamedText;
 
+      if (!writeResult?.content?.trim()) {
+        finalContent = extractWriterVisibleContent(finalContent);
+      }
+
       if (!finalContent?.trim()) {
         if (controller.signal.aborted) {
-          // User stopped — keep what we have in localContents (partial content)
+          await onUpdateChapter(project.id, capturedChapterId, {
+            generationStatus: 'partial',
+            generationStartedAt: undefined,
+            updatedAt: new Date().toISOString(),
+          });
           finishScratchStream();
           return;
         }
@@ -729,10 +1027,12 @@ export default function StoryWorkspace({
         chapter.id === capturedChapterId
           ? {
               ...chapter,
-              title: writeResult?.title || activeChapter.title,
+              title: writeResult?.title || targetChapter.title,
               content: finalContent,
-              summary: writeResult?.ledger?.summary || activeChapter.summary,
+              summary: writeResult?.ledger?.summary || targetChapter.summary,
               status: 'draft' as const,
+              generationStatus: controller.signal.aborted ? 'partial' as const : 'done' as const,
+              generationStartedAt: undefined,
               updatedAt: nextUpdatedAt,
             }
           : chapter,
@@ -771,6 +1071,29 @@ export default function StoryWorkspace({
       finishScratchStream();
 
       // If user aborted — keep partial content, no error notification
+      const partialContent = extractWriterVisibleContent(
+        localContents[capturedChapterId] ?? useGenerationStore.getState().scratchStreamedText ?? '',
+      ).trim();
+      if (partialContent) {
+        await onUpdateChapter(project.id, capturedChapterId, {
+          content: partialContent,
+          status: 'draft',
+          generationStatus: controller.signal.aborted ? 'partial' : 'failed',
+          generationStartedAt: undefined,
+          updatedAt: new Date().toISOString(),
+        });
+        setLocalContents((prev) => {
+          const next = { ...prev };
+          delete next[capturedChapterId];
+          return next;
+        });
+      } else {
+        await onUpdateChapter(project.id, capturedChapterId, {
+          generationStatus: controller.signal.aborted ? 'partial' : 'failed',
+          generationStartedAt: undefined,
+          updatedAt: new Date().toISOString(),
+        });
+      }
       if (controller.signal.aborted) return;
 
       let userMessage = 'Workflow viết chương thất bại.';
@@ -794,7 +1117,6 @@ export default function StoryWorkspace({
       });
     }
   }, [
-    activeChapter,
     activeChapterId,
     appendScratchChunk,
     chapters,
@@ -802,6 +1124,7 @@ export default function StoryWorkspace({
     isScratchStreaming,
     project,
     pushNotification,
+    qualityMode,
     replaceProjectChapters,
     startScratchStream,
     startWorkflowIntent,
@@ -828,17 +1151,53 @@ export default function StoryWorkspace({
     const emptyChapters = chapters.filter((ch) => !ch.content?.trim());
     if (emptyChapters.length === 0 || batchProgress?.isRunning) return;
 
+    // [Domain:StoryEditor] STEP — Guard: prevent batch when hydration is still in progress
+    // to avoid using stripped chapters from localStorage that overwrite IndexedDB content
+    if (isHydrating) {
+      pushNotification({
+        type: 'warning',
+        title: 'Đang nạp dữ liệu...',
+        message: 'Vui lòng đợi nạp xong dữ liệu trước khi viết batch.',
+      });
+      return;
+    }
+
     const total = emptyChapters.length;
     setBatchProgress({ current: 0, total, isRunning: true });
 
     let successCount = 0;
     let failCount = 0;
-    let workingChapters = chapters;
+
+    // [Domain:StoryEditor] STEP — Use fresh chapters from store (post-hydration)
+    // to preserve any existing content from IndexedDB instead of using stale `chapters`
+    // which may have been stripped by partialize
+    const freshProject = useProjectStore.getState().projects.find((p) => p.id === project.id);
+    let workingChapters = freshProject
+      ? sortChaptersBySequence(freshProject.chapters || [])
+      : chapters;
+
+    console.log('[handleBatchGenerateAll] Starting batch', {
+      emptyCount: emptyChapters.length,
+      totalChapters: workingChapters.length,
+      chaptersWithContent: workingChapters.filter((c) => c.content?.trim()).length,
+    });
 
     for (let i = 0; i < emptyChapters.length; i++) {
       const ch = emptyChapters[i];
       setBatchProgress({ current: i + 1, total, isRunning: true });
       setActiveChapterId(ch.id);
+      const generationStartedAt = new Date().toISOString();
+      workingChapters = workingChapters.map((chapter) =>
+        chapter.id === ch.id
+          ? {
+              ...chapter,
+              generationStatus: 'generating' as const,
+              generationStartedAt,
+              updatedAt: generationStartedAt,
+            }
+          : chapter,
+      );
+      await replaceProjectChapters(project.id, workingChapters, { storageMode: 'indexeddb' });
 
       const chapterIndex = Math.max(
         0,
@@ -866,14 +1225,24 @@ export default function StoryWorkspace({
             prompt: ch.summary?.trim() || undefined,
             notes: 'Viết nội dung chi tiết cho chương này, bám sát canon, nhân vật, thế giới và outline đã chốt.',
             styleInstruction: project.writingStyle || undefined,
-            skipReview: true,
-            skipPolish: true,
-            qualityMode: 'fast',
+            qualityMode,
           },
         });
 
         const writeResult = session.artifacts.chapterWriteResult;
         if (!writeResult?.content?.trim()) {
+          const failedAt = new Date().toISOString();
+          workingChapters = workingChapters.map((chapter) =>
+            chapter.id === ch.id
+              ? {
+                  ...chapter,
+                  generationStatus: 'failed' as const,
+                  generationStartedAt: undefined,
+                  updatedAt: failedAt,
+                }
+              : chapter,
+          );
+          await replaceProjectChapters(project.id, workingChapters, { storageMode: 'indexeddb' });
           failCount++;
           continue;
         }
@@ -887,6 +1256,8 @@ export default function StoryWorkspace({
                 content: writeResult.content,
                 summary: writeResult.ledger.summary || ch.summary,
                 status: 'draft' as const,
+                generationStatus: 'done' as const,
+                generationStartedAt: undefined,
                 updatedAt: nextUpdatedAt,
               }
             : chapter,
@@ -908,11 +1279,30 @@ export default function StoryWorkspace({
         successCount++;
       } catch (error) {
         console.error(`[BatchGenerate] Failed chapter ${ch.title}:`, error);
+        const failedAt = new Date().toISOString();
+        workingChapters = workingChapters.map((chapter) =>
+          chapter.id === ch.id
+            ? {
+                ...chapter,
+                generationStatus: 'failed' as const,
+                generationStartedAt: undefined,
+                updatedAt: failedAt,
+              }
+            : chapter,
+        );
+        await replaceProjectChapters(project.id, workingChapters, { storageMode: 'indexeddb' });
         failCount++;
       }
     }
 
     setBatchProgress(null);
+
+    console.log('[handleBatchGenerateAll] Batch complete', {
+      successCount,
+      failCount,
+      totalChapters: workingChapters.length,
+      chaptersWithContent: workingChapters.filter((c) => c.content?.trim()).length,
+    });
 
     pushNotification({
       type: failCount === 0 ? 'success' : 'warning',
@@ -924,11 +1314,184 @@ export default function StoryWorkspace({
   }, [
     batchProgress,
     chapters,
+    isHydrating,
     onUpdateChapter,
     project,
     pushNotification,
+    qualityMode,
     replaceProjectChapters,
     startWorkflowIntent,
+  ]);
+
+  const handleContinueGeneration = useCallback(async (
+    targetChapterId?: string,
+    options?: ChapterGenerationRunOptions,
+  ) => {
+    const resolvedChapterId = targetChapterId ?? activeChapterId;
+    const targetChapter = chapters.find((chapter) => chapter.id === resolvedChapterId);
+    if (!resolvedChapterId || !targetChapter || isScratchStreaming) return;
+    const runQualityMode = options?.workflowQualityMode ?? qualityMode;
+
+    const baseContent = (localContents[resolvedChapterId] ?? targetChapter.content ?? '').trim();
+    if (!baseContent) {
+      await handleGenerateFromScratch(resolvedChapterId, options);
+      return;
+    }
+
+    const targetChapterIndex = Math.max(
+      0,
+      (targetChapter.sequenceNumber ?? chapters.findIndex((chapter) => chapter.id === resolvedChapterId) + 1) - 1,
+    );
+
+    const controller = startScratchStream(resolvedChapterId);
+    const capturedChapterId = resolvedChapterId;
+    const generationStartedAt = new Date().toISOString();
+
+    await onUpdateChapter(project.id, capturedChapterId, {
+      generationStatus: 'generating',
+      generationStartedAt,
+      updatedAt: generationStartedAt,
+    });
+
+    setLocalContents((prev) => ({ ...prev, [capturedChapterId]: baseContent }));
+
+    try {
+      const session = await startWorkflowIntent(
+        {
+          id: createId(),
+          type: 'full_write_pipeline',
+          projectId: project.id,
+          chapterId: capturedChapterId,
+          source: 'button',
+          createdAt: new Date().toISOString(),
+          payload: {
+            workflowEngine: 'api',
+            project,
+            targetChapterIndex,
+            mode: 'continue',
+            tensionLevel: 'nudge',
+            prompt: targetChapter.summary?.trim() || undefined,
+            sourceOverride: baseContent,
+            notes: [
+              'Chương này bị dừng giữa chừng. Chỉ viết phần tiếp nối ngay sau nội dung đã có, không lặp lại đoạn cũ.',
+              'Giữ đúng văn phong, nhân vật, mạch truyện và hoàn tất chương ở độ dài đầy đủ.',
+            ].join('\n'),
+            styleInstruction: project.writingStyle || undefined,
+            qualityMode: runQualityMode,
+          },
+        },
+        {
+          onChunk: (_chunk: string, accumulated: string) => {
+            appendScratchChunk(_chunk);
+            const continuation = extractWriterVisibleContent(accumulated).trim();
+            setLocalContents((prev) => ({
+              ...prev,
+              [capturedChapterId]: continuation ? `${baseContent}\n\n${continuation}` : baseContent,
+            }));
+          },
+          signal: controller.signal,
+        },
+      );
+
+      const continuation = session.artifacts.chapterWriteResult?.content?.trim()
+        ? session.artifacts.chapterWriteResult.content.trim()
+        : extractWriterVisibleContent(useGenerationStore.getState().scratchStreamedText).trim();
+      const finalContent = continuation ? `${baseContent}\n\n${continuation}` : baseContent;
+      const nextUpdatedAt = new Date().toISOString();
+
+      if (!continuation && !controller.signal.aborted) {
+        throw new Error(session.error?.message || 'AI không tạo được phần tiếp tục cho chương này.');
+      }
+
+      await onUpdateChapter(project.id, capturedChapterId, {
+        content: finalContent,
+        summary: session.artifacts.chapterWriteResult?.ledger?.summary || targetChapter.summary,
+        status: 'draft',
+        generationStatus: continuation ? 'done' : 'partial',
+        generationStartedAt: undefined,
+        updatedAt: nextUpdatedAt,
+      });
+
+      setLocalContents((prev) => {
+        const next = { ...prev };
+        delete next[capturedChapterId];
+        return next;
+      });
+      setLastSavedAt(nextUpdatedAt);
+      finishScratchStream();
+
+      if (continuation) {
+        pushNotification({
+          type: 'success',
+          title: 'Đã tiếp tục chương dở',
+          message: 'AI đã nối tiếp từ nội dung đang có và lưu lại vào chương.',
+        });
+      }
+    } catch (error) {
+      console.error('[handleContinueGeneration] Pipeline error:', error);
+      finishScratchStream();
+
+      const streamedContinuation = extractWriterVisibleContent(
+        useGenerationStore.getState().scratchStreamedText || '',
+      ).trim();
+      const partialContent = streamedContinuation
+        ? `${baseContent}\n\n${streamedContinuation}`
+        : (localContents[capturedChapterId] ?? baseContent).trim();
+      await onUpdateChapter(project.id, capturedChapterId, {
+        content: partialContent,
+        status: 'draft',
+        generationStatus: controller.signal.aborted ? 'partial' : 'failed',
+        generationStartedAt: undefined,
+        updatedAt: new Date().toISOString(),
+      });
+
+      if (controller.signal.aborted) return;
+
+      pushNotification({
+        type: 'error',
+        title: 'Không thể tiếp tục chương',
+        message: error instanceof Error ? error.message : 'Workflow viết tiếp chương thất bại.',
+      });
+    }
+  }, [
+    activeChapterId,
+    appendScratchChunk,
+    chapters,
+    finishScratchStream,
+    handleGenerateFromScratch,
+    isScratchStreaming,
+    localContents,
+    onUpdateChapter,
+    project,
+    pushNotification,
+    qualityMode,
+    startScratchStream,
+    startWorkflowIntent,
+  ]);
+
+  const handleCompleteChapter = useCallback(async (chapterId: string) => {
+    const targetChapter = chapters.find((chapter) => chapter.id === chapterId);
+    if (!targetChapter || isScratchStreaming) return;
+    // Completion flow should unblock interrupted chapters quickly instead of
+    // waiting on the full review/polish/memory pipeline.
+    const completionRunOptions: ChapterGenerationRunOptions = { workflowQualityMode: 'fast' };
+
+    setActiveChapterId(chapterId);
+    setCurrentMode('write');
+
+    const resolvedContent = (localContents[chapterId] ?? targetChapter.content ?? '').trim();
+    if (resolvedContent) {
+      await handleContinueGeneration(chapterId, completionRunOptions);
+      return;
+    }
+
+    await handleGenerateFromScratch(chapterId, completionRunOptions);
+  }, [
+    chapters,
+    handleContinueGeneration,
+    handleGenerateFromScratch,
+    isScratchStreaming,
+    localContents,
   ]);
 
   const handleRetryLoadChapterContent = useCallback(async () => {
@@ -982,15 +1545,76 @@ export default function StoryWorkspace({
     pushNotification,
   ]);
 
+  const handleRestoreImportedSource = useCallback(async () => {
+    if (isRestoringImportedSource) return;
+
+    setIsRestoringImportedSource(true);
+    try {
+      const result = await restoreImportedProjectFromSnapshot(
+        project.id,
+        {
+          replaceProjectChapters,
+        },
+        {
+          storageMode: project.storageMode === 'provider' ? 'provider' : 'indexeddb',
+        },
+      );
+
+      if (result.status === 'restored') {
+        setLocalContents({});
+        setLocalTitles({});
+        setSelectionMap({});
+        setProposalMap({});
+        setActiveChapterId(null);
+        pushNotification({
+          type: 'success',
+          title: 'Đã khôi phục bản import',
+          message: `Đã dựng lại ${result.chaptersRestored} chương từ snapshot import gần nhất và ghi đè dữ liệu lỗi.`,
+        });
+        return;
+      }
+
+      pushNotification({
+        type: 'warning',
+        title: 'Không còn snapshot để khôi phục',
+        message: 'Thiết bị này không còn lưu bản import gốc. Hãy dùng "Import lại & ghi đè" để nạp lại file và thay thế project hiện tại.',
+      });
+    } catch (error) {
+      pushNotification({
+        type: 'error',
+        title: 'Khôi phục bản import thất bại',
+        message: error instanceof Error ? error.message : 'Không thể dựng lại chapters từ snapshot import.',
+      });
+    } finally {
+      setIsRestoringImportedSource(false);
+    }
+  }, [isRestoringImportedSource, project.id, project.storageMode, pushNotification, replaceProjectChapters]);
+
+  const handleOpenReimportFlow = useCallback(() => {
+    onNavigate?.('adaptation');
+  }, [onNavigate]);
+
   const handleSelectChapter = useCallback((id: string) => {
     setActiveChapterId(id);
   }, []);
 
-  const handleSelectionAction = useCallback((action: string) => {
-    if (!activeSelection?.text) return;
+  const handleSelectionAction = useCallback((action: EditorSelectionIntent) => {
+    if (!activeSelection?.text.trim()) return;
     setCurrentMode('detail');
-    setAssistantPrefill(`${action} cho đoạn đang chọn, giữ ý chính và văn phong phù hợp với chương.`);
-  }, [activeSelection?.text]);
+    if (action === 'custom') {
+      setAssistantPrefill('Tôi muốn sửa đoạn đang chọn theo hướng: ');
+      return;
+    }
+    setSelectionIntentRequest({
+      id: createId(),
+      intent: action,
+      selection: {
+        start: activeSelection.start,
+        end: activeSelection.end,
+        text: activeSelection.text.trim(),
+      },
+    });
+  }, [activeSelection]);
 
   // [Domain:StoryEditor] STEP — Recovery handlers
   const handleRecoverDrafts = useCallback(() => {
@@ -1036,55 +1660,146 @@ export default function StoryWorkspace({
     pushNotification({ type: 'success', title: 'Đã nhân bản chương', message: `Đã tạo bản sao: "${copy.title}"` });
   }, [chapters, insertChapter, project.id, pushNotification]);
 
-  // [Domain:StoryEditor] STEP — Move chapter up (swap sequence numbers)
-  const handleMoveChapterUp = useCallback(async (chapterId: string) => {
-    const idx = chapters.findIndex((c) => c.id === chapterId);
-    if (idx <= 0) return;
-    const reordered = [...chapters];
-    const tmp = reordered[idx - 1];
-    reordered[idx - 1] = { ...reordered[idx], sequenceNumber: tmp.sequenceNumber };
-    reordered[idx] = { ...tmp, sequenceNumber: reordered[idx].sequenceNumber };
-    await replaceChapters(project.id, reordered, { storageMode: 'indexeddb' });
-  }, [chapters, project.id, replaceChapters]);
+  // [Domain:StoryEditor] STEP — Toggle chapter favorite
+  const handleToggleChapterFavorite = useCallback(async (chapterId: string) => {
+    const chapter = chapters.find((c) => c.id === chapterId);
+    if (!chapter) return;
+    await updateChapter(project.id, chapterId, { isFavorite: !chapter.isFavorite });
+  }, [chapters, project.id, updateChapter]);
 
-  // [Domain:StoryEditor] STEP — Move chapter down (swap sequence numbers)
-  const handleMoveChapterDown = useCallback(async (chapterId: string) => {
-    const idx = chapters.findIndex((c) => c.id === chapterId);
-    if (idx < 0 || idx >= chapters.length - 1) return;
-    const reordered = [...chapters];
-    const seqA = reordered[idx].sequenceNumber;
-    const seqB = reordered[idx + 1].sequenceNumber;
-    reordered[idx] = { ...reordered[idx + 1], sequenceNumber: seqA };
-    reordered[idx + 1] = { ...chapters[idx], sequenceNumber: seqB };
-    await replaceChapters(project.id, reordered, { storageMode: 'indexeddb' });
-  }, [chapters, project.id, replaceChapters]);
+  // [Domain:StoryEditor] STEP — Next Chapter
+  const handleNextChapter = useCallback(() => {
+    if (!activeChapterId) return;
+    const sortedChapters = [...chapters].sort((a, b) => (a.sequenceNumber ?? 0) - (b.sequenceNumber ?? 0));
+    const currentIndex = sortedChapters.findIndex(c => c.id === activeChapterId);
+    if (currentIndex >= 0 && currentIndex < sortedChapters.length - 1) {
+      setActiveChapterId(sortedChapters[currentIndex + 1].id);
+    }
+  }, [activeChapterId, chapters]);
 
   void onUpdateProject;
+
+  const isReadingModeFullscreen = useAppearanceStore((state) => state.isReadingModeFullscreen);
+  const setReadingModeFullscreen = useAppearanceStore((state) => state.setReadingModeFullscreen);
+
+  const handleModeChange = useCallback((newMode: EditorMode) => {
+    setCurrentMode(newMode);
+    if (newMode === 'read') {
+      setReadingModeFullscreen(true);
+    } else {
+      setReadingModeFullscreen(false);
+    }
+  }, [setReadingModeFullscreen]);
+
+  // ── Save as Template ──
+  const hasSavedAsTemplate = useTemplateStore((state) => !!state.getTemplateById(project.id));
+  const addCustomTemplate = useTemplateStore((state) => state.addCustomTemplate);
+
+  const handleSaveAsTemplate = useCallback(async () => {
+    if (hasSavedAsTemplate || isSavingTemplate) return;
+
+    setIsSavingTemplate(true);
+    setTemplateSaveLabel('Đang chuẩn bị nội dung truyện...');
+    flushAutosave();
+
+    try {
+      const sourceProject = await getProjectSnapshot(project.id) ?? project;
+      const draftOverrides = { contents: localContents, titles: localTitles };
+      const chapterContentChars = countProjectTemplateChapterContentChars(sourceProject, draftOverrides);
+
+      if (chapterContentChars === 0) {
+        pushNotification({
+          type: 'error',
+          title: 'Chưa thể lưu Template',
+          message: 'Không tìm thấy nội dung chương để trích xuất. Hãy lưu hoặc nhập nội dung chương trước.',
+        });
+        return;
+      }
+
+      const sourceText = buildProjectTemplateSourceText(sourceProject, draftOverrides);
+      const resolution = await resolveExtractedTemplateFromSource({
+        sourceTitle: sourceProject.title,
+        sourceText,
+        shareByDefault: false,
+        onProgress: (progress) => setTemplateSaveLabel(progress.label),
+      });
+
+      addCustomTemplate({
+        ...resolution.template,
+        id: project.id,
+        name: `[Lưu từ truyện] ${sourceProject.title}`,
+        originalName: sourceProject.title,
+        tags: Array.from(
+          new Set([
+            ...(resolution.template.tags ?? []),
+            ...(sourceProject.subGenre ?? []),
+            'custom',
+            'saved-from-story',
+          ]),
+        ),
+        targetChapterCount: sourceProject.targetChapters,
+      });
+
+      pushNotification({
+        type: 'success',
+        title: 'Đã lưu thành Template',
+        message: 'Template đã được trích xuất từ nội dung chương và có thể dùng lại cho truyện mới.',
+      });
+    } catch (error) {
+      console.warn('[StoryWorkspace] Save as template failed:', error);
+      pushNotification({
+        type: 'error',
+        title: 'Lưu Template thất bại',
+        message: error instanceof Error ? error.message : 'Không thể trích xuất template từ truyện hiện tại.',
+      });
+    } finally {
+      setIsSavingTemplate(false);
+      setTemplateSaveLabel('');
+    }
+  }, [
+    addCustomTemplate,
+    flushAutosave,
+    hasSavedAsTemplate,
+    isSavingTemplate,
+    localContents,
+    localTitles,
+    project,
+    pushNotification,
+  ]);
 
   // ── Render ──
 
   return (
     <div className="flex h-full w-full flex-col overflow-hidden bg-bg-deep text-text-primary font-sans selection:bg-accent-amber/20 selection:text-accent-amber">
       {/* Top Navigation Bar - Full Width */}
-      <EditorTopbar
-        project={projectInfo}
-        chapter={activeChapter}
-        chapters={chapters}
-        statusMap={statusMap}
-        isSaving={isSaving}
-        isDirty={isDirty}
-        onSave={handleSave}
-        onApprove={handleApprove}
-        onSelectChapter={handleSelectChapter}
-        sessionTokens={sessionTokens}
-        onNewChapter={handleCreateNew}
-        onNavigate={onNavigate}
-        onOpenCreationChat={creationProgressSummary ? onOpenCreationChat : undefined}
-        creationProgressSummary={creationProgressSummary}
-        emptyChapterCount={emptyChapterIds.length}
-        batchProgress={batchProgress}
-        onBatchGenerateAll={handleBatchGenerateAll}
-      />
+      {!isReadingModeFullscreen && (
+        <EditorTopbar
+          project={projectInfo}
+          chapter={activeChapter}
+          chapters={chapters}
+          statusMap={statusMap}
+          isSaving={isSaving}
+          isDirty={isDirty}
+          onSave={handleSave}
+          onApprove={handleApprove}
+          onSelectChapter={handleSelectChapter}
+          sessionTokens={sessionTokens}
+          onNewChapter={handleCreateNew}
+          onNavigate={onNavigate}
+          onOpenCreationChat={creationProgressSummary ? onOpenCreationChat : undefined}
+          creationProgressSummary={creationProgressSummary}
+          emptyChapterCount={emptyChapterIds.length}
+          batchProgress={batchProgress}
+          onBatchGenerateAll={handleBatchGenerateAll}
+          qualityMode={qualityMode}
+          onQualityModeChange={setQualityMode}
+          onSaveAsTemplate={handleSaveAsTemplate}
+          hasSavedAsTemplate={hasSavedAsTemplate}
+          isSavingTemplate={isSavingTemplate}
+          templateSaveLabel={templateSaveLabel}
+          onCompleteChapter={handleCompleteChapter}
+        />
+      )}
 
       {/* Main Content Area - 3 Columns */}
       <div className="flex min-h-0 flex-1 overflow-hidden">
@@ -1111,9 +1826,11 @@ export default function StoryWorkspace({
             wordCount={wordCount}
             readingTimeMinutes={readingTimeMinutes}
             lastSavedAt={lastSavedAt}
+            isDirty={isDirty}
             emptyStateVariant={emptyStateVariant}
             isGeneratingFromScratch={isScratchStreaming}
             isReloadingChapterContent={isReloadingChapterContent}
+            isRestoringImportedSource={isRestoringImportedSource}
             batchProgress={batchProgress}
             emptyChapterCount={emptyChapterIds.length}
             onBatchGenerateAll={handleBatchGenerateAll}
@@ -1123,55 +1840,84 @@ export default function StoryWorkspace({
             onRejectProposal={handleRejectProposal}
             onSelectionChange={handleSelectionChange}
             onSelectionAction={handleSelectionAction}
-            onGenerateFromScratch={handleGenerateFromScratch}
+            onGenerateFromScratch={() => void handleGenerateFromScratch()}
+            onContinueGeneration={() => void handleContinueGeneration()}
             onStopScratch={handleStopScratch}
             onRetryLoadContent={handleRetryLoadChapterContent}
+            onRestoreImportedSource={handleRestoreImportedSource}
+            onOpenReimportFlow={onNavigate ? handleOpenReimportFlow : undefined}
+            onOpenVersionHistory={() => setShowVersionHistory(true)}
             hasSelection={Boolean(activeSelection?.text)}
-            onModeChange={setCurrentMode}
+            onModeChange={handleModeChange}
+            onNextChapter={handleNextChapter}
           />
         </div>
 
         {/* Right Panel — Chapters + AI Muse */}
-        <div className="hidden w-[380px] shrink-0 border-l border-[#241c17] bg-[#161210] lg:flex lg:flex-col shadow-[-8px_0_24px_rgba(0,0,0,0.2)] z-10">
-          <AIAssistantPanel
-            chapterContent={resolvedContent}
-            chapterTitle={activeChapter?.title ?? ''}
-            reviewSummary={reviewSummary}
-            selection={activeSelection}
-            activeProposal={activeProposal}
-            prefillPrompt={assistantPrefill}
-            messages={activeMessages}
-            onMessagesChange={handleMessagesChange}
-            onAiResponse={handleAiProposal}
-            onOpenReview={() => setCurrentMode('review')}
-            sessionTokens={sessionTokens}
-            project={projectInfo}
-            fullProject={project}
-            chapters={chapters}
-            selectedChapterId={activeChapterId}
-            statusMap={statusMap}
-            onSelectChapter={handleSelectChapter}
-            onNewChapter={handleCreateNew}
-            onInsertChapter={handleInsertChapter}
-            onDeleteChapter={handleDeleteChapter}
-            onDuplicateChapter={handleDuplicateChapter}
-            onMoveChapterUp={handleMoveChapterUp}
-            onMoveChapterDown={handleMoveChapterDown}
-          />
-        </div>
+        {!isReadingModeFullscreen && (
+          <div className="z-10 w-[400px] shrink-0 border-l border-[#241c17] bg-[#161210] shadow-[-8px_0_24px_rgba(0,0,0,0.2)] lg:flex lg:flex-col xl:w-[440px] 2xl:w-[480px]">
+            <AIAssistantPanel
+              editorMode={currentMode}
+              chapterContent={resolvedContent}
+              chapterTitle={resolvedTitle}
+              reviewSummary={reviewSummary}
+              selection={activeSelection}
+              selectionIntentRequest={selectionIntentRequest}
+              activeProposal={activeProposal}
+              prefillPrompt={assistantPrefill}
+              messages={activeMessages}
+              onMessagesChange={handleMessagesChange}
+              onSelectionIntentConsumed={() => setSelectionIntentRequest(null)}
+              onAiResponse={handleAiProposal}
+              onOpenReview={() => setCurrentMode('review')}
+              onOpenDiff={() => setCurrentMode('diff')}
+              onApplyRewrite={handleApplyRewrite}
+              onRenameChapter={handleRenameActiveChapter}
+              onApplyStoryRewrite={handleApplyStoryRewrite}
+              sessionTokens={sessionTokens}
+              project={projectInfo}
+              fullProject={project}
+              chapters={chapters}
+              storySourceChapters={storySourceChapters}
+              selectedChapterId={activeChapterId}
+              statusMap={statusMap}
+              onSelectChapter={handleSelectChapter}
+              onNewChapter={handleCreateNew}
+              onInsertChapter={handleInsertChapter}
+              onDeleteChapter={handleDeleteChapter}
+              onDuplicateChapter={handleDuplicateChapter}
+              onToggleChapterFavorite={handleToggleChapterFavorite}
+              onOpenCreationChat={creationProgressSummary ? onOpenCreationChat : undefined}
+              onCompleteChapter={handleCompleteChapter}
+            />
+          </div>
+        )}
       </div>
 
       {/* Bottom Status Bar - Full Width */}
-      <EditorStatusBar
-        wordCount={wordCount}
-        wordsAdded={wordsAdded}
-        readingTimeMinutes={readingTimeMinutes}
-        lastSavedAt={lastSavedAt}
-        isSyncing={isSaving}
-        sessionStartTime={sessionStartTime}
-        autosaveStatus={autosaveStatus}
-        lastAutosaveAt={lastAutosaveAt}
-      />
+      {!isReadingModeFullscreen && (
+        <EditorStatusBar
+          wordCount={wordCount}
+          wordsAdded={wordsAdded}
+          readingTimeMinutes={readingTimeMinutes}
+          lastSavedAt={lastSavedAt}
+          isSyncing={isSaving}
+          sessionStartTime={sessionStartTime}
+          autosaveStatus={autosaveStatus}
+          lastAutosaveAt={lastAutosaveAt}
+        />
+      )}
+
+      {showVersionHistory && activeChapter && (
+        <VersionHistoryPanel
+          chapterId={activeChapter.id}
+          projectId={project.id}
+          currentTitle={resolvedTitle || activeChapter.title}
+          currentContent={resolvedContent}
+          onClose={() => setShowVersionHistory(false)}
+          onRestore={handleRestoreVersion}
+        />
+      )}
     </div>
   );
 }

@@ -12,6 +12,11 @@ const MAX_HISTORY_MESSAGES = 8;
 const MAX_HISTORY_CONTENT_LENGTH = 480;
 const CREATION_DISCUSSION_TYPES = new Set<CreationMessageType>(['text', 'suggestions']);
 
+interface CreationSyncSource {
+  projectId: string;
+  chapterId: string;
+}
+
 function trimMessageContent(content: string): string {
   const normalized = content.trim().replace(/\s+/g, ' ');
   if (normalized.length <= MAX_HISTORY_CONTENT_LENGTH) return normalized;
@@ -22,7 +27,63 @@ export function normalizeStoryEditorMessages(messages: ChatMessage[]): ChatMessa
   return messages.slice(-MAX_STORED_MESSAGES);
 }
 
-export function buildStoryEditorSeedMessages(messages: CreationMessage[]): ChatMessage[] {
+function toPersistedStoryEditorMessage(message: ChatMessage): ChatMessage | null {
+  const hadTransientState = Boolean(
+    message.isStreaming ||
+      message.isDrafting ||
+      message.isPartialStop,
+  );
+
+  if (message.role === 'assistant' && hadTransientState && !message.content.trim()) {
+    return null;
+  }
+
+  const {
+    isStreaming: _isStreaming,
+    isDrafting: _isDrafting,
+    isPartialStop: _isPartialStop,
+    ...persistedMessage
+  } = message;
+
+  return persistedMessage;
+}
+
+export function normalizePersistedStoryEditorMessages(messages: ChatMessage[]): ChatMessage[] {
+  return normalizeStoryEditorMessages(
+    messages
+      .map(toPersistedStoryEditorMessage)
+      .filter((message): message is ChatMessage => message !== null),
+  );
+}
+
+function getCreationSyncedEditorId(messageId: string, syncSource?: CreationSyncSource): string {
+  if (!syncSource) return `creation-${messageId}`;
+
+  const prefix = `editor:${syncSource.projectId}:${syncSource.chapterId}:`;
+  if (messageId.startsWith(prefix)) {
+    return messageId.slice(prefix.length);
+  }
+
+  return `creation-${messageId}`;
+}
+
+export function mergeStoryEditorChatMessages(
+  seedMessages: ChatMessage[],
+  localMessages: ChatMessage[],
+): ChatMessage[] {
+  const mergedById = new Map<string, ChatMessage>();
+
+  [...localMessages, ...seedMessages].forEach((message) => {
+    mergedById.set(message.id, message);
+  });
+
+  return normalizeStoryEditorMessages(Array.from(mergedById.values()));
+}
+
+export function buildStoryEditorSeedMessages(
+  messages: CreationMessage[],
+  syncSource?: CreationSyncSource,
+): ChatMessage[] {
   return messages
     .filter(
       (message) =>
@@ -33,7 +94,7 @@ export function buildStoryEditorSeedMessages(messages: CreationMessage[]): ChatM
       if (!content) return null;
 
       return {
-        id: `creation-${message.id}`,
+        id: getCreationSyncedEditorId(message.id, syncSource),
         role: message.role === 'user' ? 'user' : 'assistant',
         content,
         timestamp: message.timestamp,

@@ -21,60 +21,179 @@ export const GAME_SPORTS_TEMPLATE: StoryTemplate = {
   ],
   "subGenres": [
     {
-      "name": "Game / Thể Thao",
-      "description": "竞技对抗 + 规则博弈 + 团队成长。在赛场上燃烧青春，用实力证明一切。",
-      "coreAppeal": "竞技对抗 + 规则博弈 + 团队成长。在赛场上燃烧青春，用实力证明一切。"
+      "name": "电竞竞技流",
+      "description": "职业电竞，战队比赛，冠军之路",
+      "coreAppeal": "操作碾压、战术反杀、夺冠荣耀",
+      "referenceWorks": [
+        "全职高手",
+        "你是我的荣耀",
+        "亲爱的，热爱的",
+        "穿越火线"
+      ]
+    },
+    {
+      "name": "传统体育流",
+      "description": "足球/篮球/网球等传统体育",
+      "coreAppeal": "绝杀时刻、逆转比赛、冠军梦想",
+      "referenceWorks": [
+        "灌篮高手",
+        "足球小将",
+        "网球王子",
+        "我们的少年时代"
+      ]
+    },
+    {
+      "name": "棋牌竞技流",
+      "description": "围棋/象棋/麻将等智力竞技",
+      "coreAppeal": "智力碾压、绝妙手筋、天才对决",
+      "referenceWorks": [
+        "棋魂",
+        "天元",
+        "围棋少年"
+      ]
+    },
+    {
+      "name": "游戏人生流",
+      "description": "游戏与现实交织，游戏改变人生",
+      "coreAppeal": "游戏成就、现实逆袭、虚拟与真实",
+      "referenceWorks": [
+        "从零开始",
+        "网游之近战法师",
+        "惊悚乐园"
+      ]
     }
   ],
-  "worldRules": [],
-  "coolPatterns": [],
-  "conflictPatterns": [],
+  "worldRules": [
+    {
+      "name": "电竞生态",
+      "description": "层级 / 特点 / 收入 ------ / ------ / ------ 顶级战队 / 世界赛常客 / 千万级 一线战队 / 联赛强队 / 百万级 二线战队 / 联赛中游 / 十万级 青训队 / 培养新人 / 基础工资 路人王 / 天梯高手 / 无固定"
+    },
+    {
+      "name": "赛事体系",
+      "description": "级别 / 赛事 / 重要性 ------ / ------ / -------- S级 / 世界赛 / 最高荣誉 A级 / 洲际赛 / 区域荣誉 B级 / 联赛 / 常规赛季 C级 / 杯赛 / 额外荣誉 D级 / 线下赛 / 练兵/曝光"
+    },
+    {
+      "name": "战队结构",
+      "description": "角色 / 职责 / 重要性 ------ / ------ / -------- 队长 / 指挥决策 / 核心 主C / 核心输出 / 关键 辅助 / 保护/控制 / 重要 教练 / 战术制定 / 幕后 分析师 / 数据分析 / 辅助 --"
+    }
+  ],
+  "coolPatterns": [
+    {
+      "name": "绝境翻盘",
+      "scenario": "比分落后，濒临淘汰",
+      "appeal": "主角爆发，连续操作，逆转比赛",
+      "keyNote": "要有铺垫，展示压力"
+    },
+    {
+      "name": "天才对决",
+      "scenario": "两个天才选手正面对抗",
+      "appeal": "神仙打架，操作拉满",
+      "keyNote": "双方都要有高光"
+    },
+    {
+      "name": "战术碾压",
+      "scenario": "用独特战术打败强敌",
+      "appeal": "智商碾压，对手懵逼",
+      "keyNote": "战术要合理可信"
+    },
+    {
+      "name": "复仇成功",
+      "scenario": "对阵曾经击败自己的对手",
+      "appeal": "雪耻成功，证明成长",
+      "keyNote": "要有情感铺垫"
+    }
+  ],
+  "conflictPatterns": [
+    {
+      "type": "卷一：入门 (1-60章)",
+      "source": "替补/青训",
+      "resolution": "首次上场，惊艳表现"
+    },
+    {
+      "type": "卷二：成长 (61-150章)",
+      "source": "主力选手",
+      "resolution": "联赛取得好成绩"
+    },
+    {
+      "type": "卷三：崛起 (151-280章)",
+      "source": "一线选手",
+      "resolution": "获得联赛冠军"
+    },
+    {
+      "type": "卷四：巅峰 (281-400章)",
+      "source": "顶级选手",
+      "resolution": "世界赛夺冠"
+    }
+  ],
   "outlineArcs": [
     {
       "title": "卷一：入门 (1-60章)",
-      "chapterRange": "1-100",
+      "chapterRange": "1-60",
       "coreFocus": "主角展现天赋，加入战队",
       "coreConflict": "替补/青训",
       "climax": "首次上场，惊艳表现"
     },
     {
       "title": "卷二：成长 (61-150章)",
-      "chapterRange": "1-100",
+      "chapterRange": "61-150",
       "coreFocus": "成为主力，参加联赛",
       "coreConflict": "主力选手",
       "climax": "联赛取得好成绩"
     },
     {
       "title": "卷三：崛起 (151-280章)",
-      "chapterRange": "1-100",
+      "chapterRange": "151-280",
       "coreFocus": "成为明星选手",
       "coreConflict": "一线选手",
       "climax": "获得联赛冠军"
     },
     {
       "title": "卷四：巅峰 (281-400章)",
-      "chapterRange": "1-100",
+      "chapterRange": "281-400",
       "coreFocus": "冲击世界赛",
       "coreConflict": "顶级选手",
       "climax": "世界赛夺冠"
     },
     {
       "title": "卷五：传奇 (401-500章)",
-      "chapterRange": "1-100",
+      "chapterRange": "401-500",
       "coreFocus": "成为传奇，功成身退",
       "coreConflict": "传奇选手",
       "climax": "圆满结局"
     }
   ],
+  "targetWordCount": "1.500.000 chữ",
+  "targetChapterCount": 500,
   "pitfalls": [
     {
-      "description": "Thiết lập trước sau mâu thuẫn.",
+      "description": "只堆比赛，没有人物塑造",
+      "severity": "critical"
+    },
+    {
+      "description": "战术描写空泛，不专业",
+      "severity": "critical"
+    },
+    {
+      "description": "主角无敌，没有挑战",
+      "severity": "critical"
+    },
+    {
+      "description": "配角工具人化",
       "severity": "critical"
     }
   ],
   "bestPractices": [
     {
-      "description": "Thiết lập tự nhất quán."
+      "description": "比赛与人物成长结合"
+    },
+    {
+      "description": "战术要专业可信"
+    },
+    {
+      "description": "主角有失败有成长"
+    },
+    {
+      "description": "队友有独立人格"
     }
   ],
   "entityTags": [

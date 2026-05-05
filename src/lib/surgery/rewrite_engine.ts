@@ -29,7 +29,10 @@ async function maybeGenerate(taskType: 'plan_chapter' | 'write_chapter', systemP
     aiStore.models,
     undefined,
     aiStore.activeModelId,
-    aiStore.taskModelOverrides
+    aiStore.taskModelOverrides,
+    aiStore.modelHealth,
+    [],
+    aiStore.preferredProvider
   );
   if (!model) return undefined;
 

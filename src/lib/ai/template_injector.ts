@@ -17,7 +17,7 @@ import {
   serializeTemplateForPrompt,
 } from '../../data/story_templates/template_registry';
 import type { StoryTemplate, TemplateDialogueRule, TemplateLanguageRegister } from '../../types/story_template';
-import { useCustomTemplateStore } from '../../store/use_custom_template_store';
+import { useTemplateStore } from '../../store/use_template_store';
 
 type LanguageRegisterProfile = TemplateLanguageRegister;
 
@@ -32,7 +32,7 @@ function findTemplateWithCustomPriority(
   tags?: string[],
 ): StoryTemplate | undefined {
   // [Domain:StoryTemplate] STEP 1 — Search custom (user-extracted) templates first
-  const customTemplates = useCustomTemplateStore.getState().templates;
+  const customTemplates = useTemplateStore.getState().customTemplates;
   if (customTemplates.length > 0) {
     // Match theo tags/genre trong custom list
     const genreLower = genre.toLowerCase();
@@ -343,7 +343,20 @@ export function injectTemplateToWriterPrompt(
     parts.push(`Sảng điểm khả dụng: ${topPatterns.map((p) => p.name).join(', ')}`);
   }
 
-  // [Domain:StoryTemplate] STEP 4 — Critical pitfalls (chỉ gửi critical)
+  // [Domain:StoryTemplate] STEP 4 — Opportunity arc / best practices / constraint packs
+  if (template.opportunityArc && template.opportunityArc.length > 0) {
+    parts.push(`Nhịp triển khai gợi ý: ${template.opportunityArc.map((step) => step.name).join(' → ')}`);
+  }
+
+  if (template.bestPractices.length > 0) {
+    parts.push(`NÊN: ${template.bestPractices.slice(0, 3).map((practice) => practice.description).join(' | ')}`);
+  }
+
+  if (template.constraintPacks && template.constraintPacks.length > 0) {
+    parts.push(`Constraint packs: ${template.constraintPacks.join(', ')}`);
+  }
+
+  // [Domain:StoryTemplate] STEP 5 — Critical pitfalls (chỉ gửi critical)
   const criticalPitfalls = template.pitfalls.filter((p) => p.severity === 'critical');
   if (criticalPitfalls.length > 0) {
     parts.push(`⛔ TRÁNH: ${criticalPitfalls.map((p) => p.description).join(' | ')}`);

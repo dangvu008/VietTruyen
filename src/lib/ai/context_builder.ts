@@ -35,6 +35,7 @@ import { routeMemoryForScene, type MemoryRouteResult } from './scene_memory_rout
 import { buildSceneMindState, renderSceneMindSection } from './scene_mind_builder';
 import { buildSceneCard, renderSceneCardSection } from './scene_card_planner';
 import { buildVoiceConstraints, renderVoiceConstraintsSection } from './voice_constraint_builder';
+import { buildEraRegisterGuardrailSection } from './era_register_guardrails';
 
 interface WritingContext {
   contextText: string;
@@ -133,6 +134,7 @@ export async function buildWritingContext(
     const world = buildWorldBrief(project);
     if (world) sections.push(world);
   }
+  sections.push(buildEraRegisterGuardrailSection(project));
 
   // Board 5: Time Constraints
   const timeConstraints = extractTimeConstraints([]);
@@ -226,6 +228,7 @@ export async function buildSurpriseContext(
 
   const world = buildWorldBrief(project);
   if (world) sections.push(world);
+  sections.push(buildEraRegisterGuardrailSection(project));
 
   const recent = buildRecentSummaries(project, targetChapterIndex);
   if (recent) sections.push(recent);
@@ -298,6 +301,9 @@ function buildBibleSnapshot(project: Project, maxChars?: number): string {
   if (project.worldSetting) parts.push(`Thiết lập thế giới: ${quickTruncate(project.worldSetting, Math.round(220 * scale))}`);
   if (project.endgame) parts.push(`Kết thúc dự kiến: ${quickTruncate(project.endgame, Math.round(200 * scale))}`);
   if (project.mainPlot) parts.push(`Cốt truyện chính: ${quickTruncate(project.mainPlot, Math.round(350 * scale))}`);
+  // P3b - Input Governance: explicitly guide AI with high-level intent
+  if (project.authorIntent) parts.push(`[ĐỊNH HƯỚNG DÀI HẠN]: ${quickTruncate(project.authorIntent, Math.round(200 * scale))}`);
+  if (project.currentFocus) parts.push(`[TRỌNG TÂM HIỆN TẠI]: ${quickTruncate(project.currentFocus, Math.round(200 * scale))}`);
   if (project.notes) parts.push(`Ghi chú tác giả: ${quickTruncate(project.notes, Math.round(220 * scale))}`);
   return parts.length > 1 ? parts.join('\n') : '';
 }
@@ -307,12 +313,15 @@ function buildCharactersBrief(characters: Character[], maxChars?: number): strin
   const budget = maxChars ?? 2000;
   // [Domain:ContextSelection] Scale character trait detail based on scene budget
   const traitLimit = Math.max(30, Math.round(80 * Math.min(1, budget / 2000)));
+  const psychologyLimit = Math.max(60, Math.round(180 * Math.min(1, budget / 2000)));
   const speechLimit = Math.max(50, Math.round(120 * Math.min(1, budget / 2000)));
 
   const lines = characters.map((character) => {
     const parts = [`- ${character.name} (${character.role})`];
     if (character.traits) parts.push(`: ${quickTruncate(character.traits, traitLimit)}`);
     if (character.currentStage) parts.push(` [${character.currentStage}]`);
+    const psychologySummary = buildPsychologySummary(character, psychologyLimit);
+    if (psychologySummary) parts.push(` | ${psychologySummary}`);
     if (character.aliases?.length) parts.push(` aka ${character.aliases.join(', ')}`);
     const speechSummary = buildSpeechProfileSummary(character, speechLimit);
     if (speechSummary) parts.push(` | ${speechSummary}`);
@@ -320,6 +329,20 @@ function buildCharactersBrief(characters: Character[], maxChars?: number): strin
   });
 
   return `## NHÂN VẬT\n${lines.join('\n')}`;
+}
+
+function buildPsychologySummary(character: Character, maxChars = 180): string {
+  const psychology = character.psychology;
+  if (!psychology) return '';
+
+  const parts: string[] = [];
+  if (psychology.coreWound) parts.push(`vết thương ${psychology.coreWound}`);
+  if (psychology.deepFear) parts.push(`sợ ${psychology.deepFear}`);
+  if (psychology.hiddenDesire) parts.push(`muốn thật ${psychology.hiddenDesire}`);
+  if (psychology.selfDeception) parts.push(`tự lừa ${psychology.selfDeception}`);
+  if (psychology.bodyLanguage) parts.push(`stress ${psychology.bodyLanguage}`);
+  if (parts.length === 0) return '';
+  return quickTruncate(`TÂM LÝ: ${parts.join(' | ')}`, maxChars);
 }
 
 function buildSpeechProfileSummary(character: Character, maxChars = 120): string {
@@ -426,6 +449,12 @@ async function buildHybridRetrievalSection(
   const canonSection = renderPackSection('## CANON ƯU TIÊN', result.canonPack, { limit: 4 });
   if (canonSection) lines.push(canonSection);
 
+  const stateSection = renderPackSection('## SNAPSHOT TRẠNG THÁI', result.statePack, { limit: 4 });
+  if (stateSection) lines.push(stateSection);
+
+  const hookSection = renderPackSection('## HOOK CHƯA THANH TOÁN', result.hookPack, { limit: 4 });
+  if (hookSection) lines.push(hookSection);
+
   const graphSection = renderPackSection('## ĐIỂM NEO ĐỒ THỊ', result.graphPack, {
     limit: 4,
     includeTitles: true,
@@ -471,6 +500,12 @@ async function buildRoutedHybridSection(
 
   const canonSection = renderPackSection('## CANON ƯU TIÊN', result.canonPack, { limit: 4 });
   if (canonSection) lines.push(canonSection);
+
+  const stateSection = renderPackSection('## SNAPSHOT TRẠNG THÁI', result.statePack, { limit: 4 });
+  if (stateSection) lines.push(stateSection);
+
+  const hookSection = renderPackSection('## HOOK CHƯA THANH TOÁN', result.hookPack, { limit: 4 });
+  if (hookSection) lines.push(hookSection);
 
   // [Domain:ContextSelection] Only include graph context when router enables it
   if (route.includeGraphCommunities) {
@@ -572,6 +607,8 @@ async function buildEntityTimelineSection(project: Project, targetChapterIndex: 
         const parts = [`- ${character.name} (${character.role || 'chưa rõ vai trò'})`];
         if (character.currentStage) parts.push(` [${quickTruncate(character.currentStage, 40)}]`);
         if (character.traits) parts.push(`: ${quickTruncate(character.traits, 80)}`);
+        const psychologySummary = buildPsychologySummary(character, 180);
+        if (psychologySummary) parts.push(` | ${psychologySummary}`);
         const speechSummary = buildSpeechProfileSummary(character, 120);
         if (speechSummary) parts.push(` | ${speechSummary}`);
         return parts.join('');
@@ -584,12 +621,21 @@ async function buildEntityTimelineSection(project: Project, targetChapterIndex: 
       const currentStage = currentSnapshot?.attributes.current_stage || character.currentStage;
       const role = currentSnapshot?.attributes.role || character.role;
       const traits = currentSnapshot?.attributes.traits || character.traits;
+      const psychology = {
+        coreWound: currentSnapshot?.attributes.core_wound || character.psychology?.coreWound || '',
+        deepFear: currentSnapshot?.attributes.deep_fear || character.psychology?.deepFear || '',
+        hiddenDesire: currentSnapshot?.attributes.hidden_desire || character.psychology?.hiddenDesire || '',
+        selfDeception: currentSnapshot?.attributes.self_deception || character.psychology?.selfDeception || '',
+        bodyLanguage: currentSnapshot?.attributes.body_language || character.psychology?.bodyLanguage || '',
+      };
       const milestones = buildSnapshotMilestones(snapshots, chapterNumber);
       const speechSummary = buildSpeechProfileSummary(character, 120);
 
       const parts = [`- ${character.name} (${role || 'chưa rõ vai trò'})`];
       if (currentStage) parts.push(` [${quickTruncate(currentStage, 40)}]`);
       if (traits) parts.push(`: ${quickTruncate(traits, 80)}`);
+      const psychologySummary = buildPsychologySummary({ ...character, psychology }, 180);
+      if (psychologySummary) parts.push(` | ${psychologySummary}`);
       if (speechSummary) parts.push(` | ${speechSummary}`);
       if (milestones.length > 0) parts.push(` | Mốc: ${milestones.join(' | ')}`);
       return parts.join('');
@@ -660,7 +706,21 @@ function buildCurrentBeat(outline: OutlineBeat[], targetIndex: number): string {
   if (outline.length === 0 || targetIndex >= outline.length) return '';
   const beat = outline[targetIndex];
   if (!beat) return '';
-  return `## NHỊP TRUYỆN HIỆN TẠI (Beat ${targetIndex + 1})\nTiêu đề: ${beat.title}\nNội dung: ${quickTruncate(beat.summary, 300)}\nTrọng tâm: ${beat.focus}`;
+  
+  const parts = [
+    `## NHỊP TRUYỆN HIỆN TẠI (Beat ${targetIndex + 1})`,
+    `Tiêu đề: ${beat.title}`,
+    `Nội dung: ${quickTruncate(beat.summary, 300)}`,
+    `Trọng tâm: ${beat.focus}`
+  ];
+  
+  // P2a: Inject Blueprint metadata to guide AI generation style
+  if (beat.chapterRole) parts.push(`Vai trò chương: ${beat.chapterRole}`);
+  if (beat.suspenseLevel) parts.push(`Mức độ kịch tính (1-5): ${beat.suspenseLevel}`);
+  if (beat.plotTwistLevel) parts.push(`Mức độ bất ngờ (1-5): ${beat.plotTwistLevel}`);
+  if (beat.foreshadowingHint) parts.push(`Gợi ý phục bút: ${beat.foreshadowingHint}`);
+
+  return parts.join('\n');
 }
 
 function buildTargetBeat(outline: OutlineBeat[], targetIndex: number): string {

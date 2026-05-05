@@ -1,5 +1,6 @@
 import type { AnchorSet, ExpectationProfile, SurpriseBranch, TensionLevel } from '../../types/surprise';
-import type { Project } from '../../types/story';
+import type { OutlineBeat, Project } from '../../types/story';
+import { buildChapterCharacterGuardrails } from './character_cast_guardrails';
 
 function formatAnchors(anchors: AnchorSet): string {
   return anchors.all
@@ -13,6 +14,7 @@ export function buildBranchPlannerPrompts(opts: {
   tensionLevel: TensionLevel;
   anchors: AnchorSet;
   expectation: ExpectationProfile;
+  currentBeat?: OutlineBeat;
   prompt?: string;
   notes?: string;
   sourceOverride?: string;
@@ -23,6 +25,7 @@ export function buildBranchPlannerPrompts(opts: {
     tensionLevel,
     anchors,
     expectation,
+    currentBeat,
     prompt,
     notes,
     sourceOverride,
@@ -39,7 +42,8 @@ QUY TẮC CỨNG:
 5. riskScore là số nguyên từ 1 đến 10.
 6. beatStrategy chỉ được là follow, delay hoặc replace.
 7. Không tạo nhánh random; mọi nhánh phải có logic đọc ngược được.
-8. Không tạo twist phá endgame hoặc world rules.`;
+8. Không tạo twist phá endgame hoặc world rules.
+9. Các branch tạo ra phải tuân thủ mức độ suspense và twist của Outline Beat (nếu có), đồng thời hướng tới Author Intent.`;
 
   const user = `PROJECT: ${project.title || 'Dự án chưa đặt tên'}
 TARGET CHAPTER INDEX: ${targetChapterIndex}
@@ -47,6 +51,11 @@ TENSION LEVEL: ${tensionLevel}
 GENRE: ${project.genre}
 MAIN PLOT: ${project.mainPlot || '(trống)'}
 ENDGAME: ${project.endgame || '(trống)'}
+AUTHOR INTENT: ${project.authorIntent || '(không có)'}
+CURRENT FOCUS: ${project.currentFocus || '(không có)'}
+BEAT SUSPENSE LEVEL: ${currentBeat?.suspenseLevel ? `${currentBeat.suspenseLevel}/5` : '(không có)'}
+BEAT TWIST LEVEL: ${currentBeat?.plotTwistLevel ? `${currentBeat.plotTwistLevel}/5` : '(không có)'}
+FORESHADOWING HINT: ${currentBeat?.foreshadowingHint || '(không có)'}
 OPTIONAL USER PROMPT: ${prompt || '(không có)'}
 OPTIONAL USER NOTES: ${notes || '(không có)'}
 SOURCE OVERRIDE: ${sourceOverride ? sourceOverride.slice(-500) : '(không có)'}
@@ -62,6 +71,8 @@ ${expectation.setupSignals.join(' | ') || '(không có)'}
 
 ANCHORS:
 ${formatAnchors(anchors)}
+
+${buildChapterCharacterGuardrails(project, targetChapterIndex)}
 
 Trả JSON dạng:
 {
@@ -86,13 +97,14 @@ Trả JSON dạng:
 
 export function buildChapterWriterPrompts(opts: {
   contextText: string;
+  characterGuardrails?: string;
   branch: SurpriseBranch;
   tensionLevel: TensionLevel;
   prompt?: string;
   notes?: string;
   styleInstruction?: string;
 }) {
-  const { contextText, branch, tensionLevel, prompt, notes, styleInstruction } = opts;
+  const { contextText, characterGuardrails, branch, tensionLevel, prompt, notes, styleInstruction } = opts;
 
   const system = `Bạn là tiểu thuyết gia tiếng Việt viết chương truyện mượt, giàu logic nội tại và mang đậm tính "người" (human-like).
 Mục tiêu: viết chương theo branch đã chọn mà vẫn giữ coherence.
@@ -107,10 +119,13 @@ QUY TẮC:
 7. CONTENT chỉ là văn xuôi chương truyện.
 8. CONTENT không được là tóm tắt, dàn ý, phân tích, hay lời hứa sẽ viết.
 9. Viết bản thảo chi tiết khoảng 1.800-3.000 từ tiếng Việt nếu giới hạn token cho phép: có cảnh cụ thể, hành động, đối thoại, nội tâm, chuyển nhịp, và hook cuối chương.
-10. Phải giữ register từ vựng đúng bối cảnh trong context. Nếu context là cổ đại/cổ phong thì tránh từ hiện đại như "thành phố", "cao ốc", "app", "CEO" trừ khi chính context xác nhận có yếu tố xuyên không hoặc pha thời đại.
+10. Phải giữ register từ vựng đúng bối cảnh trong context. Nếu context là cổ đại/cổ phong thì tránh từ hiện đại/kỹ thuật như "va chạm vật lý", "phản xạ thần kinh", "tâm lý học", "logic", "thành phố", "cao ốc", "app", "CEO" trừ khi chính context xác nhận có yếu tố xuyên không hoặc pha thời đại.
 11. Xưng hô phải nhất quán theo quan hệ, địa vị và cảm xúc của đúng cảnh đang viết. Nếu context có hồ sơ xưng hô riêng của nhân vật thì phải ưu tiên hồ sơ đó trước luật template chung. Không được trượt giữa "ta/ngươi", "thiếp/chàng", "thần/bệ hạ" sang "tôi/anh/em" nếu context là cổ đại. Lưu ý: "ta - ngươi" không chỉ dành cho kẻ thù; trong cổ phong nó còn có thể dùng khi giữ khoảng cách, thị uy, người trên nói với kẻ dưới, hoặc hai bên chưa thân. Nhưng nếu cảnh cần thân mật, cung kính, hoặc quân thần thì phải đổi sang cặp phù hợp hơn.
 12. ANTI-AI STYLE (BẮT BUỘC): Cấm dùng các từ nối giáo khoa như "Tuy nhiên", "Điều quan trọng là", "Có thể nói rằng", "Tóm lại". Sử dụng câu đơn, câu phức xen kẽ để tạo nhịp điệu (sentence variance). Phải Show, Don't Tell - miêu tả biểu hiện vật lý thay vì gọi tên cảm xúc.
 13. Nếu context có các mục như "BẢN ĐỒ TÂM LÝ CẢNH", "KẾ HOẠCH CẢNH GHOSTWRITER", "RÀNG BUỘC GIỌNG VĂN" thì phải tuân thủ chúng như ràng buộc ưu tiên cao, chỉ đứng sau hard canon.
+14. Nếu context có mục "ERA, REGION, AND REGISTER LOCK" thì coi đó là luật ngôn ngữ ưu tiên cao: phải giữ đúng trục thời gian, trục văn minh-khu vực, tầng ngôn ngữ, và mode diễn giải; không được trộn thuật ngữ xuyên thời đại hay sai vùng văn hóa.
+15. Không được thêm nhân vật mới chỉ để làm đông cảnh. Nếu cần người mới, họ phải có chức năng rõ ràng và để lại hệ quả hoặc dư âm đủ nhớ.
+16. TUYỆT ĐỐI KHÔNG được đưa bất kỳ thuật ngữ lập trình, kỹ thuật máy tính, hoặc ký tự lạ nào vào phần CONTENT. Các từ như "Runtime", "Promise", "function", "module", "Error", "async", "null", "undefined", "JSON", "API", "config", "export", "import", "interface" v.v. là metadata nội bộ hệ thống, KHÔNG BAO GIỜ xuất hiện trong văn xuôi truyện. Nếu context chứa các từ này, phải bỏ qua hoàn toàn khi viết CONTENT.
 
 ⚠️ CRITICAL: Output PHẢI bắt đầu bằng dòng @@ECOT_ANALYSIS@@. Viết phân tích ngắn gọn về Động lực tâm lý nhân vật, Biểu hiện cơ thể dự kiến, và Danh sách từ cấm.
 Tiếp theo là @@LEDGER@@ (JSON hợp lệ).
@@ -133,6 +148,8 @@ SURPRISE VECTOR: ${branch.surpriseVector}
 USER PROMPT: ${prompt || '(không có)'}
 USER NOTES: ${notes || '(không có)'}
 STYLE INSTRUCTION: ${styleInstruction || '(không có)'}
+
+${characterGuardrails || ''}
 
 ${contextText}`;
 

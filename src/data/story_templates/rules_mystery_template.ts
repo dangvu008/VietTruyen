@@ -11,7 +11,7 @@ import type { StoryTemplate } from '../../types/story_template';
 export const RULES_MYSTERY_TEMPLATE: StoryTemplate = {
   id: 'rules-mystery',
   name: 'Quái Đàm Quy Tắc / Trinh Thám',
-  originalName: '规则怪谈',
+  originalName: 'luật lệ怪谈',
   coreSellingPoint: 'Logic suy luận + Manh mối công bằng + Trí lực đối kháng.',
   tags: ['mystery', 'detective', 'rules', 'horror'],
 

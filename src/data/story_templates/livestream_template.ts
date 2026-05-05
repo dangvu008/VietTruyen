@@ -20,60 +20,178 @@ export const LIVESTREAM_TEMPLATE: StoryTemplate = {
   ],
   "subGenres": [
     {
-      "name": "Trực Tiếp Văn / Livestream",
-      "description": "实时互动 + 舆论反转 + 商业变现。用“观众反馈”驱动剧情即时爽感。",
-      "coreAppeal": "实时互动 + 舆论反转 + 商业变现。用“观众反馈”驱动剧情即时爽感。"
+      "name": "带货逆袭流",
+      "description": "从小主播到头部主播，靠产品理解与话术破圈",
+      "coreAppeal": "单场爆单、对赌翻盘、品牌方反向求合作"
+    },
+    {
+      "name": "才艺竞技流",
+      "description": "唱跳/乐器/口才等赛道对决",
+      "coreAppeal": "临场发挥封神、全平台热搜、打脸质疑者"
+    },
+    {
+      "name": "探店纪实流",
+      "description": "线下探店+行业内幕揭露",
+      "coreAppeal": "真假测评、维权反击、舆论逆转"
+    },
+    {
+      "name": "神豪礼物流",
+      "description": "礼物榜、守护榜、直播间攻防战",
+      "coreAppeal": "榜单冲刺、PK翻盘、隐藏大哥身份揭晓"
     }
   ],
-  "worldRules": [],
-  "coolPatterns": [],
-  "conflictPatterns": [],
+  "worldRules": [
+    {
+      "name": "流量层级",
+      "description": "层级 / 特征 / 冲突来源 ------ / ------ / ---------- 冷启动 / 推荐少、曝光低 / 起号焦虑 成长期 / 稳定观众增长 / 内容同质化 爆发期 / 流量飙升 / 黑粉与节奏 头部期 / 商业化深 / 合同、舆论、团队管理"
+    },
+    {
+      "name": "关键角色",
+      "description": "**主播**: 核心输出与人设承载 **运营/剪辑**: 流量放大器 **品牌方**: 商业合作与议价博弈 **观众群体**: 支持者、路人、黑粉三类互动 --"
+    }
+  ],
+  "coolPatterns": [
+    {
+      "name": "直播翻车反杀",
+      "scenario": "对手设局抹黑，直播间节奏失控",
+      "appeal": "当场放证据反转，全网改口",
+      "keyNote": "证据链必须提前埋伏笔"
+    },
+    {
+      "name": "榜单冲顶",
+      "scenario": "PK赛最后5分钟落后",
+      "appeal": "战术拉票+关键助力，绝杀逆袭",
+      "keyNote": "过程要有节奏波峰，不要一口气碾压"
+    },
+    {
+      "name": "品牌博弈",
+      "scenario": "大品牌压价或甩锅",
+      "appeal": "主播以数据与口碑反制，反向提高议价",
+      "keyNote": "商务逻辑要真实"
+    },
+    {
+      "name": "账号重生",
+      "scenario": "封号/舆论崩盘后复出",
+      "appeal": "新账号冷启动破局，再次登顶",
+      "keyNote": "复出要有差异化定位"
+    }
+  ],
+  "conflictPatterns": [
+    {
+      "type": "起号焦虑",
+      "source": "起号焦虑",
+      "resolution": "冷启动"
+    },
+    {
+      "type": "内容同质化",
+      "source": "内容同质化",
+      "resolution": "成长期"
+    },
+    {
+      "type": "黑粉与节奏",
+      "source": "黑粉与节奏",
+      "resolution": "爆发期"
+    },
+    {
+      "type": "合同、舆论、团队管理",
+      "source": "合同、舆论、团队管理",
+      "resolution": "头部期"
+    },
+    {
+      "type": "关键角色",
+      "source": "**主播**: 核心输出与人设承载 **运营/剪辑**: 流量放大器 **品牌方**: 商业合作与议价博弈 **观众群体**: 支持者、路人、黑粉三类互动 --",
+      "resolution": "**主播**: 核心输出与人设承载 **运营/剪辑**: 流量放大器 **品牌方**: 商业合作与议价博弈 **观众群体**: 支持者、路人、黑粉三类互动 --"
+    },
+    {
+      "type": "直播翻车反杀",
+      "source": "对手设局抹黑，直播间节奏失控",
+      "resolution": "证据链必须提前埋伏笔"
+    },
+    {
+      "type": "品牌博弈",
+      "source": "大品牌压价或甩锅",
+      "resolution": "商务逻辑要真实"
+    },
+    {
+      "type": "卷二：破圈 (61-160章)",
+      "source": "**核心**: 内容升级+平台推荐，进入竞争赛道 **高潮**: 榜单逆袭",
+      "resolution": "**核心**: 内容升级+平台推荐，进入竞争赛道 **高潮**: 榜单逆袭"
+    },
+    {
+      "type": "卷三：攻防 (161-300章)",
+      "source": "**核心**: 应对黑粉、公关危机与团队矛盾 **高潮**: 舆论反转战",
+      "resolution": "**核心**: 应对黑粉、公关危机与团队矛盾 **高潮**: 舆论反转战"
+    }
+  ],
   "outlineArcs": [
     {
       "title": "卷一：起号 (1-60章)",
-      "chapterRange": "1-100",
+      "chapterRange": "1-60",
       "coreFocus": "完成账号定位，拿到第一波稳定观众",
       "coreConflict": "",
       "climax": "单场小爆发"
     },
     {
       "title": "卷二：破圈 (61-160章)",
-      "chapterRange": "1-100",
+      "chapterRange": "61-160",
       "coreFocus": "内容升级+平台推荐，进入竞争赛道",
       "coreConflict": "",
       "climax": "榜单逆袭"
     },
     {
       "title": "卷三：攻防 (161-300章)",
-      "chapterRange": "1-100",
+      "chapterRange": "161-300",
       "coreFocus": "应对黑粉、公关危机与团队矛盾",
       "coreConflict": "",
       "climax": "舆论反转战"
     },
     {
       "title": "卷四：商业化 (301-460章)",
-      "chapterRange": "1-100",
+      "chapterRange": "301-460",
       "coreFocus": "品牌合作、供应链、团队扩张",
       "coreConflict": "",
       "climax": "商业对赌胜出"
     },
     {
       "title": "卷五：新阶段 (461-620章)",
-      "chapterRange": "1-100",
+      "chapterRange": "461-620",
       "coreFocus": "从个人主播走向内容公司化",
       "coreConflict": "",
       "climax": "新赛道再封神"
     }
   ],
+  "targetWordCount": "1.500.000 chữ",
+  "targetChapterCount": 620,
   "pitfalls": [
     {
-      "description": "Thiết lập trước sau mâu thuẫn.",
+      "description": "直播生态脱离现实，数据全靠“天降流量”",
+      "severity": "critical"
+    },
+    {
+      "description": "观众只当背景板，不参与剧情推动",
+      "severity": "critical"
+    },
+    {
+      "description": "每章都在吵架，没有事业线进展",
+      "severity": "critical"
+    },
+    {
+      "description": "舆论反转没有证据与铺垫",
       "severity": "critical"
     }
   ],
   "bestPractices": [
     {
-      "description": "Thiết lập tự nhất quán."
+      "description": "每章至少体现1次“观众反馈”对决策的影响"
+    },
+    {
+      "description": "直播前-直播中-直播后形成闭环"
+    },
+    {
+      "description": "关键反转前埋2-3个可回收证据点"
+    },
+    {
+      "description": "商业冲突与人物情绪线并行推进"
     }
   ],
   "entityTags": [

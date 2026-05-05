@@ -8,15 +8,26 @@
  * - Input: freeText (user idea), optional context (previous messages)
  * - Output: { system, user } prompt pair → AI trả JSON
  */
+import { buildJsonObjectSystem, buildVietnameseTextSystem } from './prompt_standard';
 
-const BRAINSTORM_SYSTEM = `Bạn là chuyên gia sáng tạo tiểu thuyết mạng Việt Nam cấp cao nhất.
-Nhiệm vụ: Brainstorm cùng người viết — mở rộng ý tưởng, đặt câu hỏi thú vị, gợi ý hướng đi.
-Phong cách: Nhiệt tình, sáng tạo, thực tế. Hiểu sâu về webnovel Trung/Việt.
-LUÔN trả lời bằng tiếng Việt.`;
+const BRAINSTORM_SYSTEM = buildVietnameseTextSystem(
+  'Senior Vietnamese webnovel brainstorm partner',
+  'Expand the writer’s idea, surface strong directions, and ask the highest-value follow-up questions',
+  [
+    'Be creative but practical.',
+    'Stay grounded in Vietnamese and Chinese webnovel conventions.',
+    'Keep the reply compact.',
+  ],
+);
 
-const EXTRACTION_SYSTEM = `Bạn là chuyên gia sáng tạo tiểu thuyết mạng Việt Nam.
-Nhiệm vụ: Phân tích cuộc brainstorm và trích xuất TOÀN BỘ thông tin thành cấu trúc dự án.
-LUÔN trả về JSON hợp lệ. Không giải thích, không markdown — CHỈ JSON.`;
+const EXTRACTION_SYSTEM = buildJsonObjectSystem(
+  'Vietnamese webnovel project extractor',
+  'Convert the brainstorm conversation into structured project data',
+  [
+    'Infer missing details only when the conversation strongly supports them.',
+    'Prefer complete usable fields over vague placeholders.',
+  ],
+);
 
 /**
  * Brainstorm Phase 1: Interactive dialogue

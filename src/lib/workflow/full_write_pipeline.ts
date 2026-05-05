@@ -29,14 +29,17 @@ import type { CheckerContext } from '../../core/checkers/checker_types';
 import { analyzeChapterStyle } from '../ai/style_analyzer';
 import { executePostWritePipeline, type PostWritePipelineResult } from '../memory/memory_extractor';
 import { syncProjectMemoryBridge } from '../memory/memory_sync_bridge';
-import { getProjectRules } from '../../db/narrative_db';
+import { getActiveNarrativeStateFactsAtChapter, getProjectRules } from '../../db/narrative_db';
 import { getModelForTask } from '../ai/model_router';
 import { useAiStore } from '../../store/use_ai_store';
 import { callAiModelTracked } from '../ai/tracked_ai_client';
+import { runPreSaveQualityGate, type PreSaveQualityReport } from '../ai/pre_save_quality_gate';
 import { buildChapterContentHash } from '../memory/memory_indexer';
 import { createId } from '../../core/id';
 import { useTokenStore } from '../../store/use_token_store';
 import type { PipelineSession } from '../../types/token_tracker';
+import { getContinuityWarnings } from '../memory/memory_query';
+import { getOpenHooksForProject } from '../memory/pending_hooks_repository';
 
 // ─── Types ──────────────────────────────────────────────
 
@@ -61,6 +64,8 @@ export interface FullPipelineResult {
   reviewReport: CombinedReviewReport | null;
   /** Style analysis (null if skipped) */
   styleAnalysis: StyleAnalysisResult | null;
+  /** Final pre-save quality gate report (null if skipped or failed) */
+  preSaveReport: PreSaveQualityReport | null;
   /** Data agent extraction result */
   dataResult: PostWritePipelineResult | null;
   /** Per-step timing */
@@ -93,6 +98,7 @@ const MAX_REVIEW_RETRIES = 1;
 const DEFAULT_QUALITY_MODE: QualityMode = 'quality';
 
 interface QualityStepPlan {
+  runPreSaveGate: boolean;
   runReview: boolean;
   runPolish: boolean;
   runDataAgent: boolean;
@@ -106,6 +112,7 @@ function buildQualityStepPlan(
 ): QualityStepPlan {
   if (qualityMode === 'fast') {
     return {
+      runPreSaveGate: false,
       runReview: false,
       runPolish: false,
       runDataAgent: false,
@@ -115,6 +122,7 @@ function buildQualityStepPlan(
 
   if (qualityMode === 'balanced') {
     return {
+      runPreSaveGate: true,
       runReview: false,
       runPolish: !skipPolish,
       runDataAgent: true,
@@ -123,6 +131,7 @@ function buildQualityStepPlan(
   }
 
   return {
+    runPreSaveGate: true,
     runReview: !skipReview,
     runPolish: !skipPolish,
     runDataAgent: true,
@@ -137,16 +146,39 @@ function resolvePipelineModel(taskType: 'write_chapter' | 'summarize' | 'extract
     aiStore.models,
     undefined,
     aiStore.activeModelId,
-    aiStore.taskModelOverrides
+    aiStore.taskModelOverrides,
+    aiStore.modelHealth,
+    [],
+    aiStore.preferredProvider
   );
 }
 
-function buildCheckerContext(
+async function buildCheckerContext(
   project: Project,
   targetChapterIndex: number,
   chapterText: string,
   systemStateContext: string,
-): CheckerContext {
+): Promise<CheckerContext> {
+  const currentBeat = project.outline[targetChapterIndex];
+  const nextBeat = project.outline[targetChapterIndex + 1];
+  const effectiveChapterIndex = Math.max(1, targetChapterIndex);
+  const [stateFacts, openHooks, continuityTasks] = await Promise.all([
+    getActiveNarrativeStateFactsAtChapter(project.id, effectiveChapterIndex).catch(() => []),
+    getOpenHooksForProject(project.id).catch(() => []),
+    getContinuityWarnings(project.id, effectiveChapterIndex).catch(() => []),
+  ]);
+  const activeThreads = [
+    ...project.foreshadowings
+      .filter((item) => !item.isResolved)
+      .slice(0, 5)
+      .map((item) => item.description),
+    ...openHooks.slice(0, 4).map((hook) => hook.description),
+    ...project.outline
+      .slice(targetChapterIndex + 1, targetChapterIndex + 3)
+      .map((beat) => [beat.title, beat.summary].filter(Boolean).join(': '))
+      .filter(Boolean),
+  ];
+
   return {
     chapterId: `pipeline-${targetChapterIndex}`,
     chapterNumber: targetChapterIndex + 1,
@@ -156,10 +188,10 @@ function buildCheckerContext(
       aliases: c.aliases || [],
       traits: c.traits || '',
       role: c.role,
-      personality: c.traits || '',
+      personality: [c.traits, c.psychology?.selfDeception, c.psychology?.hiddenDesire].filter(Boolean).join(' | '),
       speechPattern: '',
-      coreValues: '',
-      behavioralTendencies: c.arc || '',
+      coreValues: c.psychology?.coreWound || '',
+      behavioralTendencies: [c.arc, c.psychology?.bodyLanguage].filter(Boolean).join(' | '),
     })),
     strandTracker: project.strandTracker || {
       lastQuestChapter: 0,
@@ -169,7 +201,30 @@ function buildCheckerContext(
     },
     systemStateContext,
     previousSummary: project.chapters[targetChapterIndex - 1]?.summary || '',
-    activeThreads: [],
+    activeThreads,
+    chapterIntent: [
+      currentBeat?.title,
+      currentBeat?.summary,
+      currentBeat?.focus ? `Focus: ${currentBeat.focus}` : '',
+    ].filter(Boolean).join(' | '),
+    futureTarget: nextBeat
+      ? [nextBeat.title, nextBeat.summary, nextBeat.focus ? `Focus: ${nextBeat.focus}` : ''].filter(Boolean).join(' | ')
+      : project.endgame || '',
+    storyStateFacts: stateFacts.slice(0, 8).map((fact) => ({
+      subjectId: fact.subjectId,
+      predicate: fact.predicate,
+      value: fact.value,
+      validFromChapter: fact.validFromChapter,
+      confidence: fact.confidence,
+    })),
+    activeHooks: openHooks.slice(0, 5).map((hook) => ({
+      id: hook.id,
+      description: hook.description,
+      plantedChapterIndex: hook.plantedChapterIndex,
+      expectedPayoffBy: hook.expectedPayoffBy,
+      confidence: hook.confidence,
+    })),
+    continuityWarnings: continuityTasks.slice(0, 4).map((task) => task.recommendedAction),
   };
 }
 
@@ -202,6 +257,34 @@ function buildRetryFeedbackNotes(reviewReport: CombinedReviewReport): string {
 function mergeNotes(baseNotes?: string, extraNotes?: string): string | undefined {
   const merged = [baseNotes, extraNotes].filter(Boolean).join('\n\n');
   return merged || undefined;
+}
+
+async function runPreSaveGateForWriteResult(opts: {
+  project: Project;
+  targetChapterIndex: number;
+  writeResult: ChapterWriteResult;
+  pipelineSessionId: string;
+}): Promise<{ writeResult: ChapterWriteResult; report: PreSaveQualityReport | null }> {
+  const model = resolvePipelineModel('write_chapter');
+  if (!model) return { writeResult: opts.writeResult, report: null };
+
+  const result = await runPreSaveQualityGate({
+    project: opts.project,
+    targetChapterIndex: opts.targetChapterIndex,
+    chapterTitle: opts.writeResult.title,
+    chapterContent: opts.writeResult.content,
+    chapterSummary: opts.writeResult.ledger.summary,
+    model,
+    pipelineSessionId: opts.pipelineSessionId,
+  });
+
+  return {
+    writeResult: {
+      ...opts.writeResult,
+      content: result.content,
+    },
+    report: result.report,
+  };
 }
 
 function buildDraftChapter(
@@ -314,6 +397,24 @@ export async function executeFullWritePipeline(opts: PipelineOptions): Promise<F
     signal,
   });
 
+  let preSaveReport: PreSaveQualityReport | null = null;
+  if (stepPlan.runPreSaveGate) {
+    const preSaveStart = Date.now();
+    try {
+      const preSaveResult = await runPreSaveGateForWriteResult({
+        project,
+        targetChapterIndex,
+        writeResult,
+        pipelineSessionId,
+      });
+      writeResult = preSaveResult.writeResult;
+      preSaveReport = preSaveResult.report;
+    } catch (error) {
+      console.error('[FullPipeline] Pre-save quality gate failed:', error);
+    }
+    stepTimings['pre_save_quality_gate'] = Date.now() - preSaveStart;
+  }
+
   stepTimings['ai_draft'] = Date.now() - step2Start;
   emitProgress(2, 'AI viết nháp chương', 'done', stepTimings['ai_draft']);
 
@@ -330,7 +431,7 @@ export async function executeFullWritePipeline(opts: PipelineOptions): Promise<F
       if (!reviewModel) throw new Error('No model for review');
 
       const runReviewPass = async (content: string) => {
-        const checkerContext = buildCheckerContext(
+        const checkerContext = await buildCheckerContext(
           project,
           targetChapterIndex,
           content,
@@ -374,6 +475,21 @@ export async function executeFullWritePipeline(opts: PipelineOptions): Promise<F
           styleInstruction,
           pipelineSessionId,
         });
+
+        if (stepPlan.runPreSaveGate) {
+          try {
+            const preSaveResult = await runPreSaveGateForWriteResult({
+              project,
+              targetChapterIndex,
+              writeResult,
+              pipelineSessionId,
+            });
+            writeResult = preSaveResult.writeResult;
+            preSaveReport = preSaveResult.report;
+          } catch (error) {
+            console.error('[FullPipeline] Pre-save quality gate retry pass failed:', error);
+          }
+        }
 
         reviewReport = await runReviewPass(writeResult.content);
       }
@@ -509,6 +625,7 @@ export async function executeFullWritePipeline(opts: PipelineOptions): Promise<F
     writeResult,
     reviewReport,
     styleAnalysis,
+    preSaveReport,
     dataResult,
     stepTimings,
     totalDurationMs,

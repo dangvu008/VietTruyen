@@ -26,6 +26,7 @@ import {
   Users,
 } from 'lucide-react';
 import type { StoryTemplate } from '../../../types/story_template';
+import { getTemplateTagLabelVi } from '../../../lib/story_templates/tag_labels_vi';
 
 // ─── Section Wrapper ────────────────────────────────────────
 
@@ -117,7 +118,7 @@ const TemplateDetailView: React.FC<TemplateDetailViewProps> = ({
                 key={tag}
                 className="px-2.5 py-1 rounded-full text-[11px] font-medium bg-white/[0.04] text-[var(--vt-text-muted)] border border-white/5"
               >
-                {tag}
+                {getTemplateTagLabelVi(tag)}
               </span>
             ))}
           </div>

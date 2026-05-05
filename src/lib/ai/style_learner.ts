@@ -44,7 +44,10 @@ export async function synthesizeRules(
     aiStore.models,
     undefined,
     aiStore.activeModelId,
-    aiStore.taskModelOverrides
+    aiStore.taskModelOverrides,
+    aiStore.modelHealth,
+    [],
+    aiStore.preferredProvider
   );
 
   if (!model) {

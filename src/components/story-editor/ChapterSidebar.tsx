@@ -11,8 +11,6 @@ import type { ChapterUIStatus, ProjectInfo } from './editor_types';
 import {
   Archive,
   Book,
-  ChevronDown,
-  ChevronUp,
   Copy,
   Filter,
   Folder,
@@ -21,6 +19,7 @@ import {
   PenLine,
   Plus,
   Search,
+  Star,
   Trash2,
   X,
 } from 'lucide-react';
@@ -34,8 +33,7 @@ interface Props {
   onNew: () => void;
   onDelete?: (chapterId: string) => Promise<void> | void;
   onDuplicate?: (chapter: Chapter) => Promise<void> | void;
-  onMoveUp?: (chapterId: string) => Promise<void> | void;
-  onMoveDown?: (chapterId: string) => Promise<void> | void;
+  onToggleFavorite?: (chapterId: string) => Promise<void> | void;
 }
 
 const STATUS_META: Record<ChapterUIStatus, { label: string; badge: string; dot: string }> = {
@@ -48,6 +46,16 @@ const STATUS_META: Record<ChapterUIStatus, { label: string; badge: string; dot: 
     label: 'AI nháp',
     badge: 'border-[#c6a6ff]/15 bg-[#c6a6ff]/10 text-[#ceb9f4]',
     dot: 'bg-[#c6a6ff]',
+  },
+  generating: {
+    label: 'Đang tạo',
+    badge: 'border-[#f0c59a]/20 bg-[#f0c59a]/10 text-[#f0c59a]',
+    dot: 'bg-[#f0c59a] animate-pulse',
+  },
+  interrupted: {
+    label: 'Tạo dở',
+    badge: 'border-amber-500/25 bg-amber-500/10 text-amber-300',
+    dot: 'bg-amber-300',
   },
   reviewing: {
     label: 'Đang sửa',
@@ -76,6 +84,7 @@ type FilterStatus = 'all' | ChapterUIStatus;
 const FILTER_OPTIONS: { value: FilterStatus; label: string }[] = [
   { value: 'all', label: 'Tất cả' },
   { value: 'empty', label: 'Trống' },
+  { value: 'interrupted', label: 'Tạo dở' },
   { value: 'edited', label: 'Đã viết' },
   { value: 'approved', label: 'Hoàn tất' },
 ];
@@ -95,8 +104,7 @@ export const ChapterSidebar: React.FC<Props> = ({
   onNew,
   onDelete,
   onDuplicate,
-  onMoveUp,
-  onMoveDown,
+  onToggleFavorite,
 }) => {
   const [query, setQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<FilterStatus>('all');
@@ -153,7 +161,7 @@ export const ChapterSidebar: React.FC<Props> = ({
     empty: chapters.filter((c) => !statusMap[c.id] || statusMap[c.id] === 'empty').length,
     draft: chapters.filter((c) => {
       const s = statusMap[c.id];
-      return s === 'ai-draft' || s === 'reviewing';
+      return s === 'ai-draft' || s === 'reviewing' || s === 'generating' || s === 'interrupted';
     }).length,
   }), [chapters, statusMap]);
 
@@ -399,6 +407,9 @@ export const ChapterSidebar: React.FC<Props> = ({
                             <span className={`rounded-full border px-2 py-1 text-[10px] font-semibold ${statusMeta.badge}`}>
                               {statusMeta.label}
                             </span>
+                            {chapter.isFavorite && (
+                              <Star className="mr-1 mt-1 h-3 w-3 fill-accent-amber text-accent-amber" />
+                            )}
                             {/* Context menu trigger */}
                             <button
                               type="button"
@@ -480,26 +491,14 @@ export const ChapterSidebar: React.FC<Props> = ({
           </div>
 
           <div className="py-1">
-            {/* Move up */}
+            {/* Toggle Favorite */}
             <button
               type="button"
-              onClick={async () => { await onMoveUp?.(contextMenu.chapterId); setContextMenu(null); }}
-              disabled={contextIndex === 0}
-              className="flex w-full items-center gap-2.5 px-3 py-2 text-[12px] text-[#d0c6bd] transition-colors hover:bg-white/[0.06] disabled:cursor-not-allowed disabled:opacity-35"
+              onClick={async () => { await onToggleFavorite?.(contextMenu.chapterId); setContextMenu(null); }}
+              className="flex w-full items-center gap-2.5 px-3 py-2 text-[12px] text-[#d0c6bd] transition-colors hover:bg-white/[0.06]"
             >
-              <ChevronUp className="h-3.5 w-3.5 shrink-0 text-[#8f7f73]" />
-              Di chuyển lên
-            </button>
-
-            {/* Move down */}
-            <button
-              type="button"
-              onClick={async () => { await onMoveDown?.(contextMenu.chapterId); setContextMenu(null); }}
-              disabled={contextIndex === chapters.length - 1}
-              className="flex w-full items-center gap-2.5 px-3 py-2 text-[12px] text-[#d0c6bd] transition-colors hover:bg-white/[0.06] disabled:cursor-not-allowed disabled:opacity-35"
-            >
-              <ChevronDown className="h-3.5 w-3.5 shrink-0 text-[#8f7f73]" />
-              Di chuyển xuống
+              <Star className={`h-3.5 w-3.5 shrink-0 ${contextChapter.isFavorite ? 'fill-accent-amber text-accent-amber' : 'text-[#8f7f73]'}`} />
+              {contextChapter.isFavorite ? 'Bỏ yêu thích' : 'Đánh dấu yêu thích'}
             </button>
 
             <div className="mx-3 my-1 border-t border-white/[0.05]" />

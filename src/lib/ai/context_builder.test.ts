@@ -51,6 +51,13 @@ function makeProject(): Project {
         traits: 'Gan lì',
         aliases: [],
         facts: [],
+        psychology: {
+          coreWound: 'Từng bị sư môn bỏ mặc',
+          deepFear: 'bị xem là phế vật',
+          hiddenDesire: 'được một người thật sự tin mình',
+          selfDeception: 'chỉ cần mạnh lên thì không cần ai cả',
+          bodyLanguage: 'hàm siết chặt, ngón tay bấu vào chuôi kiếm',
+        },
         speechProfile: {
           defaultSelfPronouns: ['ta'],
           defaultAddressPronouns: ['ngươi'],
@@ -192,6 +199,8 @@ describe('buildSurpriseContext', () => {
     expect(context.contextText).toContain('## TIMELINE NHÂN VẬT TRỌNG TÂM');
     expect(context.contextText).toContain('Lâm Tề');
     expect(context.contextText).toContain('Ch.2: current_stage=Trúc Cơ');
+    expect(context.contextText).toContain('TÂM LÝ:');
+    expect(context.contextText).toContain('tự lừa chỉ cần mạnh lên thì không cần ai cả');
     expect(context.contextText).toContain('xưng ta');
     expect(context.contextText).toContain('đối đầu với Bạch Long: ta - ngươi');
     expect(context.contextText).not.toContain('Hạ Vũ');
@@ -273,6 +282,8 @@ describe('buildWritingContext', () => {
     expect(context.contextText).toContain('## CỤM NARRATIVE LIÊN QUAN');
     expect(context.contextText).toContain('Lâm Tề / Bạch Long');
     expect(context.contextText).toContain('Open threads');
+    expect(context.contextText).toContain('## ERA, REGION, AND REGISTER LOCK');
+    expect(context.contextText).toContain('"va chạm vật lý"');
     expect(context.contextText).not.toContain('## NHÂN VẬT\n- Hạ Vũ');
   });
 });

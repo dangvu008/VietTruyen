@@ -7,6 +7,7 @@
 - Do not use the removed `.agent-skills` submodule paths.
 - Do not resurrect non-canonical routes or flows that [`docs/CANONICAL_AGENT_SPEC.md`](/Users/adm/VietTruyen/docs/CANONICAL_AGENT_SPEC.md) marks as legacy.
 - Do not claim completion without proof.
+- Prompt instructions should follow [`docs/PROMPT_STANDARD.md`](/Users/adm/VietTruyen/docs/PROMPT_STANDARD.md): English-first, concise, format-driven.
 
 ## ACE Guide
 

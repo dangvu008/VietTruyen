@@ -12,15 +12,18 @@
  */
 import { callAiModelTracked } from './tracked_ai_client';
 import type { AiModel } from '../../types/story';
+import { buildVietnameseTextSystem } from './prompt_standard';
 
-const SUMMARIZE_SYSTEM = `Bạn là trợ lý tóm tắt chương truyện. Mục tiêu: tóm tắt NGẮN GỌN, ĐẦY ĐỦ thông tin cốt lõi.
-
-QUY TẮC:
-1. Tóm tắt trong 150-200 chữ tiếng Việt.
-2. BẮT BUỘC bao gồm: sự kiện chính, nhân vật xuất hiện, thay đổi trạng thái/tình cảm, mầm mối/foreshadowing (nếu có).
-3. Dùng thể chủ động, câu ngắn, rõ ràng.
-4. KHÔNG thêm bình luận, đánh giá chất lượng. CHỈ tóm tắt nội dung.
-5. KHÔNG dùng markdown. Viết văn xuôi thuần.`;
+const SUMMARIZE_SYSTEM = buildVietnameseTextSystem(
+  'Chapter summarizer',
+  'Summarize a chapter with the core plot, characters, state changes, and foreshadowing',
+  [
+    'Keep the summary within 150-200 Vietnamese words.',
+    'Use active voice and short clear sentences.',
+    'Do not add critique or quality commentary.',
+    'Return summary prose only.',
+  ],
+);
 
 /**
  * Gọi AI (ưu tiên Flash model) để tóm tắt 1 chương.

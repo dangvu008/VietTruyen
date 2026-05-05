@@ -129,6 +129,7 @@ describe('adaptation_import_pipeline', () => {
     );
 
     expect(syncMock).toHaveBeenCalledWith(previewProject, {
+      mirrorEmbeddings: false,
       onProgress: undefined,
     });
     expect(result.stats).toEqual({

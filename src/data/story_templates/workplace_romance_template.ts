@@ -21,60 +21,176 @@ export const WORKPLACE_ROMANCE_TEMPLATE: StoryTemplate = {
   ],
   "subGenres": [
     {
-      "name": "Chức Trường Hôn Luyến",
-      "description": "职场博弈 + 成长晋升 + 情感平衡。在事业与爱情的天平上，找到属于自己的平衡点。",
-      "coreAppeal": "职场博弈 + 成长晋升 + 情感平衡。在事业与爱情的天平上，找到属于自己的平衡点。"
+      "name": "办公室恋情流",
+      "description": "上下级/同事之间的感情",
+      "coreAppeal": "暗恋成真、身份反转、甜蜜日常",
+      "referenceWorks": [
+        "杉杉来了",
+        "何以笙箫默",
+        "你是我的荣耀"
+      ]
+    },
+    {
+      "name": "职场逆袭流",
+      "description": "职场小白成长为精英",
+      "coreAppeal": "能力打脸、晋升逆袭、事业爱情双丰收",
+      "referenceWorks": [
+        "欢乐颂",
+        "我的前半生",
+        "都挺好"
+      ]
+    },
+    {
+      "name": "商战博弈流",
+      "description": "商业竞争中的爱恨情仇",
+      "coreAppeal": "商战胜利、对手臣服、强强联合",
+      "referenceWorks": [
+        "创业时代",
+        "猎场",
+        "精英律师"
+      ]
+    },
+    {
+      "name": "行业精英流",
+      "description": "特定行业的专业故事",
+      "coreAppeal": "专业碾压、行业认可、业界传奇",
+      "referenceWorks": [
+        "外科风云",
+        "法医秦明",
+        "翻译官"
+      ]
     }
   ],
-  "worldRules": [],
-  "coolPatterns": [],
-  "conflictPatterns": [],
+  "worldRules": [
+    {
+      "name": "职场等级",
+      "description": "等级 / 特点 / 权力 ------ / ------ / ------ 高管层 / 决策权 / 战略方向 中层 / 执行权 / 部门管理 基层主管 / 监督权 / 团队管理 普通员工 / 执行者 / 具体工作 实习生 / 学习者 / 打杂"
+    },
+    {
+      "name": "行业特色",
+      "description": "行业 / 特点 / 核心冲突 ------ / ------ / ---------- 金融 / 高压高薪 / 业绩vs道德 互联网 / 快节奏 / 创新vs稳定 律师 / 逻辑严密 / 正义vs利益 医疗 / 生死攸关 / 救人vs规则 传媒 / 舆论影响 / 真相vs流量"
+    },
+    {
+      "name": "职场资源",
+      "description": "资源 / 说明 / 获取方式 ------ / ------ / ---------- 人脉 / 关系网络 / 社交/项目 业绩 / 工作成果 / 努力/机遇 能力 / 专业技能 / 学习/实践 口碑 / 职场声誉 / 积累/维护 靠山 / 上级支持 / 表现/站队 --"
+    }
+  ],
+  "coolPatterns": [
+    {
+      "name": "能力打脸",
+      "scenario": "被质疑后用实力证明自己",
+      "appeal": "专业碾压，对手哑口无言",
+      "keyNote": "要有专业细节支撑"
+    },
+    {
+      "name": "晋升逆袭",
+      "scenario": "从底层一路升到高位",
+      "appeal": "曾经看不起的人现在要仰望",
+      "keyNote": "要有成长过程"
+    },
+    {
+      "name": "商战胜利",
+      "scenario": "关键项目/谈判获胜",
+      "appeal": "击败对手，获得认可"
+    },
+    {
+      "name": "身份反转",
+      "scenario": "隐藏身份被揭露",
+      "appeal": "原来是大老板/富二代",
+      "keyNote": "要有伏笔，不能太突兀"
+    }
+  ],
+  "conflictPatterns": [
+    {
+      "type": "卷一：入职 (1-50章)",
+      "source": "新人/底层",
+      "resolution": "第一个项目成功"
+    },
+    {
+      "type": "卷二：成长 (51-120章)",
+      "source": "骨干员工",
+      "resolution": "获得晋升机会"
+    },
+    {
+      "type": "卷三：考验 (121-200章)",
+      "source": "中层管理",
+      "resolution": "度过危机"
+    },
+    {
+      "type": "卷四：突破 (201-280章)",
+      "source": "高层/合伙人",
+      "resolution": "事业巅峰"
+    }
+  ],
   "outlineArcs": [
     {
       "title": "卷一：入职 (1-50章)",
-      "chapterRange": "1-100",
+      "chapterRange": "1-50",
       "coreFocus": "进入职场，适应环境",
       "coreConflict": "新人/底层",
       "climax": "第一个项目成功"
     },
     {
       "title": "卷二：成长 (51-120章)",
-      "chapterRange": "1-100",
+      "chapterRange": "51-120",
       "coreFocus": "能力提升，感情萌芽",
       "coreConflict": "骨干员工",
       "climax": "获得晋升机会"
     },
     {
       "title": "卷三：考验 (121-200章)",
-      "chapterRange": "1-100",
+      "chapterRange": "121-200",
       "coreFocus": "事业感情双重考验",
       "coreConflict": "中层管理",
       "climax": "度过危机"
     },
     {
       "title": "卷四：突破 (201-280章)",
-      "chapterRange": "1-100",
+      "chapterRange": "201-280",
       "coreFocus": "事业突破，感情确定",
       "coreConflict": "高层/合伙人",
       "climax": "事业巅峰"
     },
     {
       "title": "卷五：圆满 (281-350章)",
-      "chapterRange": "1-100",
+      "chapterRange": "281-350",
       "coreFocus": "事业爱情双丰收",
       "coreConflict": "行业精英",
       "climax": "圆满结局"
     }
   ],
+  "targetWordCount": "800.000 chữ",
+  "targetChapterCount": 350,
   "pitfalls": [
     {
-      "description": "Thiết lập trước sau mâu thuẫn.",
+      "description": "职场描写太假",
+      "severity": "critical"
+    },
+    {
+      "description": "只谈恋爱不工作",
+      "severity": "critical"
+    },
+    {
+      "description": "升职太快太顺",
+      "severity": "critical"
+    },
+    {
+      "description": "专业知识错误",
       "severity": "critical"
     }
   ],
   "bestPractices": [
     {
-      "description": "Thiết lập tự nhất quán."
+      "description": "职场细节真实"
+    },
+    {
+      "description": "事业感情平衡"
+    },
+    {
+      "description": "晋升有过程"
+    },
+    {
+      "description": "专业知识准确"
     }
   ],
   "entityTags": [

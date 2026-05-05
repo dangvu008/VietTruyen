@@ -13,6 +13,7 @@
 
 import { create } from 'zustand';
 import type { PromptScope } from '../components/story-editor/editor_types';
+import { traceStoryDebugEvent } from '../lib/debug/story_debug_trace';
 
 // ─── Types ──────────────────────────────────────────────
 
@@ -137,6 +138,20 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
       abortController: controller,
       streamingMessageId: messageId,
     });
+    traceStoryDebugEvent({
+      domain: 'generation',
+      action: 'chat_stream.start',
+      level: 'info',
+      summary: 'AI chat stream started.',
+      details: {
+        messageId,
+        scope: context.scope,
+        provider: context.provider,
+        modelId: context.modelId,
+        modelName: context.modelName,
+        lastInstruction: context.lastInstruction,
+      },
+    });
 
     return controller;
   },
@@ -145,6 +160,19 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
     set((state) => ({
       streamedText: state.streamedText + chunk,
     }));
+    const state = get();
+    traceStoryDebugEvent({
+      domain: 'generation',
+      action: 'chat_stream.chunk',
+      level: 'info',
+      summary: `AI chat stream appended ${chunk.length} chars.`,
+      details: {
+        messageId: state.streamingMessageId,
+        chunkChars: chunk.length,
+        accumulatedChars: state.streamedText.length,
+        chunk,
+      },
+    });
   },
 
   stopStream: () => {
@@ -158,6 +186,16 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
       isStreaming: false,
       canResume: true,
       abortController: null,
+    });
+    traceStoryDebugEvent({
+      domain: 'generation',
+      action: 'chat_stream.stopped',
+      level: 'warn',
+      summary: 'AI chat stream was stopped and can be resumed.',
+      details: {
+        messageId: get().streamingMessageId,
+        partialChars: get().streamedText.length,
+      },
     });
   },
 
@@ -180,16 +218,37 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
       abortController: controller,
       streamingMessageId: messageId,
     });
+    traceStoryDebugEvent({
+      domain: 'generation',
+      action: 'chat_stream.resume',
+      level: 'info',
+      summary: 'AI chat stream resume started.',
+      details: {
+        messageId,
+        partialChars: get().streamedText.length,
+      },
+    });
 
     return controller;
   },
 
   finishStream: () => {
+    const { streamingMessageId, streamedText } = get();
     set({
       isStreaming: false,
       canResume: false,
       abortController: null,
       streamingMessageId: null,
+    });
+    traceStoryDebugEvent({
+      domain: 'generation',
+      action: 'chat_stream.finished',
+      level: 'info',
+      summary: 'AI chat stream finished.',
+      details: {
+        messageId: streamingMessageId,
+        outputChars: streamedText.length,
+      },
     });
   },
 
@@ -197,6 +256,10 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
     const controller = get().abortController;
     if (controller) {
       controller.abort();
+    }
+    const scratchController = get().scratchAbortController;
+    if (scratchController) {
+      scratchController.abort();
     }
 
     set({
@@ -206,6 +269,18 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
       resumeContext: null,
       abortController: null,
       streamingMessageId: null,
+      isScratchStreaming: false,
+      scratchStreamedText: '',
+      scratchAbortController: null,
+      generationJobId: null,
+      generatingChapterId: null,
+      generationStartedAt: null,
+    });
+    traceStoryDebugEvent({
+      domain: 'generation',
+      action: 'state.reset',
+      level: 'info',
+      summary: 'Generation state reset.',
     });
   },
 
@@ -226,6 +301,16 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
       generatingChapterId: chapterId,
       generationStartedAt: new Date().toISOString(),
     });
+    traceStoryDebugEvent({
+      domain: 'generation',
+      action: 'scratch_stream.start',
+      level: 'info',
+      summary: 'Scratch chapter generation stream started.',
+      details: {
+        chapterId,
+        generationJobId: jobId,
+      },
+    });
     return controller;
   },
 
@@ -237,6 +322,20 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
         state.onChunkPersist(state.generatingChapterId, next);
       }
       return { scratchStreamedText: next };
+    });
+    const state = get();
+    traceStoryDebugEvent({
+      domain: 'generation',
+      action: 'scratch_stream.chunk',
+      level: 'info',
+      summary: `Scratch chapter generation appended ${chunk.length} chars.`,
+      details: {
+        chapterId: state.generatingChapterId,
+        generationJobId: state.generationJobId,
+        chunkChars: chunk.length,
+        accumulatedChars: state.scratchStreamedText.length,
+        chunk,
+      },
     });
   },
 
@@ -250,9 +349,21 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
       isScratchStreaming: false,
       scratchAbortController: null,
     });
+    traceStoryDebugEvent({
+      domain: 'generation',
+      action: 'scratch_stream.stopped',
+      level: 'warn',
+      summary: 'Scratch chapter generation stream was stopped.',
+      details: {
+        chapterId: get().generatingChapterId,
+        generationJobId: get().generationJobId,
+        partialChars: get().scratchStreamedText.length,
+      },
+    });
   },
 
   finishScratchStream: () => {
+    const { generatingChapterId, generationJobId, scratchStreamedText } = get();
     // [Domain:StoryEditor] STEP — Clear all job tracking on natural completion
     set({
       isScratchStreaming: false,
@@ -260,6 +371,17 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
       generationJobId: null,
       generatingChapterId: null,
       generationStartedAt: null,
+    });
+    traceStoryDebugEvent({
+      domain: 'generation',
+      action: 'scratch_stream.finished',
+      level: 'info',
+      summary: 'Scratch chapter generation stream finished.',
+      details: {
+        chapterId: generatingChapterId,
+        generationJobId,
+        outputChars: scratchStreamedText.length,
+      },
     });
   },
 }));

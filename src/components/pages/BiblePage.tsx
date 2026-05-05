@@ -9,7 +9,7 @@
  * 2. Thiết lập chi tiết — Characters, World, Plot + AI suggest for each
  */
 import React, { useState, useCallback, useEffect } from 'react';
-import { Save, ChevronDown, ChevronUp, Sparkles } from 'lucide-react';
+import { AlertTriangle, Save, ChevronDown, ChevronUp, Sparkles } from 'lucide-react';
 import type { Project } from '../../types/story';
 import { NOVEL_GENRES, NOVEL_TAGS, WRITING_STYLES } from '../../data/novel_genres';
 import { buildTitlePrompt, buildCharacterPrompt, buildWorldPrompt, buildPlotPrompt } from '../../lib/ai/bible_prompts';
@@ -24,11 +24,20 @@ import { useNotificationStore } from '../../store/use_notification_store';
 import { createId } from '../../core/id';
 import PageHeader from '../layout/PageHeader';
 import { hasDuplicateProjectTitle } from '../../lib/project/project_title';
+import {
+  buildBibleSmartSyncReview,
+  type BibleSmartSyncReview,
+} from '../../lib/bible/bible_smart_sync_review';
 
 interface BiblePageProps {
   project: Project;
   onUpdateProject: (id: string, patch: Partial<Project>) => void;
   onOpenAi: () => void;
+}
+
+function previewReviewValue(value: string): string {
+  if (!value.trim()) return 'Trống';
+  return value.length > 140 ? `${value.slice(0, 140)}...` : value;
 }
 
 const BiblePage: React.FC<BiblePageProps> = ({ project, onUpdateProject, onOpenAi }) => {
@@ -55,6 +64,7 @@ const BiblePage: React.FC<BiblePageProps> = ({ project, onUpdateProject, onOpenA
   const [handoffBrief, setHandoffBrief] = useState<string | null>(null);
   const [titleDraft, setTitleDraft] = useState(project.title);
   const [titleError, setTitleError] = useState('');
+  const [pendingSmartSync, setPendingSmartSync] = useState<BibleSmartSyncReview | null>(null);
 
   const update = (field: keyof Project, value: any) => {
     onUpdateProject(project.id, { [field]: value });
@@ -64,7 +74,7 @@ const BiblePage: React.FC<BiblePageProps> = ({ project, onUpdateProject, onOpenA
     setTitleDraft(project.title);
   }, [project.title]);
 
-  const commitTitleDraft = useCallback(() => {
+  const commitTitleDraft = useCallback((): boolean => {
     const nextTitle = titleDraft.trim() || 'Tác phẩm mới';
     const duplicated = hasDuplicateProjectTitle(store.projects, nextTitle, {
       excludeProjectId: project.id,
@@ -72,14 +82,26 @@ const BiblePage: React.FC<BiblePageProps> = ({ project, onUpdateProject, onOpenA
 
     if (duplicated) {
       setTitleError('Tên tác phẩm đã tồn tại. Hãy dùng tên khác hoặc mở tác phẩm cũ để sửa.');
-      return;
+      return false;
     }
 
     setTitleError('');
     if (nextTitle !== project.title) {
       onUpdateProject(project.id, { title: nextTitle });
     }
+    return true;
   }, [onUpdateProject, project.id, project.title, store.projects, titleDraft]);
+
+  const handleSave = useCallback(() => {
+    if (!commitTitleDraft()) return;
+
+    onUpdateProject(project.id, {});
+    useNotificationStore.getState().push({
+      type: 'success',
+      title: 'Đã lưu nền truyện',
+      message: 'Dữ liệu thiết lập đã đồng bộ với truyện đang mở.',
+    });
+  }, [commitTitleDraft, onUpdateProject, project.id]);
 
   // Consume Handoff
   const consumeHandoff = useAssistantSessionStore((state) => state.consumeHandoff);
@@ -109,39 +131,38 @@ const BiblePage: React.FC<BiblePageProps> = ({ project, onUpdateProject, onOpenA
     }
   }, [consumeHandoff, project.id, onUpdateProject]);
 
-  // Central AI: fill ALL domains from one description
-  const handleSmartResult = useCallback((data: any) => {
+  const applySmartResult = useCallback((review: BibleSmartSyncReview) => {
     const pid = project.id;
+    const data = review.data;
 
     // Bible fields
-    if (data.bible) {
-      const b = data.bible;
-      const patch: Partial<Project> = {};
-      if (b.genre) patch.genre = b.genre;
-      if (b.subGenre?.length) patch.subGenre = b.subGenre;
-      if (b.writingStyle) patch.writingStyle = b.writingStyle;
-      if (b.title) patch.title = b.title;
-      if (b.logline) patch.logline = b.logline;
-      if (b.endgame) patch.endgame = b.endgame;
-      if (b.characterSetup) patch.characterSetup = b.characterSetup;
-      if (b.worldSetting) patch.worldSetting = b.worldSetting;
-      if (b.mainPlot) patch.mainPlot = b.mainPlot;
-      if (b.mainCharacterCount) patch.mainCharacterCount = b.mainCharacterCount;
-      if (b.supportCharacterCount) patch.supportCharacterCount = b.supportCharacterCount;
-      onUpdateProject(pid, patch);
+    if (Object.keys(review.projectPatch).length > 0) {
+      onUpdateProject(pid, review.projectPatch);
     }
 
     // Characters
     if (data.characters?.length) {
-      data.characters.forEach((c: any) => {
-        if (c.name) {
+      data.characters.forEach((c) => {
+        const name = typeof c.name === 'string' ? c.name.trim() : '';
+        if (name) {
+          const psychologyInput = c.psychology && typeof c.psychology === 'object'
+            ? c.psychology as Record<string, unknown>
+            : null;
+          const psychology = psychologyInput ? {
+            coreWound: typeof psychologyInput.coreWound === 'string' ? psychologyInput.coreWound : '',
+            deepFear: typeof psychologyInput.deepFear === 'string' ? psychologyInput.deepFear : '',
+            hiddenDesire: typeof psychologyInput.hiddenDesire === 'string' ? psychologyInput.hiddenDesire : '',
+            selfDeception: typeof psychologyInput.selfDeception === 'string' ? psychologyInput.selfDeception : '',
+            bodyLanguage: typeof psychologyInput.bodyLanguage === 'string' ? psychologyInput.bodyLanguage : '',
+          } : undefined;
           store.addCharacter(pid, {
             id: createId(),
-            name: c.name,
-            role: c.role || 'Chính',
-            traits: c.traits || '',
-            arc: c.arc || '',
-            currentStage: c.currentStage || 'Khởi đầu',
+            name,
+            role: typeof c.role === 'string' && c.role.trim() ? c.role : 'Chính',
+            traits: typeof c.traits === 'string' ? c.traits : '',
+            arc: typeof c.arc === 'string' ? c.arc : '',
+            currentStage: typeof c.currentStage === 'string' && c.currentStage.trim() ? c.currentStage : 'Khởi đầu',
+            psychology,
           });
         }
       });
@@ -150,25 +171,29 @@ const BiblePage: React.FC<BiblePageProps> = ({ project, onUpdateProject, onOpenA
     // World
     if (data.world) {
       const w = data.world;
+      const factions = Array.isArray(w.factions)
+        ? w.factions.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+        : [];
       store.updateWorld(pid, {
-        ...(w.geography ? { geography: w.geography } : {}),
-        ...(w.magicSystem ? { magicSystem: w.magicSystem } : {}),
-        ...(w.techLevel ? { techLevel: w.techLevel } : {}),
-        ...(w.currency ? { currency: w.currency } : {}),
-        ...(w.factions?.length ? { factions: w.factions } : {}),
-        ...(w.rules ? { rules: w.rules } : {}),
+        ...(typeof w.geography === 'string' && w.geography.trim() ? { geography: w.geography } : {}),
+        ...(typeof w.magicSystem === 'string' && w.magicSystem.trim() ? { magicSystem: w.magicSystem } : {}),
+        ...(typeof w.techLevel === 'string' && w.techLevel.trim() ? { techLevel: w.techLevel } : {}),
+        ...(typeof w.currency === 'string' && w.currency.trim() ? { currency: w.currency } : {}),
+        ...(factions.length ? { factions } : {}),
+        ...(typeof w.rules === 'string' && w.rules.trim() ? { rules: w.rules } : {}),
       });
     }
 
     // Outline beats
     if (data.outline?.length) {
-      data.outline.forEach((beat: any) => {
-        if (beat.title) {
+      data.outline.forEach((beat) => {
+        const title = typeof beat.title === 'string' ? beat.title.trim() : '';
+        if (title) {
           store.addOutlineBeat(pid, {
             id: createId(),
-            title: beat.title,
-            summary: beat.summary || '',
-            focus: beat.focus || '',
+            title,
+            summary: typeof beat.summary === 'string' ? beat.summary : '',
+            focus: typeof beat.focus === 'string' ? beat.focus : '',
           });
         }
       });
@@ -176,18 +201,40 @@ const BiblePage: React.FC<BiblePageProps> = ({ project, onUpdateProject, onOpenA
 
     // Foreshadowings
     if (data.foreshadowings?.length) {
-      data.foreshadowings.forEach((f: any) => {
-        if (f.description) {
+      data.foreshadowings.forEach((f) => {
+        const description = typeof f.description === 'string' ? f.description.trim() : '';
+        if (description) {
           store.addForeshadowing(pid, {
             id: createId(),
-            description: f.description,
+            description,
             isResolved: false,
             createdAt: new Date().toISOString(),
           });
         }
       });
     }
-  }, [project.id, onUpdateProject, store]);
+  }, [onUpdateProject, project.id, store]);
+
+  // Central AI: fill ALL domains from one description
+  const handleSmartResult = useCallback((data: unknown) => {
+    const review = buildBibleSmartSyncReview(project, data);
+
+    if (!review.hasChanges) {
+      useNotificationStore.getState().push({
+        type: 'warning',
+        title: 'Chưa có thay đổi để đồng bộ',
+        message: 'AI không tìm thấy dữ liệu mới đủ rõ để cập nhật nền truyện.',
+      });
+      return;
+    }
+
+    if (review.requiresConfirmation) {
+      setPendingSmartSync(review);
+      return;
+    }
+
+    applySmartResult(review);
+  }, [applySmartResult, project]);
 
   // Tag toggle
   const toggleTag = (tag: string) => {
@@ -270,6 +317,20 @@ const BiblePage: React.FC<BiblePageProps> = ({ project, onUpdateProject, onOpenA
   };
 
   const isAnyLoading = titleAi.isLoading || charAi.isLoading || worldAi.isLoading || plotAi.isLoading;
+  const hasOpenStoryData = (project.chapters || []).length > 0 || Boolean(project.storyPreview?.trim());
+  const openStoryAnalysisText =
+    `Phân tích dữ liệu thực tế của truyện đang mở "${project.title}" ` +
+    'và đồng bộ nền truyện từ nội dung/chương đã nhập. Chỉ suy luận từ dữ liệu gốc, không bịa thêm.';
+  const confirmSmartSync = useCallback(() => {
+    if (!pendingSmartSync) return;
+    applySmartResult(pendingSmartSync);
+    setPendingSmartSync(null);
+    useNotificationStore.getState().push({
+      type: 'success',
+      title: 'Đã đồng bộ nền truyện',
+      message: 'Các thay đổi đã được áp dụng sau khi bạn xác nhận tác động.',
+    });
+  }, [applySmartResult, pendingSmartSync]);
 
   return (
     <div className="animate-fade-in" style={{ maxWidth: 960 }}>
@@ -281,7 +342,7 @@ const BiblePage: React.FC<BiblePageProps> = ({ project, onUpdateProject, onOpenA
             <button onClick={onOpenAi} className="btn-ai">
               <Sparkles size={16} /> AI Chat
             </button>
-            <button className="btn-primary">
+            <button onClick={handleSave} className="btn-primary" type="button">
               <Save size={16} /> Lưu
             </button>
           </div>
@@ -319,7 +380,97 @@ const BiblePage: React.FC<BiblePageProps> = ({ project, onUpdateProject, onOpenA
           return buildSmartProjectPrompt(text, preview);
         }}
         onResult={handleSmartResult}
+        allowEmptyAnalysis={hasOpenStoryData}
+        emptyAnalysisText={openStoryAnalysisText}
+        helperText={
+          hasOpenStoryData
+            ? 'Để trống để AI phân tích truyện đang mở, hoặc nhập thêm yêu cầu để định hướng lại.'
+            : 'Viết bất kỳ điều gì → AI sẽ tự phân tích và điền vào form bên dưới'
+        }
       />
+
+      {pendingSmartSync && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="smart-sync-review-title"
+        >
+          <div className="w-full max-w-2xl rounded-xl border border-[#D4A574]/30 bg-[#0F1115] p-5 shadow-2xl shadow-black/40">
+            <div className="flex items-start gap-3">
+              <div className="mt-1 rounded-lg border border-[#D4A574]/25 bg-[#D4A574]/10 p-2 text-[#F2C08D]">
+                <AlertTriangle size={18} />
+              </div>
+              <div className="min-w-0 flex-1">
+                <h2 id="smart-sync-review-title" className="text-lg font-semibold text-[#F8FAFC]">
+                  Xác nhận đồng bộ nền truyện
+                </h2>
+                <p className="mt-1 text-sm leading-6 text-[#CBB8AA]">
+                  AI đã phân tích nội dung truyện đang mở. Hãy xác nhận trước khi thay đổi canon nền truyện và cốt truyện.
+                </p>
+              </div>
+            </div>
+
+            {pendingSmartSync.changedFields.length > 0 && (
+              <div className="mt-4 max-h-56 overflow-auto rounded-lg border border-[#2A3038] bg-[#080A0D]">
+                {pendingSmartSync.changedFields.map((change) => (
+                  <div key={String(change.field)} className="border-b border-[#1E232B] p-3 last:border-b-0">
+                    <div className="text-sm font-semibold text-[#E8E1DC]">{change.label}</div>
+                    <div className="mt-2 grid gap-2 text-xs leading-5 md:grid-cols-2">
+                      <div>
+                        <div className="font-semibold text-[#8F7F73]">Hiện tại</div>
+                        <div className="mt-1 whitespace-pre-wrap text-[#BCA999]">
+                          {previewReviewValue(change.before)}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="font-semibold text-[#F2C08D]">Sau khi đồng bộ</div>
+                        <div className="mt-1 whitespace-pre-wrap text-[#E8E1DC]">
+                          {previewReviewValue(change.after)}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {pendingSmartSync.appendSummary.length > 0 && (
+              <div className="mt-4 rounded-lg border border-[#2DD4BF]/20 bg-[#2DD4BF]/5 p-3 text-sm text-[#D6F4EE]">
+                Sẽ thêm: {pendingSmartSync.appendSummary.join(', ')}.
+              </div>
+            )}
+
+            {pendingSmartSync.impactWarnings.length > 0 && (
+              <div className="mt-4 rounded-lg border border-[#D4A574]/20 bg-[#D4A574]/10 p-3">
+                <div className="text-sm font-semibold text-[#F2C08D]">Tác động cần lưu ý</div>
+                <ul className="mt-2 space-y-2 text-sm leading-6 text-[#E8E1DC]">
+                  {pendingSmartSync.impactWarnings.map((warning) => (
+                    <li key={warning}>• {warning}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            <div className="mt-5 flex justify-end gap-3">
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => setPendingSmartSync(null)}
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={confirmSmartSync}
+              >
+                Xác nhận áp dụng
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Loading indicator */}
       {isAnyLoading && (

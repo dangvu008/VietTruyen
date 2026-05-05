@@ -8,6 +8,7 @@ import { create } from 'zustand';
 import { createId } from '../core/id';
 
 export type NotifType = 'success' | 'error' | 'warning' | 'info' | 'reminder';
+export const DEFAULT_NOTIFICATION_DURATION = 4000;
 
 export interface Notification {
   id: string;
@@ -84,3 +85,11 @@ export const useNotificationStore = create<NotificationState>()((set, get) => ({
 
 export const getUnreadCount = (state: NotificationState) =>
   state.notifications.filter((n) => !n.read).length;
+
+export const shouldDisplayNotificationToast = (notification: Notification): boolean => {
+  if (notification.type === 'error') {
+    return true;
+  }
+
+  return (notification.duration ?? DEFAULT_NOTIFICATION_DURATION) > 0;
+};

@@ -8,10 +8,17 @@
  * - Input: freeText (string) from user's natural language description
  * - Output: { system, user } prompt pair — AI sẽ trả JSON
  */
+import { buildJsonObjectSystem } from './prompt_standard';
 
-const SYSTEM_BASE = `Bạn là chuyên gia sáng tạo tiểu thuyết mạng Việt Nam.
-Nhiệm vụ: Phân tích mô tả tự do của người dùng rồi trích xuất thông tin có cấu trúc.
-LUÔN trả về JSON hợp lệ. Không giải thích, không markdown — CHỈ JSON.`;
+const SYSTEM_BASE = buildJsonObjectSystem(
+  'Vietnamese webnovel structured extractor',
+  'Read a free-form story description and extract structured project data',
+  [
+    'Infer only what is strongly supported by the input.',
+    'Use empty strings or empty arrays when data is missing.',
+    'Do not add commentary outside the schema.',
+  ],
+);
 
 export function buildSmartProjectPrompt(freeText: string, storyPreview?: string) {
   const previewContext = storyPreview ? `\n\n--- NỘI DUNG GỐC CỦA TRUYỆN DỰA ĐỂ THAM KHẢO ---\n${storyPreview}\n--- KẾT THÚC NỘI DUNG GỐC ---\n` : '';
@@ -100,24 +107,40 @@ Trả về JSON đúng format sau (điền gì có, để chuỗi rỗng nếu k
 /**
  * Characters Page: extract array of Character objects
  */
-export function buildSmartCharacterPrompt(freeText: string, existingNames: string[], storyPreview?: string) {
+export function buildSmartCharacterPrompt(
+  freeText: string,
+  existingNames: string[],
+  storyPreview?: string,
+  outlineContext?: string,
+  archetypeHints?: string,
+) {
   const existing = existingNames.length > 0 ? `\nNhân vật đã có: ${existingNames.join(', ')}. KHÔNG tạo trùng.` : '';
   const previewContext = storyPreview ? `\n\n--- NỘI DUNG GỐC CỦA TRUYỆN DỰA ĐỂ THAM KHẢO ---\n${storyPreview}\n--- KẾT THÚC NỘI DUNG GỐC ---\n` : '';
+  const outlineBlock = outlineContext ? `\n\nCỐT TRUYỆN ĐÃ VẠCH (gắn nhân vật vào đây):\n${outlineContext}` : '';
+  const archetypeBlock = archetypeHints ? `\n\nGỢI Ý VAI TRÒ THEO THỂ LOẠI:\n${archetypeHints}` : '';
   return {
     system: SYSTEM_BASE,
     user: `Phân tích mô tả nhân vật sau và trích xuất danh sách nhân vật:
 
-"${freeText}"${existing}${previewContext}
+"${freeText}"${existing}${outlineBlock}${archetypeBlock}${previewContext}
+
+YÊU CẦU:
+1. Đa dạng vai trò — KHÔNG chỉ tạo "Chính" và "Phụ"
+2. Mỗi nhân vật phải có chức năng narrative rõ ràng
+3. Nhân vật phụ phải có chiều sâu, có thể là điểm nhấn
 
 Trả về JSON đúng format:
 {
   "characters": [
     {
       "name": "Tên nhân vật",
-      "role": "Chính/Phụ/Phản diện/Mentor/Đồng hành/Bí ẩn",
+      "role": "Chính/Phản diện chính/Phụ quan trọng/Đồng hành/Tình yêu/Đối thủ/Mentor/Hài hước/Kẻ phản bội/Gác cổng/Bí ẩn/Nền sống động/Nhân chứng/Chất xúc tác/Biến chuyển/Ẩn boss",
+      "narrativeFunction": "Tại sao nhân vật này cần tồn tại trong truyện",
       "traits": "tính cách nổi bật",
       "arc": "hành trình nhân vật",
-      "currentStage": "giai đoạn hiện tại (VD: Khởi đầu)"
+      "currentStage": "giai đoạn hiện tại (VD: Khởi đầu)",
+      "appearsInArcs": ["Quyển 1", "Quyển 3"],
+      "relationships": [{"with": "Tên NV khác", "type": "sư đồ/đối thủ/tình nhân/..."}]
     }
   ]
 }`,

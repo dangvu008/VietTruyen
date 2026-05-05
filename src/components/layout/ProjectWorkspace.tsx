@@ -12,6 +12,7 @@ import ProjectSidebar from './ProjectSidebar';
 import AppHeader from './AppHeader';
 import { PROJECT_TAB_LABELS, PROJECT_TAB_PHASES, getProjectWorkflowSnapshot } from '../../lib/navigation/project_workflow';
 import { useNotificationStore } from '../../store/use_notification_store';
+import { useAppearanceStore } from '../../store/use_appearance_store';
 
 export interface ProjectWorkspaceProps {
   activeTab: ProjectTabId;
@@ -45,6 +46,7 @@ const ProjectWorkspace: React.FC<ProjectWorkspaceProps> = ({
   const isFullscreen = FULLSCREEN_TABS.has(activeTab);
   const snapshot = getProjectWorkflowSnapshot(project);
   const pushNotification = useNotificationStore((state) => state.push);
+  const isReadingModeFullscreen = useAppearanceStore((state) => state.isReadingModeFullscreen);
   const phaseLabel =
     PROJECT_TAB_PHASES[activeTab] === 'setup'
       ? 'Thiết lập'
@@ -87,34 +89,38 @@ const ProjectWorkspace: React.FC<ProjectWorkspaceProps> = ({
         fontFamily: 'Manrope, system-ui, sans-serif',
       }}
     >
-      <ProjectSidebar
-        activeTab={activeTab}
-        onNavigate={guardedNavigate}
-        onExitProject={onExitProject}
-        onGoHome={onGoHome}
-        onNavigateSettings={onNavigateSettings}
-        project={project}
-        recommendedTab={snapshot.recommendedTab}
-        projectTitle={projectTitle}
-        projectStatus={projectStatus}
-      />
+      {!isReadingModeFullscreen && (
+        <ProjectSidebar
+          activeTab={activeTab}
+          onNavigate={guardedNavigate}
+          onExitProject={onExitProject}
+          onGoHome={onGoHome}
+          onNavigateSettings={onNavigateSettings}
+          project={project}
+          recommendedTab={snapshot.recommendedTab}
+          projectTitle={projectTitle}
+          projectStatus={projectStatus}
+        />
+      )}
 
       <div className="flex flex-1 flex-col min-w-0 overflow-hidden">
-        <div
-          className="h-px w-full shrink-0"
-          style={{
-            background: 'linear-gradient(90deg, transparent 0%, var(--vt-accent-line) 50%, transparent 100%)',
-          }}
-        />
+        {!isReadingModeFullscreen && (
+          <>
+            <div
+              className="h-px w-full shrink-0"
+              style={{
+                background: 'linear-gradient(90deg, transparent 0%, var(--vt-accent-line) 50%, transparent 100%)',
+              }}
+            />
 
-        <AppHeader
-          breadcrumbs={
-            <>
-              <span className="text-[#4d4039] uppercase tracking-[0.18em]">{phaseLabel}</span>
-              <span className="text-[#3a2f26]">·</span>
-              <span className="text-[#c5b5a8]">{PROJECT_TAB_LABELS[activeTab]}</span>
-            </>
-          }
+            <AppHeader
+              breadcrumbs={
+                <>
+                  <span className="text-[#4d4039] uppercase tracking-[0.18em]">{phaseLabel}</span>
+                  <span className="text-[#3a2f26]">·</span>
+                  <span className="text-[#c5b5a8]">{PROJECT_TAB_LABELS[activeTab]}</span>
+                </>
+              }
           primaryAction={
             snapshot.recommendedTab !== activeTab ? (
               <button
@@ -129,6 +135,8 @@ const ProjectWorkspace: React.FC<ProjectWorkspaceProps> = ({
           }
           rightActions={rightActions}
         />
+      </>
+    )}
 
         <main className="flex-1 overflow-y-auto">
           {isFullscreen ? (

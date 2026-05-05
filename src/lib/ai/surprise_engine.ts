@@ -9,6 +9,7 @@ import type {
   SurpriseBranch,
   TensionLevel,
 } from '../../types/surprise';
+import type { PendingHook } from '../../types/narrative_memory';
 import { sortChaptersBySequence } from '../memory/chapter_order';
 
 const STOP_WORDS = new Set([
@@ -116,7 +117,7 @@ function collectRepeatedClues(texts: string[]): string[] {
     .slice(0, 5);
 }
 
-export function extractAnchors(project: Project, targetChapterIndex: number): AnchorSet {
+export function extractAnchors(project: Project, targetChapterIndex: number, pendingHooks: PendingHook[] = []): AnchorSet {
   const endgame: Anchor[] = [];
   const characterTruth: Anchor[] = [];
   const establishedFact: Anchor[] = [];
@@ -260,6 +261,18 @@ export function extractAnchors(project: Project, targetChapterIndex: number): An
       });
     });
 
+  pendingHooks
+    .filter((hook) => hook.status === 'open')
+    .forEach((hook) => {
+      addAnchor(foreshadowingPlanted, dedupe, {
+        kind: 'foreshadowing_planted',
+        label: 'Pending Hook',
+        detail: hook.description,
+        source: `pendingHooks.${hook.id}`,
+        weight: 2,
+      });
+    });
+
   collectRepeatedClues(getRecentChapterTexts(project, targetChapterIndex)).forEach((clue, index) => {
     addAnchor(foreshadowingPlanted, dedupe, {
       kind: 'foreshadowing_planted',
@@ -274,7 +287,7 @@ export function extractAnchors(project: Project, targetChapterIndex: number): An
   return { endgame, characterTruth, establishedFact, foreshadowingPlanted, all };
 }
 
-function buildExpectationCandidates(project: Project, targetChapterIndex: number) {
+function buildExpectationCandidates(project: Project, targetChapterIndex: number, pendingHooks: PendingHook[] = []) {
   const candidates: Array<{ text: string; score: number; signal: string }> = [];
   const currentBeat = project.outline[targetChapterIndex];
   if (currentBeat?.summary) {
@@ -285,14 +298,21 @@ function buildExpectationCandidates(project: Project, targetChapterIndex: number
     });
   }
 
-  const recentForeshadow = (project.foreshadowings || [])
+  const recentLegacyForeshadow = (project.foreshadowings || [])
     .filter((item) => !item.isResolved)
-    .slice(-2);
-  recentForeshadow.forEach((item, index) => {
+    .map(f => f.description);
+    
+  const recentPendingHooks = pendingHooks
+    .filter(h => h.status === 'open')
+    .map(h => h.description);
+
+  const activeForeshadows = dedupeStrings([...recentLegacyForeshadow, ...recentPendingHooks]).slice(-2);
+  
+  activeForeshadows.forEach((desc, index) => {
     candidates.push({
-      text: item.description,
+      text: desc,
       score: 30 - index * 5,
-      signal: `Phục bút chưa giải quyết: ${item.description}`,
+      signal: `Phục bút chưa giải quyết: ${desc}`,
     });
   });
 
@@ -337,8 +357,9 @@ export function detectExpectation(
   project: Project,
   targetChapterIndex: number,
   anchors: AnchorSet,
+  pendingHooks: PendingHook[] = []
 ): ExpectationProfile {
-  const candidates = buildExpectationCandidates(project, targetChapterIndex);
+  const candidates = buildExpectationCandidates(project, targetChapterIndex, pendingHooks);
   const ranked = [...candidates].sort((a, b) => b.score - a.score);
   const dominant = ranked[0]?.text || anchors.endgame[0]?.detail || project.mainPlot || project.endgame || 'Giữ đà truyện tiến về đích gần nhất.';
   const totalSignalScore = ranked.slice(0, 5).reduce((sum, item) => sum + item.score, 0);

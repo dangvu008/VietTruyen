@@ -56,6 +56,7 @@ export function buildProjectStructureHash(project: Project): string {
         currentStage: character.currentStage,
         traits: character.traits,
         arc: character.arc,
+        psychology: character.psychology,
         aliases: character.aliases || [],
         facts: character.facts || [],
       })),
@@ -65,6 +66,56 @@ export function buildProjectStructureHash(project: Project): string {
       },
     })
   );
+}
+
+function hasChapterPayload(chapter: Pick<Project['chapters'][number], 'content' | 'summary'>): boolean {
+  return Boolean(chapter.content?.trim() || chapter.summary?.trim());
+}
+
+function shouldUseStoredPayload(
+  incoming: Project['chapters'][number],
+  stored: Project['chapters'][number] | undefined,
+): stored is Project['chapters'][number] {
+  if (!stored || hasChapterPayload(incoming) || !hasChapterPayload(stored)) return false;
+  if (!incoming.updatedAt || !stored.updatedAt) return true;
+  return incoming.updatedAt <= stored.updatedAt;
+}
+
+function restoreStrippedChapterPayloads(
+  project: Project,
+  storedChapters: Project['chapters'],
+): Project {
+  const incomingChapters = project.chapters || [];
+  if (incomingChapters.length === 0 || storedChapters.length === 0) return project;
+
+  const incomingHasPayload = incomingChapters.some(hasChapterPayload);
+  const storedHasPayload = storedChapters.some(hasChapterPayload);
+  if (incomingHasPayload || !storedHasPayload) return project;
+
+  const storedById = new Map(storedChapters.map((chapter) => [chapter.id, chapter]));
+  const storedBySequence = new Map(
+    storedChapters
+      .filter((chapter) => chapter.sequenceNumber != null)
+      .map((chapter) => [chapter.sequenceNumber, chapter] as const),
+  );
+
+  let restoredAny = false;
+  const chapters = incomingChapters.map((chapter) => {
+    const stored =
+      storedById.get(chapter.id) ??
+      (chapter.sequenceNumber != null ? storedBySequence.get(chapter.sequenceNumber) : undefined);
+
+    if (!shouldUseStoredPayload(chapter, stored)) return chapter;
+
+    restoredAny = true;
+    return {
+      ...chapter,
+      content: stored.content,
+      summary: stored.summary ?? chapter.summary,
+    };
+  });
+
+  return restoredAny ? { ...project, chapters } : project;
 }
 
 function makeJob(projectId: string, jobType: IndexJob['jobType'], totalItems: number, chapterId?: string): IndexJob {
@@ -137,27 +188,30 @@ export async function backfillProjectMemory(
   opts?: {
     model?: AiModel;
     onProgress?: (processed: number, total: number) => void | Promise<void>;
+    mirrorEmbeddings?: boolean;
   }
 ): Promise<void> {
-  const sortedChapters = sortChaptersBySequence(project.chapters || []);
-  const job = makeJob(project.id, 'backfill_project', sortedChapters.length);
+  const storedChapters = await getProjectChapters(project.id);
+  const projectForIndex = restoreStrippedChapterPayloads(project, storedChapters);
+  const sortedChapters = sortChaptersBySequence(projectForIndex.chapters || []);
+  const job = makeJob(projectForIndex.id, 'backfill_project', sortedChapters.length);
   await storeIndexJob(job);
   await updateIndexJob(job.id, { status: 'running' });
 
-  await clearProjectChapterDerivedMemory(project.id);
-  await narrativeDb.chapters.where('projectId').equals(project.id).delete();
-  await storeEntityDefinitions(buildEntityDefinitions(project));
+  await clearProjectChapterDerivedMemory(projectForIndex.id);
+  await narrativeDb.chapters.where('projectId').equals(projectForIndex.id).delete();
+  await storeEntityDefinitions(buildEntityDefinitions(projectForIndex));
   await storeChapters(
     sortedChapters.map((chapter, index) => ({
       ...chapter,
-      projectId: project.id,
+      projectId: projectForIndex.id,
       index,
     }))
   );
 
   let processed = 0;
   for (const chapter of sortedChapters) {
-    await indexSingleChapter(project, chapter, opts?.model);
+    await indexSingleChapter(projectForIndex, chapter, opts?.model);
     processed += 1;
     await updateIndexJob(job.id, { processedItems: processed });
     if (opts?.onProgress) {
@@ -165,58 +219,70 @@ export async function backfillProjectMemory(
     }
   }
 
-  await rebuildProjectNarrativeGraph(project);
-  await rebuildHsc(project);
-  await upsertMemoryEmbeddings(project);
+  await rebuildProjectNarrativeGraph(projectForIndex);
+  await rebuildHsc(projectForIndex);
+  await upsertMemoryEmbeddings(projectForIndex, {
+    mirror: opts?.mirrorEmbeddings,
+  });
   await updateIndexJob(job.id, { status: 'completed', processedItems: processed });
-  await writeProjectIndexState(project, job.id);
+  await writeProjectIndexState(projectForIndex, job.id);
 }
 
 export async function reindexChapters(
   project: Project,
   chapterIds: string[],
-  opts?: { model?: AiModel }
+  opts?: { model?: AiModel; mirrorEmbeddings?: boolean }
 ): Promise<void> {
   if (chapterIds.length === 0) return;
-  const sortedChapters = sortChaptersBySequence(project.chapters || []);
+  const storedChapters = await getProjectChapters(project.id);
+  const projectForIndex = restoreStrippedChapterPayloads(project, storedChapters);
+  const sortedChapters = sortChaptersBySequence(projectForIndex.chapters || []);
   const targetChapters = sortedChapters.filter((chapter) => chapterIds.includes(chapter.id));
   if (targetChapters.length === 0) return;
 
-  await storeEntityDefinitions(buildEntityDefinitions(project));
+  await storeEntityDefinitions(buildEntityDefinitions(projectForIndex));
 
-  const job = makeJob(project.id, targetChapters.length === 1 ? 'reindex_chapter' : 'reindex_project', targetChapters.length, targetChapters[0]?.id);
+  const job = makeJob(
+    projectForIndex.id,
+    targetChapters.length === 1 ? 'reindex_chapter' : 'reindex_project',
+    targetChapters.length,
+    targetChapters[0]?.id,
+  );
   await storeIndexJob(job);
   await updateIndexJob(job.id, { status: 'running' });
 
   let processed = 0;
   for (const chapter of targetChapters) {
-    await indexSingleChapter(project, chapter, opts?.model);
+    await indexSingleChapter(projectForIndex, chapter, opts?.model);
     processed += 1;
     await updateIndexJob(job.id, { processedItems: processed });
   }
 
-  await rebuildProjectNarrativeGraph(project);
-  await rebuildHsc(project);
-  await upsertMemoryEmbeddings(project);
+  await rebuildProjectNarrativeGraph(projectForIndex);
+  await rebuildHsc(projectForIndex);
+  await upsertMemoryEmbeddings(projectForIndex, {
+    mirror: opts?.mirrorEmbeddings,
+  });
   await updateIndexJob(job.id, { status: 'completed', processedItems: processed });
-  await writeProjectIndexState(project, job.id);
+  await writeProjectIndexState(projectForIndex, job.id);
 }
 
 export async function syncProjectMemory(
   project: Project,
-  opts?: { model?: AiModel }
+  opts?: { model?: AiModel; mirrorEmbeddings?: boolean }
 ): Promise<{ mode: 'noop' | 'reindex' | 'backfill'; dirtyChapterIds: string[] }> {
-  const sortedChapters = sortChaptersBySequence(project.chapters || []);
   const storedChapters = await getProjectChapters(project.id);
+  const projectForIndex = restoreStrippedChapterPayloads(project, storedChapters);
+  const sortedChapters = sortChaptersBySequence(projectForIndex.chapters || []);
   const storedIds = new Set(storedChapters.map((chapter) => chapter.id));
   const currentIds = new Set(sortedChapters.map((chapter) => chapter.id));
   const deletedIds = storedChapters.filter((chapter) => !currentIds.has(chapter.id)).map((chapter) => chapter.id);
 
-  const projectHash = buildProjectStructureHash(project);
-  const state = await getProjectIndexState(project.id);
+  const projectHash = buildProjectStructureHash(projectForIndex);
+  const state = await getProjectIndexState(projectForIndex.id);
 
   if (!state || state.lastProjectHash !== projectHash || deletedIds.length > 0) {
-    await backfillProjectMemory(project, opts);
+    await backfillProjectMemory(projectForIndex, opts);
     return { mode: 'backfill', dirtyChapterIds: sortedChapters.map((chapter) => chapter.id) };
   }
 
@@ -229,7 +295,7 @@ export async function syncProjectMemory(
     } else {
       await storeChapter({
         ...chapter,
-        projectId: project.id,
+        projectId: projectForIndex.id,
         index: (chapter.sequenceNumber ?? 1) - 1,
       });
     }
@@ -240,10 +306,10 @@ export async function syncProjectMemory(
   }
 
   if (dirtyChapterIds.length > Math.max(5, Math.ceil(sortedChapters.length * 0.25))) {
-    await backfillProjectMemory(project, opts);
+    await backfillProjectMemory(projectForIndex, opts);
     return { mode: 'backfill', dirtyChapterIds };
   }
 
-  await reindexChapters(project, dirtyChapterIds, opts);
+  await reindexChapters(projectForIndex, dirtyChapterIds, opts);
   return { mode: 'reindex', dirtyChapterIds };
 }

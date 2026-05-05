@@ -14,14 +14,29 @@ Trả về JSON hợp lệ, không giải thích, không dùng \`\`\` (code bloc
 export function buildConsistencyCheckerPrompt(
   chapterText: string,
   chapterNumber: number,
-  systemStateContext: string // JSON string of state (power level, location, time, entities)
+  systemStateContext: string, // JSON string of state (power level, location, time, entities)
+  opts?: {
+    continuityWarnings?: string[];
+    activeHooks?: string[];
+    storyStateFacts?: string[];
+  }
 ): { system: string; user: string } {
+  const continuityBlock = opts?.continuityWarnings?.length
+    ? `\nCảnh báo continuity đang mở:\n- ${opts.continuityWarnings.join('\n- ')}\n`
+    : '';
+  const hookBlock = opts?.activeHooks?.length
+    ? `\nHook/foreshadowing còn mở:\n- ${opts.activeHooks.join('\n- ')}\n`
+    : '';
+  const storyStateBlock = opts?.storyStateFacts?.length
+    ? `\nSnapshot trạng thái đã biết trước chương này:\n- ${opts.storyStateFacts.join('\n- ')}\n`
+    : '';
   const userPrompt = `Dựa trên nội dung chương ${chapterNumber} và Dữ liệu trạng thái hệ thống, bạn hãy tìm ra các mâu thuẫn (nếu có).
 
 Dữ liệu trạng thái hệ thống hiện tại (bối cảnh trước khi vào chương):
 ---
 ${systemStateContext || '{}'}
 ---
+${storyStateBlock}${hookBlock}${continuityBlock}
 
 Nội dung chương:
 ---
@@ -51,6 +66,7 @@ Trả về JSON có định dạng sau:
     "power_conflicts": 0,
     "location_errors": 0,
     "timeline_issues": 1,
+    "active_hook_regressions": 0,
     "new_entities": ["Tông Môn Mới"]
   },
   "summary": "Nhất quán về phép thuật và không gian, nhưng dòng thời gian bị lệch nhẹ."

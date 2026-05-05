@@ -144,6 +144,7 @@ const BrainstormPage: React.FC<BrainstormPageProps> = ({ onNavigate }) => {
             traits: c.traits || '',
             arc: c.arc || '',
             currentStage: c.currentStage || 'Khởi đầu',
+            psychology: c.psychology,
           });
         }
       });

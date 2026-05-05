@@ -11,6 +11,8 @@
  * user must still manually save to persist officially.
  */
 
+import { guardChapterContent } from '../chapter/chapter_content_guard';
+
 // ── Types ──────────────────────────────────────────────────
 
 export interface AutosaveDraft {
@@ -41,6 +43,22 @@ const MAX_DRAFTS_PER_PROJECT = 50;
 
 function compositeKey(projectId: string, chapterId: string): string {
   return `${projectId}::${chapterId}`;
+}
+
+function normalizeRecoverableDraft(draft: AutosaveDraft): AutosaveDraft | null {
+  if (!draft.generationStatus) {
+    return draft;
+  }
+
+  const guarded = guardChapterContent(draft.content, { allowEmptyAfterSanitize: true });
+  if (!guarded.content.trim()) {
+    return null;
+  }
+
+  return {
+    ...draft,
+    content: guarded.content,
+  };
 }
 
 function readAllDrafts(): AutosaveDraftMap {
@@ -110,12 +128,20 @@ export function saveGeneratingDraft(
   title: string,
   jobId: string
 ): void {
+  const guarded = guardChapterContent(content, { allowEmptyAfterSanitize: true });
   const map = readAllDrafts();
   const key = compositeKey(projectId, chapterId);
+
+  if (!guarded.content.trim()) {
+    delete map[key];
+    writeAllDrafts(map);
+    return;
+  }
+
   map[key] = {
     projectId,
     chapterId,
-    content,
+    content: guarded.content,
     title,
     savedAt: new Date().toISOString(),
     generationStatus: 'generating',
@@ -173,7 +199,10 @@ export function saveDraftsBatch(
  */
 export function getDrafts(projectId: string): AutosaveDraft[] {
   const map = readAllDrafts();
-  return Object.values(map).filter((draft) => draft.projectId === projectId);
+  return Object.values(map)
+    .filter((draft) => draft.projectId === projectId)
+    .map(normalizeRecoverableDraft)
+    .filter((draft): draft is AutosaveDraft => draft !== null);
 }
 
 /**
@@ -181,7 +210,9 @@ export function getDrafts(projectId: string): AutosaveDraft[] {
  */
 export function getDraft(projectId: string, chapterId: string): AutosaveDraft | null {
   const map = readAllDrafts();
-  return map[compositeKey(projectId, chapterId)] ?? null;
+  const draft = map[compositeKey(projectId, chapterId)] ?? null;
+  if (!draft) return null;
+  return normalizeRecoverableDraft(draft);
 }
 
 /**

@@ -2,17 +2,21 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const callAiProxyMock = vi.hoisted(() => vi.fn());
 const recordCallMock = vi.hoisted(() => vi.fn());
-const getCachedResponseMock = vi.hoisted(() => vi.fn(() => null));
+const getCachedResponseMock = vi.hoisted(() => vi.fn((): unknown => null));
 const setCachedResponseMock = vi.hoisted(() => vi.fn());
+const markModelUnavailableMock = vi.hoisted(() => vi.fn());
 const aiStoreState = vi.hoisted(() => ({
   models: [] as AiModel[],
   customProviders: [] as Array<{ id: string; name: string; baseUrl: string }>,
   activeModelId: 'auto',
   manualModelId: '',
+  preferredProvider: 'openrouter',
   taskModelOverrides: {} as Record<string, string>,
+  modelHealth: {} as Record<string, unknown>,
   apiKeys: {} as Record<string, string>,
   contextSize: 16000,
   autoSummarize: false,
+  markModelUnavailable: markModelUnavailableMock,
 }));
 const authStoreState = vi.hoisted(() => ({
   isGuest: false,
@@ -77,6 +81,27 @@ const TEST_MODELS: AiModel[] = [
   },
 ];
 
+const NINE_ROUTER_MODELS: AiModel[] = [
+  {
+    id: 'nine-router-if-kimi',
+    name: 'if/kimi (9router)',
+    provider: 'nine-router',
+    modelId: 'if/kimi-k2-thinking',
+    description: '',
+    isCustom: true,
+    tier: 'quality',
+  },
+  {
+    id: 'nine-router-gemini-flash',
+    name: 'gemini/flash (9router)',
+    provider: 'nine-router',
+    modelId: 'gemini/gemini-2.5-flash',
+    description: '',
+    isCustom: true,
+    tier: 'fast',
+  },
+];
+
 describe('tracked_ai_client guest provider fallback', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
@@ -90,6 +115,7 @@ describe('tracked_ai_client guest provider fallback', () => {
     getCachedResponseMock.mockReturnValue(null);
     setCachedResponseMock.mockReset();
     recordCallMock.mockReset();
+    markModelUnavailableMock.mockReset();
     Object.assign(authStoreState, {
       isGuest: true,
       isAuthenticated: false,
@@ -100,7 +126,9 @@ describe('tracked_ai_client guest provider fallback', () => {
       models: TEST_MODELS,
       activeModelId: 'auto',
       manualModelId: TEST_MODELS[0].id,
+      preferredProvider: 'openrouter',
       taskModelOverrides: {},
+      modelHealth: {},
       apiKeys: { hocai: 'hocai-test-key' },
       customProviders: [],
       contextSize: 16000,
@@ -331,6 +359,362 @@ describe('tracked_ai_client guest provider fallback', () => {
       provider: 'hocai',
       modelId: 'gpt-4o-mini',
       apiKey: 'hocai-test-key',
+    });
+  });
+
+  it('retries transient model failures with the next healthy configured model', async () => {
+    vi.stubEnv('VITE_USE_LOCAL_AI_PROXY', 'true');
+    Object.assign(authStoreState, {
+      isGuest: false,
+      isAuthenticated: true,
+    });
+    Object.assign(aiStoreState, {
+      apiKeys: {},
+      activeModelId: 'auto',
+      manualModelId: TEST_MODELS[0].id,
+      models: TEST_MODELS,
+    });
+
+    callAiProxyMock
+      .mockRejectedValueOnce(new Error('Local AI Proxy Error: 429 rate limit'))
+      .mockResolvedValueOnce({
+        text: 'retry-ok',
+        usage: {
+          inputTokens: 10,
+          outputTokens: 5,
+          totalTokens: 15,
+          monthlyUsed: 1,
+          monthlyLimit: 1000,
+        },
+      });
+
+    const result = await callAiModelTracked({
+      provider: 'openrouter',
+      modelId: 'openai/gpt-4o-mini',
+      modelName: 'OpenRouter Balanced',
+      systemPrompt: 'system',
+      userPrompt: 'user',
+      taskType: 'chat',
+    });
+
+    expect(result).toBe('retry-ok');
+    expect(markModelUnavailableMock).toHaveBeenCalledWith(
+      'openrouter-balanced',
+      expect.objectContaining({ lastError: 'Local AI Proxy Error: 429 rate limit' }),
+    );
+    expect(callAiProxyMock).toHaveBeenCalledTimes(2);
+    expect(callAiProxyMock.mock.calls[1][0]).toMatchObject({
+      provider: 'hocai',
+      modelId: 'gpt-4o-mini',
+    });
+  });
+
+  it('retries when the local proxy reports missing credentials for the selected upstream provider', async () => {
+    vi.stubEnv('VITE_USE_LOCAL_AI_PROXY', 'true');
+    Object.assign(authStoreState, {
+      isGuest: false,
+      isAuthenticated: true,
+    });
+    Object.assign(aiStoreState, {
+      apiKeys: {},
+      activeModelId: 'auto',
+      manualModelId: 'nine-router-mistral',
+      models: [
+        {
+          id: 'nine-router-mistral',
+          name: 'mistralai/mistral-small (9router)',
+          provider: 'nine-router',
+          modelId: 'mistralai/mistral-small',
+          description: '',
+          isCustom: true,
+          tier: 'quality',
+        },
+        ...TEST_MODELS,
+      ],
+      customProviders: [{ id: 'nine-router', name: '9router', baseUrl: 'http://localhost:20128/v1' }],
+    });
+
+    callAiProxyMock
+      .mockRejectedValueOnce(
+        new Error(
+          'Local AI Proxy Error: 404 {"error":{"message":"No active credentials for provider: mistralai","type":"invalid_request_error","code":"model_not_found"}}'
+        )
+      )
+      .mockResolvedValueOnce({
+        text: 'credential-fallback-ok',
+        usage: {
+          inputTokens: 10,
+          outputTokens: 5,
+          totalTokens: 15,
+          monthlyUsed: 1,
+          monthlyLimit: 1000,
+        },
+      });
+
+    const result = await callAiModelTracked({
+      provider: 'nine-router',
+      modelId: 'mistralai/mistral-small',
+      modelName: 'mistralai/mistral-small (9router)',
+      baseUrl: 'http://localhost:20128/v1',
+      systemPrompt: 'system',
+      userPrompt: 'user',
+      taskType: 'chat',
+    });
+
+    expect(result).toBe('credential-fallback-ok');
+    expect(markModelUnavailableMock).toHaveBeenCalledWith(
+      'nine-router-mistral',
+      expect.objectContaining({
+        lastError: expect.stringContaining('No active credentials for provider: mistralai'),
+      }),
+    );
+    expect(callAiProxyMock).toHaveBeenCalledTimes(2);
+    expect(callAiProxyMock.mock.calls[1][0]).toMatchObject({
+      provider: 'openrouter',
+      modelId: 'openai/gpt-4o-mini',
+    });
+  });
+
+  it('retries when the local proxy reports invalid upstream api key for the selected provider', async () => {
+    vi.stubEnv('VITE_USE_LOCAL_AI_PROXY', 'true');
+    Object.assign(authStoreState, {
+      isGuest: false,
+      isAuthenticated: true,
+    });
+    Object.assign(aiStoreState, {
+      apiKeys: {},
+      activeModelId: 'auto',
+      manualModelId: 'nine-router-mistral',
+      models: [
+        {
+          id: 'nine-router-mistral',
+          name: 'mistralai/mistral-small (9router)',
+          provider: 'nine-router',
+          modelId: 'mistralai/mistral-small',
+          description: '',
+          isCustom: true,
+          tier: 'quality',
+        },
+        ...TEST_MODELS,
+      ],
+      customProviders: [{ id: 'nine-router', name: '9router', baseUrl: 'http://localhost:20128/v1' }],
+    });
+
+    callAiProxyMock
+      .mockRejectedValueOnce(
+        new Error(
+          'Local AI Proxy Error: 401 {"error":{"message":"Invalid API key","type":"authentication_error","code":"invalid_api_key"}}'
+        )
+      )
+      .mockResolvedValueOnce({
+        text: 'invalid-key-fallback-ok',
+        usage: {
+          inputTokens: 10,
+          outputTokens: 5,
+          totalTokens: 15,
+          monthlyUsed: 1,
+          monthlyLimit: 1000,
+        },
+      });
+
+    const result = await callAiModelTracked({
+      provider: 'nine-router',
+      modelId: 'mistralai/mistral-small',
+      modelName: 'mistralai/mistral-small (9router)',
+      baseUrl: 'http://localhost:20128/v1',
+      systemPrompt: 'system',
+      userPrompt: 'user',
+      taskType: 'chat',
+    });
+
+    expect(result).toBe('invalid-key-fallback-ok');
+    expect(markModelUnavailableMock).toHaveBeenCalledWith(
+      'nine-router-mistral',
+      expect.objectContaining({
+        lastError: expect.stringContaining('Invalid API key'),
+      }),
+    );
+    expect(callAiProxyMock).toHaveBeenCalledTimes(2);
+    expect(callAiProxyMock.mock.calls[1][0]).toMatchObject({
+      provider: 'openrouter',
+      modelId: 'openai/gpt-4o-mini',
+    });
+  });
+
+  it('retries when the local proxy reports an invalid api key in Vietnamese', async () => {
+    vi.stubEnv('VITE_USE_LOCAL_AI_PROXY', 'true');
+    Object.assign(authStoreState, {
+      isGuest: false,
+      isAuthenticated: true,
+    });
+    Object.assign(aiStoreState, {
+      apiKeys: {},
+      activeModelId: 'auto',
+      manualModelId: 'nine-router-hocai',
+      models: [
+        {
+          id: 'nine-router-hocai',
+          name: 'hocai/gpt-4o-mini (9router)',
+          provider: 'nine-router',
+          modelId: 'hocai/gpt-4o-mini',
+          description: '',
+          isCustom: true,
+          tier: 'balanced',
+        },
+        ...TEST_MODELS,
+      ],
+      customProviders: [{ id: 'nine-router', name: '9router', baseUrl: 'http://localhost:20128/v1' }],
+    });
+
+    callAiProxyMock
+      .mockRejectedValueOnce(
+        new Error('Local AI Proxy Error: 401 {"error":{"message":"API key không hợp lệ hoặc đã hết hạn."}}')
+      )
+      .mockResolvedValueOnce({
+        text: 'vietnamese-invalid-key-fallback-ok',
+        usage: {
+          inputTokens: 10,
+          outputTokens: 5,
+          totalTokens: 15,
+          monthlyUsed: 1,
+          monthlyLimit: 1000,
+        },
+      });
+
+    const result = await callAiModelTracked({
+      provider: 'nine-router',
+      modelId: 'hocai/gpt-4o-mini',
+      modelName: 'hocai/gpt-4o-mini (9router)',
+      baseUrl: 'http://localhost:20128/v1',
+      systemPrompt: 'system',
+      userPrompt: 'user',
+      taskType: 'chat',
+    });
+
+    expect(result).toBe('vietnamese-invalid-key-fallback-ok');
+    expect(markModelUnavailableMock).toHaveBeenCalledWith(
+      'nine-router-hocai',
+      expect.objectContaining({
+        lastError: expect.stringContaining('API key không hợp lệ hoặc đã hết hạn'),
+      }),
+    );
+    expect(callAiProxyMock).toHaveBeenCalledTimes(2);
+    expect(callAiProxyMock.mock.calls[1][0]).toMatchObject({
+      provider: 'openrouter',
+      modelId: 'openai/gpt-4o-mini',
+    });
+  });
+
+  it('continues rotating until a healthy fallback model succeeds', async () => {
+    vi.stubEnv('VITE_USE_LOCAL_AI_PROXY', 'true');
+    Object.assign(authStoreState, {
+      isGuest: false,
+      isAuthenticated: true,
+    });
+    Object.assign(aiStoreState, {
+      apiKeys: {},
+      activeModelId: 'auto',
+      manualModelId: TEST_MODELS[0].id,
+      models: [
+        ...TEST_MODELS,
+        {
+          id: 'openai-balanced',
+          name: 'OpenAI Balanced',
+          provider: 'openai',
+          modelId: 'gpt-4.1-mini',
+          description: '',
+          isCustom: false,
+          tier: 'balanced',
+        },
+      ],
+    });
+
+    callAiProxyMock
+      .mockRejectedValueOnce(new Error('Local AI Proxy Error: 503 temporarily unavailable'))
+      .mockRejectedValueOnce(new Error('Local AI Proxy Error: 429 rate limit'))
+      .mockResolvedValueOnce({
+        text: 'second-fallback-ok',
+        usage: {
+          inputTokens: 10,
+          outputTokens: 5,
+          totalTokens: 15,
+          monthlyUsed: 1,
+          monthlyLimit: 1000,
+        },
+      });
+
+    const result = await callAiModelTracked({
+      provider: 'openrouter',
+      modelId: 'openai/gpt-4o-mini',
+      modelName: 'OpenRouter Balanced',
+      systemPrompt: 'system',
+      userPrompt: 'user',
+      taskType: 'chat',
+    });
+
+    expect(result).toBe('second-fallback-ok');
+    expect(callAiProxyMock).toHaveBeenCalledTimes(3);
+    expect(callAiProxyMock.mock.calls[1][0]).toMatchObject({
+      provider: 'hocai',
+      modelId: 'gpt-4o-mini',
+    });
+    expect(callAiProxyMock.mock.calls[2][0]).toMatchObject({
+      provider: 'openai',
+      modelId: 'gpt-4.1-mini',
+    });
+    expect(markModelUnavailableMock).toHaveBeenCalledWith(
+      'openrouter-balanced',
+      expect.objectContaining({ lastError: 'Local AI Proxy Error: 503 temporarily unavailable' }),
+    );
+    expect(markModelUnavailableMock).toHaveBeenCalledWith(
+      'hocai-balanced',
+      expect.objectContaining({ lastError: 'Local AI Proxy Error: 429 rate limit' }),
+    );
+  });
+
+  it('rotates between 9router models instead of excluding the whole 9router provider', async () => {
+    vi.stubEnv('VITE_USE_LOCAL_AI_PROXY', 'true');
+    Object.assign(authStoreState, {
+      isGuest: false,
+      isAuthenticated: true,
+    });
+    Object.assign(aiStoreState, {
+      apiKeys: {},
+      activeModelId: 'auto',
+      manualModelId: NINE_ROUTER_MODELS[0].id,
+      models: NINE_ROUTER_MODELS,
+      customProviders: [{ id: 'nine-router', name: '9router', baseUrl: 'http://localhost:3030/v1' }],
+    });
+
+    callAiProxyMock
+      .mockRejectedValueOnce(new Error('Local AI Proxy Error: 503 temporarily unavailable'))
+      .mockResolvedValueOnce({
+        text: 'nine-router-retry-ok',
+        usage: {
+          inputTokens: 10,
+          outputTokens: 5,
+          totalTokens: 15,
+          monthlyUsed: 1,
+          monthlyLimit: 1000,
+        },
+      });
+
+    const result = await callAiModelTracked({
+      provider: 'nine-router',
+      modelId: 'if/kimi-k2-thinking',
+      modelName: 'if/kimi (9router)',
+      baseUrl: 'http://localhost:3030/v1',
+      systemPrompt: 'system',
+      userPrompt: 'user',
+      taskType: 'chat',
+    });
+
+    expect(result).toBe('nine-router-retry-ok');
+    expect(callAiProxyMock).toHaveBeenCalledTimes(2);
+    expect(callAiProxyMock.mock.calls[1][0]).toMatchObject({
+      provider: 'nine-router',
+      modelId: 'gemini/gemini-2.5-flash',
+      baseUrl: 'http://localhost:3030/v1',
     });
   });
 

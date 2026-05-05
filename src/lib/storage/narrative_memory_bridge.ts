@@ -26,7 +26,13 @@ import type {
   NarrativeEdge,
   NarrativeCommunity,
 } from '../../types/narrative_graph';
-import type { ProjectIndexState } from '../../types/narrative_memory';
+import type {
+  NarrativePredicateDefinition,
+  NarrativeStateEvidence,
+  NarrativeStateFact,
+  NarrativeStateMutation,
+  ProjectIndexState,
+} from '../../types/narrative_memory';
 import type { StorageProvider } from './storage_provider';
 
 // ── Types ────────────────────────────────────────────────────
@@ -38,6 +44,12 @@ export interface NarrativeMemorySnapshot {
     nodes: NarrativeNode[];
     edges: NarrativeEdge[];
     communities: NarrativeCommunity[];
+  };
+  state: {
+    predicateDefinitions: NarrativePredicateDefinition[];
+    facts: NarrativeStateFact[];
+    mutations: NarrativeStateMutation[];
+    evidence: NarrativeStateEvidence[];
   };
   summaryCache: SummaryCacheEntry[];
   indexState: ProjectIndexState | null;
@@ -67,10 +79,14 @@ export async function captureNarrativeMemorySnapshot(
   projectId: string,
 ): Promise<NarrativeMemorySnapshot> {
   // [Domain:Migration] STEP 1 — Read graph data
-  const [nodes, edges, communities] = await Promise.all([
+  const [nodes, edges, communities, predicateDefinitions, stateFacts, stateMutations, stateEvidence] = await Promise.all([
     getProjectNarrativeNodes(projectId),
     getProjectNarrativeEdges(projectId),
     getProjectNarrativeCommunities(projectId),
+    narrativeDb.narrativePredicateDefinitions.where('projectId').equals(projectId).toArray() as Promise<NarrativePredicateDefinition[]>,
+    narrativeDb.narrativeStateFacts.where('projectId').equals(projectId).toArray() as Promise<NarrativeStateFact[]>,
+    narrativeDb.narrativeStateMutations.where('projectId').equals(projectId).toArray() as Promise<NarrativeStateMutation[]>,
+    narrativeDb.narrativeStateEvidence.where('projectId').equals(projectId).toArray() as Promise<NarrativeStateEvidence[]>,
   ]);
 
   // [Domain:Migration] STEP 2 — Read HSC summary cache
@@ -95,6 +111,12 @@ export async function captureNarrativeMemorySnapshot(
     projectId,
     capturedAt: new Date().toISOString(),
     graph: { nodes, edges, communities },
+    state: {
+      predicateDefinitions,
+      facts: stateFacts,
+      mutations: stateMutations,
+      evidence: stateEvidence,
+    },
     summaryCache,
     indexState,
     embeddingCount,
@@ -118,7 +140,9 @@ export async function migrateProjectNarrativeMemory(
 
   if (
     snapshot.graph.nodes.length === 0 &&
-    snapshot.summaryCache.length === 0
+    snapshot.summaryCache.length === 0 &&
+    snapshot.state.facts.length === 0 &&
+    snapshot.state.mutations.length === 0
   ) {
     return {
       projectId,
@@ -134,10 +158,12 @@ export async function migrateProjectNarrativeMemory(
   console.info(
     `[NarrativeMemoryBridge] Project ${projectId}: ` +
     `${snapshot.graph.nodes.length} nodes, ` +
-    `${snapshot.graph.edges.length} edges, ` +
-    `${snapshot.graph.communities.length} communities, ` +
-    `${snapshot.summaryCache.length} HSC entries, ` +
-    `${snapshot.embeddingCount} embeddings`,
+      `${snapshot.graph.edges.length} edges, ` +
+      `${snapshot.graph.communities.length} communities, ` +
+      `${snapshot.state.facts.length} state facts, ` +
+      `${snapshot.state.mutations.length} state mutations, ` +
+      `${snapshot.summaryCache.length} HSC entries, ` +
+      `${snapshot.embeddingCount} embeddings`,
   );
 
   return {

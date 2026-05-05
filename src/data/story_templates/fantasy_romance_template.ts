@@ -19,60 +19,234 @@ export const FANTASY_ROMANCE_TEMPLATE: StoryTemplate = {
   ],
   "subGenres": [
     {
-      "name": "Huyễn Tưởng Ngôn Tình",
-      "description": "异世界规则 + 情感牺牲 + 宿命反转。在奇幻的世界里，书写跨越种族与命运的爱情。",
-      "coreAppeal": "异世界规则 + 情感牺牲 + 宿命反转。在奇幻的世界里，书写跨越种族与命运的爱情。"
+      "name": "仙侠言情流",
+      "description": "修仙世界的爱恨情仇",
+      "coreAppeal": "仙侣双修、渡劫相守、三生三世",
+      "referenceWorks": [
+        "三生三世十里桃花",
+        "花千骨",
+        "香蜜沉沉烬如霜",
+        "琉璃"
+      ]
+    },
+    {
+      "name": "玄幻言情流",
+      "description": "架空大陆的奇幻爱情",
+      "coreAppeal": "契约羁绊、种族禁忌、命定之人",
+      "referenceWorks": [
+        "斗罗大陆",
+        "斗破苍穹",
+        "武动乾坤"
+      ]
+    },
+    {
+      "name": "西幻言情流",
+      "description": "西方奇幻背景的爱情",
+      "coreAppeal": "种族禁恋、魔法羁绊、王国联姻",
+      "referenceWorks": [
+        "暮光之城",
+        "吸血鬼日记",
+        "指环王"
+      ]
+    },
+    {
+      "name": "神话言情流",
+      "description": "神仙妖魔的爱情故事",
+      "coreAppeal": "神仙眷侣、人神禁恋、轮回相守",
+      "referenceWorks": [
+        "宸汐缘",
+        "东宫",
+        "长相思",
+        "与凤行"
+      ]
     }
   ],
-  "worldRules": [],
-  "coolPatterns": [],
-  "conflictPatterns": [],
+  "worldRules": [
+    {
+      "name": "种族体系",
+      "description": "种族 / 特点 / 与人类关系 ------ / ------ / ----------- 神族 / 至高存在 / 不可亵渎 仙族 / 长生不老 / 高高在上 妖族 / 修炼化形 / 被歧视 魔族 / 天生对立 / 敌对 人族 / 寿命短暂 / 基础"
+    },
+    {
+      "name": "禁忌类型",
+      "description": "禁忌 / 原因 / 代价 ------ / ------ / ------ 种族禁恋 / 血脉不容 / 天罚 师徒禁恋 / 伦理不容 / 逐出师门 仇家禁恋 / 立场对立 / 背叛族群 人神禁恋 / 寿命差距 / 堕入轮回"
+    },
+    {
+      "name": "羁绊类型",
+      "description": "羁绊 / 特点 / 效果 ------ / ------ / ------ 契约 / 灵魂绑定 / 生死相依 血契 / 血脉相连 / 感知对方 命定 / 天命注定 / 无法逃避 轮回 / 生生世世 / 必定相遇 --"
+    }
+  ],
+  "coolPatterns": [
+    {
+      "name": "宿命相遇",
+      "scenario": "命中注定的相遇",
+      "appeal": "前世今生，缘分天定",
+      "keyNote": "要有前世铺垫"
+    },
+    {
+      "name": "禁忌之恋",
+      "scenario": "跨越种族/身份的爱情",
+      "appeal": "为爱对抗一切",
+      "keyNote": "要有真实的阻碍"
+    },
+    {
+      "name": "牺牲守护",
+      "scenario": "为对方牺牲一切",
+      "appeal": "感动、虐心、甜蜜",
+      "keyNote": "牺牲要有价值"
+    },
+    {
+      "name": "破茧重生",
+      "scenario": "经历磨难后的重逢",
+      "appeal": "苦尽甘来，HE结局",
+      "keyNote": "要有足够的虐"
+    }
+  ],
+  "conflictPatterns": [
+    {
+      "type": "不可亵渎",
+      "source": "至高存在",
+      "resolution": "神族"
+    },
+    {
+      "type": "高高在上",
+      "source": "长生不老",
+      "resolution": "仙族"
+    },
+    {
+      "type": "被歧视",
+      "source": "修炼化形",
+      "resolution": "妖族"
+    },
+    {
+      "type": "敌对",
+      "source": "天生对立",
+      "resolution": "魔族"
+    },
+    {
+      "type": "基础",
+      "source": "寿命短暂",
+      "resolution": "人族"
+    },
+    {
+      "type": "心魔",
+      "source": "阻碍突破",
+      "resolution": "制造冲突"
+    },
+    {
+      "type": "双修",
+      "source": "互相增益",
+      "resolution": "感情升温"
+    },
+    {
+      "type": "情劫",
+      "source": "必须经历",
+      "resolution": "考验感情"
+    },
+    {
+      "type": "殉情",
+      "source": "力量爆发",
+      "resolution": "高潮时刻"
+    },
+    {
+      "type": "禁忌之恋",
+      "source": "跨越种族/身份的爱情",
+      "resolution": "要有真实的阻碍"
+    },
+    {
+      "type": "卷三：考验 (151-250章)",
+      "source": "**核心**: 禁忌/阻碍出现 **关系**: 暧昧→分离 **高潮**: 被迫分开",
+      "resolution": "**核心**: 禁忌/阻碍出现 **关系**: 暧昧→分离 **高潮**: 被迫分开"
+    },
+    {
+      "type": "痴情备胎",
+      "source": "制造三角",
+      "resolution": "成全/黑化"
+    },
+    {
+      "type": "恶毒女配",
+      "source": "制造冲突",
+      "resolution": "被惩罚"
+    },
+    {
+      "type": "师尊长辈",
+      "source": "阻碍/支持",
+      "resolution": "认可"
+    },
+    {
+      "type": "忠心属下",
+      "source": "助攻",
+      "resolution": "也收获幸福"
+    }
+  ],
   "outlineArcs": [
     {
       "title": "卷一：相遇 (1-60章)",
-      "chapterRange": "1-100",
+      "chapterRange": "1-60",
       "coreFocus": "命定相遇，情感萌芽",
       "coreConflict": "",
       "climax": "第一次心动"
     },
     {
       "title": "卷二：相知 (61-150章)",
-      "chapterRange": "1-100",
+      "chapterRange": "61-150",
       "coreFocus": "深入了解，感情升温",
       "coreConflict": "",
       "climax": "确认心意"
     },
     {
       "title": "卷三：考验 (151-250章)",
-      "chapterRange": "1-100",
+      "chapterRange": "151-250",
       "coreFocus": "禁忌/阻碍出现",
       "coreConflict": "",
       "climax": "被迫分开"
     },
     {
       "title": "卷四：守护 (251-350章)",
-      "chapterRange": "1-100",
+      "chapterRange": "251-350",
       "coreFocus": "为爱对抗一切",
       "coreConflict": "",
       "climax": "打破禁忌"
     },
     {
       "title": "卷五：圆满 (351-400章)",
-      "chapterRange": "1-100",
+      "chapterRange": "351-400",
       "coreFocus": "有情人终成眷属",
       "coreConflict": "",
       "climax": "圆满结局"
     }
   ],
+  "targetWordCount": "1.000.000 chữ",
+  "targetChapterCount": 400,
   "pitfalls": [
     {
-      "description": "Thiết lập trước sau mâu thuẫn.",
+      "description": "规则不清晰",
+      "severity": "critical"
+    },
+    {
+      "description": "感情推进生硬",
+      "severity": "critical"
+    },
+    {
+      "description": "虐无意义",
+      "severity": "critical"
+    },
+    {
+      "description": "配角工具人",
       "severity": "critical"
     }
   ],
   "bestPractices": [
     {
-      "description": "Thiết lập tự nhất quán."
+      "description": "规则明确自洽"
+    },
+    {
+      "description": "感情有铺垫"
+    },
+    {
+      "description": "虐有价值有回报"
+    },
+    {
+      "description": "配角有血有肉"
     }
   ],
   "entityTags": [

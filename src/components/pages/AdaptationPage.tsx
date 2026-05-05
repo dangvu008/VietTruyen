@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import {
   UploadCloud, 
   Activity, 
@@ -19,12 +19,12 @@ import {
   Copy,
   Puzzle,
   ChevronRight,
-  Loader2
+  Loader2,
+  ExternalLink
 } from 'lucide-react';
-import { extractTemplateFromText } from '../../lib/ai/template_extractor';
 import type { ExtractionProgress } from '../../lib/ai/template_extractor';
 import type { StoryTemplate } from '../../types/story_template';
-import { useCustomTemplateStore } from '../../store/use_custom_template_store';
+import { useTemplateStore } from '../../store/use_template_store';
 import {
   getAcceptString,
   type LlmInputPreprocessStats,
@@ -41,22 +41,18 @@ import {
   type AdaptationAnalysisStats,
   prepareAdaptationSourceDraft,
 } from '../../lib/adaptation/adaptation_import_pipeline';
+import { cacheImportedSourceSnapshot } from '../../lib/adaptation/imported_project_recovery';
 import { useProjectStore } from '../../store/use_project_store';
 import { useNotificationStore } from '../../store/use_notification_store';
 import { useAiStore } from '../../store/use_ai_store';
+import { useAuthStore } from '../../store/use_auth_store';
 import type { AdaptationConfig } from '../../types/adaptation';
 import type { ProjectTabId } from '../../types/navigation';
 import type { Project } from '../../types/story';
 import { createUniqueProjectTitleSuggestion, findProjectByTitle } from '../../lib/project/project_title';
 import { getModelForTask } from '../../lib/ai/model_router';
 import { callAiModelTracked } from '../../lib/ai/tracked_ai_client';
-import {
-  buildNovelPolishInstruction,
-  getNovelPolishMode,
-  type NovelPolishModeId,
-} from '../../lib/ai/novel_polish';
-import { NovelPolishTool } from '../story-editor/NovelPolishTool';
-import { AiConnectionDebugPanel } from '../shared/AiConnectionDebugPanel';
+import { resolveExtractedTemplateFromSource } from '../../lib/story_templates/shared_template_registry';
 
 interface AdaptationPageProps {
   onComplete?: (projectId: string, destinationTab?: ProjectTabId) => void;
@@ -69,6 +65,10 @@ const AdaptationPage: React.FC<AdaptationPageProps> = ({ onComplete }) => {
   const activeProjectId = useProjectStore((state) => state.activeProjectId);
   const updateProject = useProjectStore((state) => state.updateProject);
   const replaceProjectChapters = useProjectStore((state) => state.replaceProjectChapters);
+  const shareTemplatesByDefault = useTemplateStore((state) => state.shareTemplatesByDefault);
+  const setShareTemplatesByDefault = useTemplateStore((state) => state.setShareTemplatesByDefault);
+  const user = useAuthStore((state) => state.user);
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
 
   // States
   const [uploadText, setUploadText] = useState('');
@@ -88,19 +88,16 @@ const AdaptationPage: React.FC<AdaptationPageProps> = ({ onComplete }) => {
   const [isExtracting, setIsExtracting] = useState(false);
   const [extractionProgress, setExtractionProgress] = useState<ExtractionProgress | null>(null);
   const [extractedTemplate, setExtractedTemplate] = useState<StoryTemplate | null>(null);
+  const [templatePersistenceHint, setTemplatePersistenceHint] = useState('');
 
   const [prompt, setPrompt] = useState('');
-  const [isPolishing, setIsPolishing] = useState(false);
-  const [polishError, setPolishError] = useState('');
-  const [polishResult, setPolishResult] = useState('');
-  const [polishModeId, setPolishModeId] = useState<NovelPolishModeId | null>(null);
   const [isImporting, setIsImporting] = useState(false);
   const [duplicateResolution, setDuplicateResolution] = useState<'overwrite' | 'keep_both' | null>(null);
   const [sourceRole, setSourceRole] = useState<'main_draft' | 'reference'>('main_draft');
   const [rewriteStrength, setRewriteStrength] = useState<'light' | 'balanced' | 'bold'>('balanced');
   const [startPoint, setStartPoint] = useState<'chapter_1' | 'continue_after_import'>('chapter_1');
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const fileInputId = useId();
   const previewProjectRef = useRef<Project | null>(null);
   const promotedPreviewIdRef = useRef<string | null>(null);
   const analysisRunIdRef = useRef(0);
@@ -124,21 +121,6 @@ const AdaptationPage: React.FC<AdaptationPageProps> = ({ onComplete }) => {
   const isOverwritingDuplicate = Boolean(duplicateProject && duplicateResolution === 'overwrite');
   const isKeepingBothDuplicate = Boolean(duplicateProject && duplicateResolution === 'keep_both');
   const resolvedAdaptationTitle = isKeepingBothDuplicate ? duplicateKeepBothTitle : nextAdaptationTitle;
-  const { models, activeModelId, taskModelOverrides } = useAiStore((state) => ({
-    models: state.models,
-    activeModelId: state.activeModelId,
-    taskModelOverrides: state.taskModelOverrides,
-  }));
-  const polishModel = useMemo(
-    () => getModelForTask('polish_style', models, undefined, activeModelId, taskModelOverrides),
-    [models, activeModelId, taskModelOverrides]
-  );
-  const adaptationPolishSource = useMemo(() => {
-    const trimmed = uploadText.trim();
-    if (!trimmed) return '';
-    if (trimmed.length <= 3200) return trimmed;
-    return `${trimmed.slice(0, 3200).trim()}\n\n...[Đã cắt bớt từ bản nhập để chạy polish nhanh]`;
-  }, [uploadText]);
 
   const clearPreviewProject = useCallback(async (projectId?: string) => {
     const targetProjectId = projectId ?? previewProjectRef.current?.id;
@@ -149,25 +131,16 @@ const AdaptationPage: React.FC<AdaptationPageProps> = ({ onComplete }) => {
     }
   }, []);
 
-  const resetUploadState = useCallback(() => {
-    setHasFile(false);
-    setUploadText('');
-    setUploadTitle('');
-    setInputStats(null);
-    setIsAiAnalyzed(false);
-    setIsAnalyzing(false);
-    setAnalysisStats(null);
-    setAnalysisMessage('');
-    setAnalysisProgress(null);
-    setUploadError('');
-    setDuplicateResolution(null);
-    setSourceRole('main_draft');
-    setRewriteStrength('balanced');
-    setStartPoint('chapter_1');
-    setPolishError('');
-    setPolishResult('');
-    setPolishModeId(null);
-  }, []);
+  const persistImportedSourceSnapshot = useCallback(async (projectId: string) => {
+    const sourceText = uploadText.trim();
+    if (!projectId || !sourceText) return;
+
+    await cacheImportedSourceSnapshot({
+      projectId,
+      sourceTitle: uploadTitle,
+      sourceText,
+    });
+  }, [uploadText, uploadTitle]);
 
   useEffect(() => {
     return () => {
@@ -175,8 +148,7 @@ const AdaptationPage: React.FC<AdaptationPageProps> = ({ onComplete }) => {
     };
   }, [clearPreviewProject]);
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+  const handleSelectedFile = async (file: File) => {
     if (!file) return;
 
     const runId = analysisRunIdRef.current + 1;
@@ -189,6 +161,8 @@ const AdaptationPage: React.FC<AdaptationPageProps> = ({ onComplete }) => {
     setAnalysisMessage('');
     setAnalysisProgress(null);
     setDuplicateResolution(null);
+    setExtractedTemplate(null);
+    setTemplatePersistenceHint('');
 
     await clearPreviewProject();
 
@@ -245,6 +219,21 @@ const AdaptationPage: React.FC<AdaptationPageProps> = ({ onComplete }) => {
     }
   };
 
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.currentTarget.files?.[0];
+    e.currentTarget.value = '';
+    if (!file) return;
+    void handleSelectedFile(file);
+  };
+
+  const handleFileDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    if (isParsing) return;
+    const file = e.dataTransfer.files?.[0];
+    if (!file) return;
+    void handleSelectedFile(file);
+  };
+
   const handleStartAdaptation = async () => {
     if (!uploadText.trim()) return;
     
@@ -299,6 +288,7 @@ const AdaptationPage: React.FC<AdaptationPageProps> = ({ onComplete }) => {
           await replaceProjectChapters(duplicateProject.id, finalizedPreview.chapters, {
             storageMode: finalizedPreview.storageMode,
           });
+          await persistImportedSourceSnapshot(duplicateProject.id);
           useNotificationStore.getState().push({
             type: 'success',
             title: 'Đã ghi đè tác phẩm',
@@ -310,6 +300,7 @@ const AdaptationPage: React.FC<AdaptationPageProps> = ({ onComplete }) => {
 
         promotedPreviewIdRef.current = finalizedPreview.id;
         const promotedProject = await promotePreviewProject(finalizedPreview);
+        await persistImportedSourceSnapshot(promotedProject.id);
         previewProjectRef.current = promotedProject;
         onComplete?.(promotedProject.id, 'chapters');
         return;
@@ -318,6 +309,7 @@ const AdaptationPage: React.FC<AdaptationPageProps> = ({ onComplete }) => {
       const createdProject = await adaptProject(config);
 
       if (createdProject) {
+        await persistImportedSourceSnapshot(createdProject.id);
         onComplete?.(createdProject.id, 'chapters');
       }
     } catch (err) {
@@ -332,20 +324,55 @@ const AdaptationPage: React.FC<AdaptationPageProps> = ({ onComplete }) => {
     setIsExtracting(true);
     setExtractedTemplate(null);
     setExtractionProgress(null);
+    setTemplatePersistenceHint('');
     try {
-      const template = await extractTemplateFromText(
-        uploadText,
-        uploadTitle || 'Bản thảo',
-        (progress) => setExtractionProgress(progress),
-      );
-      setExtractedTemplate(template);
-      // [Domain:StoryTemplate] Persist vào store để dùng lại sau khi chuyển trang
-      useCustomTemplateStore.getState().addTemplate(template);
-      useNotificationStore.getState().push({
-        type: 'success',
-        title: '🧩 Template đã trích xuất!',
-        message: `"${template.name}" sẵn sàng dùng cho truyện mới.`,
+      const resolution = await resolveExtractedTemplateFromSource({
+        sourceText: uploadText,
+        sourceTitle: uploadTitle || 'Bản thảo',
+        shareByDefault: shareTemplatesByDefault,
+        userId: user?.id,
+        onProgress: (progress) => setExtractionProgress(progress),
       });
+
+      setExtractedTemplate(resolution.template);
+      useTemplateStore.getState().addCustomTemplate(resolution.template);
+
+      if (resolution.reusedSharedTemplate) {
+        setTemplatePersistenceHint('Template dùng lại từ kho chia sẻ chung và đã lưu vào thư viện local.');
+        useNotificationStore.getState().push({
+          type: 'success',
+          title: 'Đã dùng template chia sẻ sẵn có',
+          message: `"${resolution.template.name}" đã tồn tại trong kho chung, không tạo bản trùng mới.`,
+        });
+      } else if (resolution.publishedSharedTemplate) {
+        setTemplatePersistenceHint('Template đã chia sẻ lên kho chung và cũng đã lưu vào thư viện local.');
+        useNotificationStore.getState().push({
+          type: 'success',
+          title: 'Template đã được chia sẻ',
+          message: `"${resolution.template.name}" đã vào kho chung để các tài khoản khác có thể tái sử dụng.`,
+        });
+      } else if (resolution.shareRequested && !user?.id) {
+        setTemplatePersistenceHint('Template đã lưu local. Hãy đăng nhập nếu muốn publish lên kho chung.');
+        useNotificationStore.getState().push({
+          type: 'success',
+          title: 'Template đã trích xuất',
+          message: 'Đã lưu local. Chia sẻ kho chung cần tài khoản đăng nhập.',
+        });
+      } else if (resolution.shareFailed) {
+        setTemplatePersistenceHint('Template đã lưu local, nhưng publish kho chung chưa thành công.');
+        useNotificationStore.getState().push({
+          type: 'warning',
+          title: 'Template đã lưu local',
+          message: 'Chia sẻ lên kho chung thất bại nên hệ thống giữ lại bản local để bạn tiếp tục dùng.',
+        });
+      } else {
+        setTemplatePersistenceHint('Template đã lưu local trong thư viện của thiết bị hiện tại.');
+        useNotificationStore.getState().push({
+          type: 'success',
+          title: 'Template đã trích xuất',
+          message: `"${resolution.template.name}" sẵn sàng dùng cho truyện mới.`,
+        });
+      }
     } catch (err) {
       useNotificationStore.getState().push({
         type: 'error',
@@ -354,42 +381,6 @@ const AdaptationPage: React.FC<AdaptationPageProps> = ({ onComplete }) => {
       });
     } finally {
       setIsExtracting(false);
-    }
-  };
-
-  const handleRunNovelPolish = async ({
-    mode,
-    rawText,
-  }: {
-    mode: NovelPolishModeId;
-    rawText: string;
-  }) => {
-    if (!polishModel) {
-      setPolishError('Chưa có model AI khả dụng cho công cụ trau chuốt. Vào Cài đặt AI để cấu hình.');
-      return;
-    }
-
-    setIsPolishing(true);
-    setPolishError('');
-    setPolishModeId(mode);
-
-    try {
-      const response = await callAiModelTracked({
-        provider: polishModel.provider,
-        modelId: polishModel.modelId,
-        modelName: polishModel.name || polishModel.modelId,
-        baseUrl: polishModel.baseUrl,
-        systemPrompt: 'Bạn là biên tập viên văn xuôi chuyên sửa bản thảo tiểu thuyết bằng tiếng Việt.',
-        userPrompt: buildNovelPolishInstruction({ mode, rawText }),
-        taskType: 'polish_style',
-      });
-
-      setPolishResult(response.trim());
-    } catch (error) {
-      setPolishResult('');
-      setPolishError(error instanceof Error ? error.message : 'Trau chuốt bản thảo thất bại.');
-    } finally {
-      setIsPolishing(false);
     }
   };
 
@@ -416,11 +407,14 @@ const AdaptationPage: React.FC<AdaptationPageProps> = ({ onComplete }) => {
         </p>
       </header>
 
-      {/* THREE COLUMN LAYOUT */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 relative z-10">
+      {/* TWO COLUMN LAYOUT */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 relative z-10">
         
-        {/* === COLUMN 1: UPLOAD === */}
-        <div className="bg-[#0F1115] border border-white/5 rounded-[24px] p-6 shadow-ambient flex flex-col relative overflow-hidden group">
+        {/* === COLUMN 1: UPLOAD + AI ANALYSIS === */}
+        <div className="flex flex-col gap-4">
+
+          {/* Upload block */}
+          <div className="bg-[#0F1115] border border-white/5 rounded-[24px] p-6 shadow-ambient flex flex-col relative overflow-hidden group">
           <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
              <span className="font-headline text-8xl font-bold text-white">01</span>
           </div>
@@ -429,18 +423,19 @@ const AdaptationPage: React.FC<AdaptationPageProps> = ({ onComplete }) => {
             <UploadCloud size={16} className="text-accent-amber" /> Tải lên bản thảo
           </h2>
 
-          <div 
-            className="flex-1 border-2 border-dashed border-[#1E232B] rounded-2xl flex flex-col items-center justify-center p-8 bg-[#0a0c10]/50 hover:bg-[#1E232B] transition-colors cursor-pointer group/drop"
-            onClick={() => fileInputRef.current?.click()}
+          <input
+            id={fileInputId}
+            type="file"
+            className="sr-only"
+            accept={getAcceptString()}
+            onChange={handleFileUpload}
+          />
+
+          <div
+            className="flex-1 border-2 border-dashed border-[#1E232B] rounded-2xl flex flex-col items-center justify-center p-8 bg-[#0a0c10]/50 hover:bg-[#1E232B] transition-colors group/drop"
+            onDragOver={(event) => event.preventDefault()}
+            onDrop={handleFileDrop}
           >
-            <input 
-              type="file" 
-              className="hidden" 
-              accept={getAcceptString()} 
-              ref={fileInputRef}
-              onChange={handleFileUpload}
-            />
-            
             {isParsing ? (
               <div className="text-center flex flex-col items-center justify-center animate-in fade-in duration-300">
                 <div className="relative w-16 h-16 mb-4 flex items-center justify-center">
@@ -470,26 +465,22 @@ const AdaptationPage: React.FC<AdaptationPageProps> = ({ onComplete }) => {
                      {uploadText.length.toLocaleString()} ký tự
                    </p>
                  )}
-                 <button className="mt-4 text-xs font-semibold uppercase tracking-wider text-accent-amber hover:text-white transition-colors"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    analysisRunIdRef.current += 1;
-                    void clearPreviewProject();
-                    resetUploadState();
-                  }}
+                 <label
+                   htmlFor={fileInputId}
+                   className="mt-4 inline-flex cursor-pointer text-xs font-semibold uppercase tracking-wider text-accent-amber transition-colors hover:text-white"
                  >
                    Chọn tệp khác
-                 </button>
+                 </label>
                </div>
             ) : (
-              <div className="text-center">
+              <label htmlFor={fileInputId} className="block cursor-pointer text-center">
                 <UploadCloud size={48} className="text-[#1E232B] group-hover/drop:text-accent-amber transition-colors mx-auto mb-4" />
                 <p className="text-[#F8FAFC] font-medium text-sm mb-1">Kéo thả tệp vào đây</p>
                 <p className="text-xs text-[#94A3B8] mb-4">Hoặc tải lên từ máy tính (TXT, PDF, DOCX, EPUB)</p>
-                <span className="px-4 py-2 bg-[#1E232B] rounded-lg text-xs font-semibold text-white uppercase tracking-wider">
+                <span className="inline-flex rounded-lg bg-[#1E232B] px-4 py-2 text-xs font-semibold uppercase tracking-wider text-white transition-colors hover:bg-accent-amber hover:text-[#0A0C10]">
                   Chọn tệp từ máy
                 </span>
-              </div>
+              </label>
             )}
             
             {uploadError && <p className="text-xs text-status-error mt-4 text-center">{uploadError}</p>}
@@ -498,7 +489,7 @@ const AdaptationPage: React.FC<AdaptationPageProps> = ({ onComplete }) => {
                 <p className="text-sm font-semibold text-[#F8FAFC]">Đã có tác phẩm trùng tên</p>
                 <p className="mt-1 text-xs leading-5 text-[#CBD5E1]">
                   <strong>{duplicateProject.title}</strong>
-                  {' '}đã tồn tại trong thư viện. Hãy xác nhận ngay tại đây: ghi đè tác phẩm cũ hoặc giữ lại cả hai bản.
+                  {' '}đã tồn tại trong thư viện. Ghi đè, giữ cả hai, hoặc bỏ qua và mở tác phẩm cũ ngay.
                 </p>
                 <div className="mt-3 flex flex-wrap gap-2">
                   <button
@@ -514,7 +505,7 @@ const AdaptationPage: React.FC<AdaptationPageProps> = ({ onComplete }) => {
                       setUploadError('');
                     }}
                   >
-                    {duplicateProject.id === activeProjectId ? 'Xác nhận ghi đè bản đang mở' : 'Xác nhận ghi đè'}
+                    {duplicateProject.id === activeProjectId ? 'Ghi đè bản đang mở' : 'Ghi đè'}
                   </button>
                   <button
                     type="button"
@@ -530,6 +521,17 @@ const AdaptationPage: React.FC<AdaptationPageProps> = ({ onComplete }) => {
                     }}
                   >
                     Giữ cả 2
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded-xl px-3 py-2 text-xs font-semibold transition-colors border border-white/20 text-[#CBD5E1] hover:bg-white/10 flex items-center gap-1.5"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onComplete?.(duplicateProject.id, 'chapters');
+                    }}
+                  >
+                    <ExternalLink size={11} />
+                    Bỏ qua &amp; mở bản cũ
                   </button>
                 </div>
                 {isOverwritingDuplicate && (
@@ -547,8 +549,9 @@ const AdaptationPage: React.FC<AdaptationPageProps> = ({ onComplete }) => {
           </div>
         </div>
 
-        {/* === COLUMN 2: AI ANALYSIS === */}
-        <div className={`bg-[#0F1115] border border-white/5 rounded-[24px] p-6 shadow-ambient flex flex-col relative overflow-hidden transition-all duration-500 ${!hasFile ? 'opacity-50 grayscale pointer-events-none' : ''}`}>
+          {/* AI Analysis block — chỉ hiện khi đã upload */}
+          {(hasFile || isAnalyzing) && (
+        <div className={`bg-[#0F1115] border border-white/5 rounded-[24px] p-6 shadow-ambient flex flex-col relative overflow-hidden transition-all duration-500 animate-in fade-in slide-in-from-top-2 ${!hasFile ? 'opacity-50 grayscale pointer-events-none' : ''}`}>
            <div className="absolute top-0 right-0 p-4 opacity-10">
              <span className="font-headline text-8xl font-bold text-white">02</span>
           </div>
@@ -641,8 +644,10 @@ const AdaptationPage: React.FC<AdaptationPageProps> = ({ onComplete }) => {
             </div>
           )}
         </div>
+          )}
+        </div>
 
-        {/* === COLUMN 3: DEEP ADAPTATION === */}
+        {/* === COLUMN 2: DEEP ADAPTATION === */}
         <div className={`bg-[#0F1115] border border-white/5 rounded-[24px] p-6 shadow-ambient flex flex-col relative overflow-hidden transition-all duration-500 delay-100 ${!isAiAnalyzed ? 'opacity-50 grayscale pointer-events-none' : ''}`}>
            <div className="absolute top-0 right-0 p-4 opacity-5">
              <span className="font-headline text-8xl font-bold text-white">03</span>
@@ -756,9 +761,9 @@ const AdaptationPage: React.FC<AdaptationPageProps> = ({ onComplete }) => {
                    <p className="text-xs font-bold text-white">Trùng với tác phẩm đã có</p>
                  </div>
                  <p className="text-[11px] leading-5 text-[#CBD5E1]">
-                   Chọn cách xử lý trước khi tạo hồ sơ để tránh ghi đè nhầm bản quan trọng.
+                   Ghi đè, giữ cả hai, hoặc bỏ qua và mở luôn tác phẩm cũ vào Editor.
                  </p>
-                 <div className="mt-3 grid grid-cols-2 gap-2">
+                 <div className="mt-3 grid grid-cols-3 gap-2">
                    <button
                      type="button"
                      onClick={() => {
@@ -787,6 +792,13 @@ const AdaptationPage: React.FC<AdaptationPageProps> = ({ onComplete }) => {
                    >
                      <Copy size={13} className="mr-1 inline" /> Giữ cả 2
                    </button>
+                   <button
+                     type="button"
+                     onClick={() => onComplete?.(duplicateProject.id, 'chapters')}
+                     className="rounded-xl px-3 py-2 text-xs font-semibold transition-colors border border-white/20 text-[#CBD5E1] hover:bg-white/10 flex items-center justify-center gap-1"
+                   >
+                     <ExternalLink size={12} /> Mở bản cũ
+                   </button>
                  </div>
                </div>
              )}
@@ -800,70 +812,7 @@ const AdaptationPage: React.FC<AdaptationPageProps> = ({ onComplete }) => {
                onChange={(e) => setPrompt(e.target.value)}
              />
 
-             <div className="mb-4">
-               <NovelPolishTool
-                 title="Trau chuốt bản thảo"
-                 sourceText={adaptationPolishSource}
-                 sourceActionLabel="Lấy từ bản nhập"
-                 disabled={isPolishing || isImporting || !isAiAnalyzed}
-                 onRun={(payload) => void handleRunNovelPolish(payload)}
-               />
-               {adaptationPolishSource && (
-                 <p className="mt-2 text-[10px] leading-4 text-[#64748B]">
-                   Nút lấy nhanh sẽ dùng một đoạn rút gọn từ bản nhập. Dán đoạn cụ thể nếu bạn muốn polish chính xác hơn.
-                 </p>
-               )}
-               {polishError ? (
-                 <div className="mt-3">
-                   <AiConnectionDebugPanel
-                     error={polishError}
-                     onDismiss={() => setPolishError('')}
-                   />
-                 </div>
-               ) : null}
-               {polishResult && polishModeId ? (
-                 <div className="mt-3 rounded-2xl border border-accent-amber/20 bg-[#0A0C10] p-4">
-                   <div className="flex items-center justify-between gap-3">
-                     <div>
-                       <p className="text-[10px] font-bold uppercase tracking-widest text-accent-amber">
-                         {getNovelPolishMode(polishModeId).label}
-                       </p>
-                       <p className="mt-1 text-[11px] text-[#94A3B8]">
-                         {getNovelPolishMode(polishModeId).outputKind === 'report'
-                           ? 'Bản báo lỗi để rà soát trước khi phóng tác.'
-                           : 'Bản trau chuốt mẫu để tham chiếu khi viết lại.'}
-                       </p>
-                     </div>
-                     <div className="flex items-center gap-2">
-                       <button
-                         type="button"
-                         onClick={() => void navigator.clipboard.writeText(polishResult)}
-                         className="rounded-lg border border-white/10 px-3 py-1.5 text-[11px] font-semibold text-[#CBD5E1] transition-colors hover:border-white/20 hover:text-white"
-                       >
-                         Sao chép
-                       </button>
-                       <button
-                         type="button"
-                         onClick={() =>
-                           setPrompt((prev) => {
-                             const seed = getNovelPolishMode(polishModeId).outputKind === 'report'
-                               ? `Các lỗi cần tránh khi phóng tác:\n${polishResult}`
-                               : `Mẫu văn phong muốn hướng tới:\n${polishResult}`;
-                             return prev.trim() ? `${prev.trim()}\n\n${seed}` : seed;
-                           })
-                         }
-                         className="rounded-lg bg-accent-amber px-3 py-1.5 text-[11px] font-semibold text-[#1E232B] transition-colors hover:bg-amber-400"
-                       >
-                         Đưa vào prompt
-                       </button>
-                     </div>
-                   </div>
-                   <div className="mt-3 max-h-56 overflow-y-auto rounded-xl border border-white/5 bg-white/[0.02] px-3 py-3 text-[12px] leading-6 text-[#E2E8F0] whitespace-pre-wrap">
-                     {polishResult}
-                   </div>
-                 </div>
-               ) : null}
-             </div>
+
 
              <div className="mb-6 flex flex-wrap gap-2">
                {['Tối giản lời thoại', 'Thêm yếu tố kỳ ảo', 'Chuyển sang ngôi thứ nhất', 'Giữ tên nhân vật', 'Tránh sao chép nguyên văn'].map((tag) => (
@@ -886,23 +835,53 @@ const AdaptationPage: React.FC<AdaptationPageProps> = ({ onComplete }) => {
              </div>
 
               <div className="mt-auto space-y-3">
-                {/* Main CTA: Adaptation */}
-                <button
-                  onClick={handleStartAdaptation}
-                  disabled={isImporting || isAnalyzing || !isAiAnalyzed || Boolean(duplicateProject && !duplicateResolution)}
-                  className="w-full py-4 bg-gradient-to-r from-accent-amber to-amber-600 rounded-2xl font-bold text-white uppercase tracking-widest text-sm shadow-[0_0_20px_rgba(245,158,11,0.3)] hover:shadow-[0_0_30px_rgba(245,158,11,0.5)] transition-all flex items-center justify-center gap-2 disabled:cursor-not-allowed disabled:opacity-60 disabled:shadow-none"
-                >
-                  {isImporting
-                    ? <Loader2 className="animate-spin" />
-                    : isOverwritingDuplicate
-                      ? 'Xác nhận & ghi đè hồ sơ'
-                      : isKeepingBothDuplicate
-                        ? 'Xác nhận & tạo bản mới'
-                        : 'Xác nhận hồ sơ phóng tác'}
-                  {!isImporting && <ArrowRight size={18} />}
-                </button>
+                <div className="flex gap-3">
+                  {/* Main CTA: Adaptation */}
+                  <button
+                    onClick={handleStartAdaptation}
+                    disabled={isImporting || isAnalyzing || !isAiAnalyzed || Boolean(duplicateProject && !duplicateResolution)}
+                    className="flex-1 py-4 bg-gradient-to-r from-accent-amber to-amber-600 rounded-2xl font-bold text-white uppercase tracking-widest text-sm shadow-[0_0_20px_rgba(245,158,11,0.3)] hover:shadow-[0_0_30px_rgba(245,158,11,0.5)] transition-all flex items-center justify-center gap-2 disabled:cursor-not-allowed disabled:opacity-60 disabled:shadow-none"
+                  >
+                    {isImporting
+                      ? <Loader2 className="animate-spin" />
+                      : isOverwritingDuplicate
+                        ? 'Ghi đè hồ sơ'
+                        : isKeepingBothDuplicate
+                          ? 'Tạo bản mới'
+                          : 'Xác nhận phóng tác'}
+                  </button>
+
+                  {/* Secondary CTA: Quick Edit */}
+                  <button
+                    onClick={handleStartAdaptation}
+                    disabled={isImporting || isAnalyzing || !isAiAnalyzed || Boolean(duplicateProject && !duplicateResolution)}
+                    className="flex-1 py-4 bg-[#1E232B] hover:bg-[#2A313C] rounded-2xl font-bold text-white uppercase tracking-widest text-sm transition-all flex items-center justify-center gap-2 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {isImporting ? <Loader2 className="animate-spin" /> : 'Vào luôn trang Edit'}
+                    {!isImporting && <PenTool size={16} />}
+                  </button>
+                </div>
 
                 {/* Secondary CTA: Extract Template */}
+                <label className="flex items-start gap-3 rounded-2xl border border-white/6 bg-white/[0.02] px-4 py-3">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5 h-4 w-4 rounded border-white/20 bg-transparent accent-[#2DD4BF]"
+                    checked={shareTemplatesByDefault}
+                    onChange={(event) => setShareTemplatesByDefault(event.target.checked)}
+                  />
+                  <span className="min-w-0">
+                    <span className="block text-[11px] font-semibold uppercase tracking-[0.18em] text-[#E2E8F0]">
+                      Chia sẻ template mặc định
+                    </span>
+                    <span className="mt-1 block text-[11px] leading-5 text-[#94A3B8]">
+                      {isAuthenticated
+                        ? 'Khi bật, hệ thống ưu tiên tái dùng template canonical đã có và chỉ tạo shared template mới nếu tác phẩm nguồn chưa tồn tại.'
+                        : 'Preference này vẫn được nhớ lại, nhưng chỉ tài khoản đăng nhập mới publish template lên kho chung.'}
+                    </span>
+                  </span>
+                </label>
+
                 <button
                   onClick={handleExtractTemplate}
                   disabled={isExtracting || !isAiAnalyzed || isImporting}
@@ -963,13 +942,21 @@ const AdaptationPage: React.FC<AdaptationPageProps> = ({ onComplete }) => {
                       {extractedTemplate.tags.slice(0, 4).map((tag) => (
                         <span key={tag} className="text-[9px] bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded-full">{tag}</span>
                       ))}
+                      <span className="text-[9px] bg-white/5 text-[#E2E8F0] px-2 py-0.5 rounded-full">
+                        {extractedTemplate.sharing?.visibility === 'shared' ? 'Shared canonical' : 'Local custom'}
+                      </span>
                     </div>
-                    <p className="text-[9px] text-[#64748B] mt-2">Template đã lưu vào bộ nhớ phiên. Vào Cài đặt → Templates để xem và áp dụng.</p>
+                    <p className="text-[9px] text-[#64748B] mt-2">
+                      {templatePersistenceHint || 'Template đã lưu vào thư viện local. Vào Cài đặt → Templates để xem và áp dụng.'}
+                    </p>
                   </div>
                 )}
 
                 <p className="text-center text-[10px] text-[#94A3B8] uppercase tracking-wider flex items-center justify-center gap-1">
-                  <Lock size={10} /> Quá trình hoàn toàn bảo mật
+                  <Lock size={10} />
+                  {shareTemplatesByDefault
+                    ? 'Chỉ template đã trích xuất được chia sẻ, không upload toàn văn công khai'
+                    : 'Template chỉ lưu local trên thiết bị hiện tại'}
                 </p>
               </div>
            </div>

@@ -1,16 +1,15 @@
-# THE ORCHESTRA Boilerplate
+# AI Agent Boilerplate
 
-Template nay dong goi bo khung van hanh THE ORCHESTRA de ban copy sang du an moi.
+Minimal handoff template for agent-driven projects.
 
-## Thanh phan
+## Files
 
-- `docs/BOARD.md`: kanban cho backlog, in-progress, done
-- `docs/DESIGN.md`: tai lieu thiet ke va Gherkin
-- `CLAUDE.md`: luat cho execute coder
-- `.antigravity_rules`: luat cho planner / architect
-- `watcher.sh`: script gac cong doc `.ready_for_claude`
+- `docs/BOARD.md`: backlog and active task list
+- `docs/DESIGN.md`: implementation and test design
+- `CLAUDE.md`: executor rules
+- `watcher.sh`: optional trigger loop
 
-## Cach dung
+## Usage
 
 ```bash
 cp -R docs/templates/ai-agent-boilerplate /path/to/new-project
@@ -18,3 +17,7 @@ cd /path/to/new-project/ai-agent-boilerplate
 chmod +x watcher.sh
 ./watcher.sh
 ```
+
+## Prompt Rule
+
+Use concise English-first prompts. See `docs/PROMPT_STANDARD.md` in the main repo for the canonical format.

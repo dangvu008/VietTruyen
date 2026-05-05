@@ -8,6 +8,7 @@
  * - Input: Context from project state (genre, tags, style, etc.)
  * - Output: { system: string, user: string } prompt pair
  */
+import { buildVietnameseTextSystem } from './prompt_standard';
 
 interface TitlePromptContext {
   genre: string;
@@ -25,6 +26,10 @@ interface CharacterPromptContext {
   supportCharacterCount: number;
   customPrompt?: string;
   storyPreview?: string;
+  /** Tóm tắt outline/arc đã vạch sẵn — để gắn nhân vật vào cốt truyện */
+  outlineContext?: string;
+  /** Gợi ý archetype từ template — để AI sinh đa dạng vai trò */
+  archetypeHints?: string;
 }
 
 interface WorldPromptContext {
@@ -46,9 +51,15 @@ interface PlotPromptContext {
   storyPreview?: string;
 }
 
-const SYSTEM_BASE = `Bạn là một chuyên gia sáng tạo tiểu thuyết mạng Việt Nam. 
-Hãy trả lời bằng tiếng Việt, ngắn gọn, sáng tạo, và phù hợp với thể loại được yêu cầu.
-Không giải thích dài dòng, đi thẳng vào nội dung gợi ý.`;
+const SYSTEM_BASE = buildVietnameseTextSystem(
+  'Vietnamese webnovel concept editor',
+  'Generate concise, genre-appropriate creative suggestions for project setup fields',
+  [
+    'Stay creative but specific.',
+    'Do not add long explanations.',
+    'Go straight to the requested suggestions.',
+  ],
+);
 
 export function buildTitlePrompt(ctx: TitlePromptContext) {
   const tagsStr = ctx.tags.length > 0 ? ctx.tags.join(', ') : 'không có';
@@ -70,6 +81,9 @@ export function buildCharacterPrompt(ctx: CharacterPromptContext) {
   const tagsStr = ctx.tags.length > 0 ? ctx.tags.join(', ') : 'không có';
   const custom = ctx.customPrompt ? `\nYêu cầu thêm: ${ctx.customPrompt}` : '';
   const previewContext = ctx.storyPreview ? `\n--- NỘI DUNG GỐC CỦA TRUYỆN DỰA ĐỂ THAM KHẢO ---\n${ctx.storyPreview}\n--- KẾT THÚC NỘI DUNG GỐC ---\n` : '';
+  const totalMin = Math.max(ctx.mainCharacterCount + ctx.supportCharacterCount, 8);
+  const outlineBlock = ctx.outlineContext ? `\n- Cốt truyện đã vạch:\n${ctx.outlineContext}` : '';
+  const archetypeBlock = ctx.archetypeHints ? `\n- Gợi ý vai trò theo thể loại:\n${ctx.archetypeHints}` : '';
 
   return {
     system: SYSTEM_BASE,
@@ -77,10 +91,23 @@ export function buildCharacterPrompt(ctx: CharacterPromptContext) {
 - Tên truyện: ${ctx.title || '(chưa đặt)'}
 - Thể loại: ${ctx.genre}
 - Chủ đề: ${tagsStr}
-- Số nhân vật chính: ${ctx.mainCharacterCount}
-- Số nhân vật phụ: ${ctx.supportCharacterCount}${custom}${previewContext}
+- Tổng nhân vật tối thiểu: ${totalMin}${outlineBlock}${archetypeBlock}${custom}${previewContext}
 
-Với mỗi nhân vật, mô tả ngắn gọn: Tên, Tuổi, Tính cách, Vai trò, Mối quan hệ.
+YÊU CẦU QUAN TRỌNG:
+1. Nhân vật PHẢI đa dạng vai trò — KHÔNG chỉ tạo Chính + Phụ đơn giản
+2. Bắt buộc có: nhân vật mentor, nhân vật hài hước/comic relief, kẻ phản bội tiềm năng, nhân vật nền tạo bầu không khí
+3. Mỗi nhân vật phải gắn với ARC cụ thể trong cốt truyện (nếu có outline)
+4. Nhân vật phụ phải có chiều sâu — đôi khi nhân vật phụ là điểm nhấn của truyện
+5. KHÔNG thêm nhân vật tùy tiện — mỗi người phải có chức năng narrative rõ ràng
+
+Với mỗi nhân vật, mô tả:
+- Tên
+- Vai trò narrative (Chính/Phản diện chính/Đồng hành/Mentor/Tình yêu/Hài hước/Kẻ phản bội/Nền sống động/Bí ẩn/Ẩn boss...)
+- Tính cách nổi bật
+- Chức năng trong cốt truyện — TẠI SAO nhân vật này cần tồn tại
+- Xuất hiện ở arc/quyển nào
+- Mối quan hệ với nhân vật khác
+
 Sử dụng format rõ ràng, dễ đọc.`,
   };
 }

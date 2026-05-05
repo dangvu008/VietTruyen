@@ -1,83 +1,40 @@
 # Universal Agent Brief
 
-Tai lieu nay dong goi mot lop "briefing" de dung AI agent an toan hon trong moi du an, dac biet cho Antigravity va Codex.
+Use this when a task needs a portable, low-token execution contract.
 
-## Muc tieu
-
-Thay vi viet prompt kieu:
+## Canonical Brief
 
 ```text
-fix this project
+Objective: [what to change]
+Scope: [files/modules allowed]
+Do Not Touch: [protected areas]
+Stop And Ask: [risky actions]
+Done When: [observable outcome]
+Verify: [smallest valid test/build/check]
 ```
 
-hay dung brief co hop dong ro:
+## Rules
+
+- Keep the brief in English unless the task explicitly requires another language.
+- Keep each line short and operational.
+- Prefer file/module scope over vague product scope.
+- Define completion with observable behavior, not intent.
+- Define one concrete verification step.
+
+## Example
 
 ```text
-Objective:
-Fix login validation in the auth UI.
-
-Allowed Scope:
-- src/auth/*
-- related tests only
-
-Do Not Touch:
-- package.json
-- DB schema
-- deployment config
-
-Stop And Ask Before:
-- adding dependencies
-- deleting files
-- changing DB schema
-
-Done When:
-- invalid email is blocked
-- empty password is blocked
-- valid input still submits
-
-Verification:
-- run the smallest relevant test command
+Objective: Fix login validation in the auth UI.
+Scope: src/auth/*, related tests only.
+Do Not Touch: package.json, DB schema, deploy config.
+Stop And Ask: adding deps, deleting files, schema changes.
+Done When: invalid email is blocked, empty password is blocked, valid input still submits.
+Verify: run the smallest relevant test command.
 ```
 
-## Tai sao no portable
+## Relationship To Project Docs
 
-- Khong khoa cung vao stack cu the
-- Luon bat dau bang viec doc repo hien tai
-- Scope theo file/thu muc neu biet, theo module neu chua biet
-- Tach phan chung va phan overlay rieng cho tung tool
-
-## Thanh phan da them vao repo nay
-
-- `AGENTS.md`: huong dan chung cho coding agents
-- `.agent/skills/universal-agent-brief/`: skill cho Antigravity
-- `.agent/workflows/agent-brief.md`: slash workflow de tao brief
-
-## Cach dung voi Codex
-
-1. Mo `AGENTS.md` de agent co contract chung.
-2. Neu can, copy brief tu template va dien theo task.
-3. Neu task lon, tach thanh nhieu brief nho theo giai doan.
-
-## Cach dung voi Antigravity
-
-1. Dung workflow `/agent-brief <task>`.
-2. Neu task lon hoac nhieu domain, chuyen sang `/plan` hoac `/orchestrate`.
-3. Giu nguyen `Allowed Scope`, `Do Not Touch`, `Stop And Ask Before`, `Done When`.
-
-## Cai sang du an khac
-
-Dung script:
-
-```bash
-./scripts/install-universal-agent-brief.sh /path/to/another-project
-```
-
-Neu muon ghi de file da ton tai:
-
-```bash
-./scripts/install-universal-agent-brief.sh --force /path/to/another-project
-```
-
-## Ghi chu
-
-Neu repo dich da co `AGENTS.md` hoac `.agent` rieng, uu tien merge co chu y thay vi ghi de mu quang.
+- Global rules: `AGENTS.md`
+- Safety and canonical routes: `GUARDRAILS.md`
+- Product truth: `docs/CANONICAL_AGENT_SPEC.md`
+- Prompt wording: `docs/PROMPT_STANDARD.md`

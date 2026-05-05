@@ -5,6 +5,7 @@ import type { ChatMessage } from './editor_types';
 import {
   buildStoryEditorChatTranscript,
   buildStoryEditorSeedMessages,
+  normalizePersistedStoryEditorMessages,
   normalizeStoryEditorMessages,
 } from './story_editor_chat_history';
 
@@ -80,5 +81,46 @@ describe('story_editor_chat_history', () => {
     expect(transcript).toContain('THE MUSE: Tin nhắn số 40');
     expect(transcript).toContain('THE MUSE: Tin nhắn số 44');
     expect(transcript).not.toContain('Tin nhắn số 10');
+  });
+
+  it('strips runtime-only streaming flags before persisting editor chat history', () => {
+    const normalized = normalizePersistedStoryEditorMessages([
+      {
+        id: 'user-1',
+        role: 'user',
+        content: 'Viết tiếp chương này.',
+        timestamp: '2026-04-20T10:00:00.000Z',
+      },
+      {
+        id: 'assistant-empty-stream',
+        role: 'assistant',
+        content: '',
+        timestamp: '2026-04-20T10:01:00.000Z',
+        isStreaming: true,
+      },
+      {
+        id: 'assistant-partial-stream',
+        role: 'assistant',
+        content: 'Nội dung đã nhận một phần.',
+        timestamp: '2026-04-20T10:02:00.000Z',
+        isStreaming: true,
+        isPartialStop: true,
+      },
+    ]);
+
+    expect(normalized).toEqual([
+      {
+        id: 'user-1',
+        role: 'user',
+        content: 'Viết tiếp chương này.',
+        timestamp: '2026-04-20T10:00:00.000Z',
+      },
+      {
+        id: 'assistant-partial-stream',
+        role: 'assistant',
+        content: 'Nội dung đã nhận một phần.',
+        timestamp: '2026-04-20T10:02:00.000Z',
+      },
+    ]);
   });
 });

@@ -8,7 +8,17 @@
  * All 4 phases render in 1 scrollable message list.
  */
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { Sparkles, Send, BookOpen, FileClock, MessageSquareQuote } from 'lucide-react';
+import {
+  Sparkles,
+  Send,
+  BookOpen,
+  FileClock,
+  MessageSquareQuote,
+  PlayCircle,
+  CheckCheck,
+  RotateCcw,
+} from 'lucide-react';
+import VoiceMicButton from '../shared/VoiceMicButton';
 import { getProjectSnapshot, useProjectStore } from '../../store/use_project_store';
 import { createId } from '../../core/id';
 import { useAiStore } from '../../store/use_ai_store';
@@ -20,12 +30,19 @@ import FrameworkPreview from '../creation/FrameworkPreview';
 import ChapterDraftCard from '../creation/ChapterDraftCard';
 import ChapterSidebarPanel from '../creation/ChapterSidebarPanel';
 import CreationCostPanel from '../creation/CreationCostPanel';
+import CreationActivityBar from '../creation/CreationActivityBar';
 import { AiThinkingIndicator } from '../shared/AiThinkingIndicator';
 import { AiConnectionDebugPanel } from '../shared/AiConnectionDebugPanel';
 import ModelSelectorDropdown from '../shared/ModelSelectorDropdown';
 import { STARTER_IDEAS } from '../../lib/ai/creation_discuss_config';
 import { estimateCreationCost } from '../../lib/ai/creation_cost_estimator';
 import { getModelForTask } from '../../lib/ai/model_router';
+import {
+  buildPlotPreviewRepairFeedback,
+  isWeakPlotPreview,
+  normalizeCreationPlotPreview,
+} from '../../lib/creation/plot_preview_normalizer';
+import { normalizeCreationFramework } from '../../lib/creation/framework_normalizer';
 import { buildCreationProjectSeed } from '../../lib/creation/project_seed';
 import {
   handleDescribeSubmit,
@@ -43,6 +60,10 @@ import {
 import type { ProjectTabId } from '../../types/navigation';
 import type { CreationMessageTokenUsage } from '../../types/creation_chat';
 import { describeCreationProgress } from '../../lib/creation/creation_progress';
+import {
+  selectLatestChapterDrafts,
+  selectUnacceptedChapterDrafts,
+} from '../../lib/creation/chapter_draft_selection';
 
 // ─── Styles ─────────────────────────────────────────────────
 
@@ -346,12 +367,16 @@ export default function CreationChatPage({
     models,
     activeModelId,
     taskModelOverrides,
+    modelHealth,
+    preferredProvider,
     subscription,
     fetchSubscription,
   } = useAiStore((state) => ({
     models: state.models,
     activeModelId: state.activeModelId,
     taskModelOverrides: state.taskModelOverrides,
+    modelHealth: state.modelHealth,
+    preferredProvider: state.preferredProvider,
     subscription: state.subscription,
     fetchSubscription: state.fetchSubscription,
   }));
@@ -365,23 +390,44 @@ export default function CreationChatPage({
     progress.batchCompose.total > 0 &&
     progress.batchCompose.successCount < progress.batchCompose.total,
   );
-  const canOpenLinkedDraft = Boolean(linkedProjectId) && !isBatchComposing && !hasIncompleteBatchCompose;
+  const latestAiChapterDrafts = useMemo(
+    () => selectLatestChapterDrafts(messages),
+    [messages],
+  );
+  const pendingAiChapterDrafts = useMemo(
+    () => selectUnacceptedChapterDrafts(messages, acceptedChapters),
+    [acceptedChapters, messages],
+  );
+  const hasGeneratedChapter = acceptedChapters.some((chapter) => chapter.content.trim()) ||
+    latestAiChapterDrafts.some((draft) => draft.content.trim());
+  const canResumeInChat = !isAiWorking && !isBatchComposing && (
+    progress.status === 'interrupted' ||
+    progress.status === 'error' ||
+    Boolean(error)
+  );
+  const canTransitionToEditor = Boolean(
+    linkedProjectId &&
+      frameworkConfirmed &&
+      hasGeneratedChapter &&
+      !isAiWorking &&
+      !isBatchComposing,
+  );
   const brainstormModel = useMemo(
-    () => getModelForTask('brainstorm', models, undefined, activeModelId, taskModelOverrides),
-    [activeModelId, models, taskModelOverrides],
+    () => getModelForTask('brainstorm', models, undefined, activeModelId, taskModelOverrides, modelHealth, [], preferredProvider),
+    [activeModelId, modelHealth, models, preferredProvider, taskModelOverrides],
   );
   const planModel = useMemo(
-    () => getModelForTask('plan_chapter', models, undefined, activeModelId, taskModelOverrides),
-    [activeModelId, models, taskModelOverrides],
+    () => getModelForTask('plan_chapter', models, undefined, activeModelId, taskModelOverrides, modelHealth, [], preferredProvider),
+    [activeModelId, modelHealth, models, preferredProvider, taskModelOverrides],
   );
   const writeModel = useMemo(
-    () => getModelForTask('write_chapter', models, undefined, activeModelId, taskModelOverrides),
-    [activeModelId, models, taskModelOverrides],
+    () => getModelForTask('write_chapter', models, undefined, activeModelId, taskModelOverrides, modelHealth, [], preferredProvider),
+    [activeModelId, modelHealth, models, preferredProvider, taskModelOverrides],
   );
   const summarizeModel = useMemo(
-    () => getModelForTask('summarize', models, undefined, activeModelId, taskModelOverrides)
-      || getModelForTask('extract_metadata', models, undefined, activeModelId, taskModelOverrides),
-    [activeModelId, models, taskModelOverrides],
+    () => getModelForTask('summarize', models, undefined, activeModelId, taskModelOverrides, modelHealth, [], preferredProvider)
+      || getModelForTask('extract_metadata', models, undefined, activeModelId, taskModelOverrides, modelHealth, [], preferredProvider),
+    [activeModelId, modelHealth, models, preferredProvider, taskModelOverrides],
   );
   const originalIdeaForEstimate = useMemo(() => {
     const firstIdea = messages.find((message) => message.role === 'user' && message.type === 'text')?.content || '';
@@ -457,6 +503,8 @@ export default function CreationChatPage({
 
   // ── Transition handler: migrate creation data → Project → Editor ──
   const handleTransitionToEditor = useCallback(async () => {
+    if (!canTransitionToEditor) return;
+
     const seed = buildCreationProjectSeed({
       framework,
       acceptedChapters,
@@ -509,6 +557,7 @@ export default function CreationChatPage({
     onComplete?.(projectId, 'writer');
   }, [
     acceptedChapters,
+    canTransitionToEditor,
     finishWorkflowStep,
     framework,
     linkProject,
@@ -565,13 +614,57 @@ export default function CreationChatPage({
       void handleWriteChapter(latestComposeNote?.content);
     }
   }, [hasIncompleteBatchCompose, linkedProjectId, messages, phase, plotPreview, progress.step]);
+  const handleOpenLinkedDraft = useCallback(() => {
+    if (!linkedProjectId || !onOpenProjectDraft || !canTransitionToEditor) return;
+    onOpenProjectDraft(linkedProjectId, 'writer');
+  }, [canTransitionToEditor, linkedProjectId, onOpenProjectDraft]);
+  const handleGoToEditorFromDraft = useCallback(async (
+    chapterIndex: number,
+    chapterTitle: string,
+    chapterContent: string,
+  ) => {
+    // [Domain:CreationChat] STEP 1 — Accept the chapter first
+    await handleAcceptChapter(chapterIndex, chapterTitle, chapterContent);
+    // [Domain:CreationChat] STEP 2 — Transition to editor
+    if (canTransitionToEditor) {
+      await handleTransitionToEditor();
+    } else if (linkedProjectId && onComplete) {
+      onComplete(linkedProjectId, 'writer');
+    }
+  }, [canTransitionToEditor, handleTransitionToEditor, linkedProjectId, onComplete]);
+  const handleAcceptAllAiChapters = useCallback(async () => {
+    if (pendingAiChapterDrafts.length === 0 || isAiWorking || isBatchComposing) return;
+
+    for (const draft of pendingAiChapterDrafts) {
+      await handleAcceptChapter(draft.chapterIndex, draft.title, draft.content, { silent: true });
+    }
+
+    useCreationChatStore
+      .getState()
+      .addSystemMessage(`✅ Đã lưu tất cả ${pendingAiChapterDrafts.length} chương AI mới nhất.`);
+  }, [isAiWorking, isBatchComposing, pendingAiChapterDrafts]);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const autoRepairPreviewRef = useRef(false);
 
   // Auto-scroll
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  useEffect(() => {
+    if (phase !== 'review_plot' || !plotPreview) {
+      autoRepairPreviewRef.current = false;
+      return;
+    }
+
+    if (isAiWorking || autoRepairPreviewRef.current || !isWeakPlotPreview(plotPreview)) {
+      return;
+    }
+
+    autoRepairPreviewRef.current = true;
+    void handlePlotPreviewFeedback(buildPlotPreviewRepairFeedback(plotPreview));
+  }, [isAiWorking, phase, plotPreview]);
 
   // ── Send handler ────────────────────────────────────────
 
@@ -632,10 +725,10 @@ export default function CreationChatPage({
             {phaseInfo.label}
           </span>
           <ModelSelectorDropdown />
-          {canOpenLinkedDraft && onOpenProjectDraft && (
+          {canTransitionToEditor && onOpenProjectDraft && (
             <button
               style={S.headerBtn(true)}
-              onClick={() => onOpenProjectDraft(linkedProjectId!, 'writer')}
+              onClick={handleOpenLinkedDraft}
               title="Mở lại bản thảo hiện tại"
             >
               <FileClock size={14} />
@@ -719,10 +812,49 @@ export default function CreationChatPage({
           )}
         </div>
         <div style={{ display: 'flex', gap: 10, flexShrink: 0 }}>
-          {canOpenLinkedDraft && onOpenProjectDraft && (
+          {latestAiChapterDrafts.length > 0 && (
+            <button
+              style={{
+                ...S.headerBtn(pendingAiChapterDrafts.length > 0),
+                opacity: pendingAiChapterDrafts.length > 0 && !isAiWorking && !isBatchComposing ? 1 : 0.55,
+                cursor: pendingAiChapterDrafts.length > 0 && !isAiWorking && !isBatchComposing ? 'pointer' : 'not-allowed',
+              }}
+              onClick={handleAcceptAllAiChapters}
+              disabled={pendingAiChapterDrafts.length === 0 || isAiWorking || isBatchComposing}
+              title={
+                pendingAiChapterDrafts.length > 0
+                  ? `Lưu ${pendingAiChapterDrafts.length} chương AI mới nhất vào dự án`
+                  : 'Tất cả chương AI đã được lưu'
+              }
+            >
+              <CheckCheck size={14} />
+              Chấp nhận tất cả
+            </button>
+          )}
+          {canResumeInChat && (
             <button
               style={S.headerBtn(true)}
-              onClick={() => onOpenProjectDraft(linkedProjectId!, 'writer')}
+              onClick={handleRetryCurrentStep}
+              title="Tiếp tục viết ngay trong khung chat này"
+            >
+              <PlayCircle size={14} />
+              Viết tiếp tại đây
+            </button>
+          )}
+          {linkedProjectId && onOpenProjectDraft && (
+            <button
+              style={{
+                ...S.headerBtn(canTransitionToEditor),
+                opacity: canTransitionToEditor ? 1 : 0.55,
+                cursor: canTransitionToEditor ? 'pointer' : 'not-allowed',
+              }}
+              onClick={handleOpenLinkedDraft}
+              disabled={!canTransitionToEditor}
+              title={
+                canTransitionToEditor
+                  ? 'Mở bản thảo trong editor'
+                  : 'Chỉ mở editor sau khi đã chốt khung truyện và có ít nhất một chương'
+              }
             >
               <FileClock size={14} />
               Về editor
@@ -795,12 +927,14 @@ export default function CreationChatPage({
 
             // ── Plot review preview ──
             if (msg.type === 'plot_preview' && msg.plotPreviewData) {
+              const previewData = normalizeCreationPlotPreview(plotPreview || msg.plotPreviewData);
+
               return (
                 <div key={msg.id} style={S.msgRow('ai')}>
                   <div style={S.msgLabel}>🤖 AI</div>
                   <div style={{ fontSize: 14, color: '#d4c4b7', marginBottom: 8 }}>{msg.content}</div>
                   <PlotPreviewCard
-                    data={plotPreview || msg.plotPreviewData}
+                    data={previewData}
                     confirmed={plotPreviewConfirmed}
                     disabled={isAiWorking}
                     onChange={(next) => setPlotPreview(next)}
@@ -813,12 +947,13 @@ export default function CreationChatPage({
 
             // ── Framework preview ──
             if (msg.type === 'framework_preview' && msg.frameworkData) {
+              const frameworkData = normalizeCreationFramework(framework || msg.frameworkData);
               return (
                 <div key={msg.id} style={S.msgRow('ai')}>
                   <div style={S.msgLabel}>🤖 AI</div>
                   <div style={{ fontSize: 14, color: '#d4c4b7', marginBottom: 8 }}>{msg.content}</div>
                   <FrameworkPreview
-                    data={framework || msg.frameworkData}
+                    data={frameworkData}
                     confirmed={frameworkConfirmed}
                     onConfirm={handleConfirmAndOpenWriter}
                     onChange={setFramework}
@@ -843,6 +978,11 @@ export default function CreationChatPage({
                     onAccept={() => handleAcceptChapter(draft.chapterIndex, draft.title, draft.content)}
                     onRewrite={() => handleWriteChapter('Viết lại chương này với hướng khác')}
                     onEdit={(newContent) => handleAcceptChapter(draft.chapterIndex, draft.title, newContent)}
+                    onGoToEditor={
+                      (linkedProjectId && onComplete)
+                        ? () => handleGoToEditorFromDraft(draft.chapterIndex, draft.title, draft.content)
+                        : undefined
+                    }
                   />
                   <TokenUsageBadge usage={msg.tokenUsage} />
                 </div>
@@ -861,7 +1001,7 @@ export default function CreationChatPage({
                       groups={msg.suggestions}
                       aiDecideLabel={msg.aiDecideLabel}
                       disabled={!isLatest || isAiWorking}
-                      onChipSelect={(val) => {
+                      onConfirmSelect={(val: string) => {
                         if (phase === 'discuss') handleDiscussAnswer(val);
                         else if (phase === 'compose') handleWriteChapter(val);
                       }}
@@ -885,12 +1025,24 @@ export default function CreationChatPage({
 
             // ── Normal text (user or ai) ──
             return (
-              <div key={msg.id} style={S.msgRow(msg.role)}>
+              <div key={msg.id} style={S.msgRow(msg.role)} className="group">
                 <div style={S.msgLabel}>
                   {msg.role === 'user' ? '✍️ BẠN' : '🤖 AI'}
                 </div>
                 <div style={S.msgBubble(msg.role)}>{msg.content}</div>
                 {msg.role === 'ai' && <TokenUsageBadge usage={msg.tokenUsage} />}
+                {msg.role === 'user' && (
+                  <button 
+                    onClick={() => {
+                      setDraftInput(msg.content);
+                      setTimeout(() => inputRef.current?.focus(), 50);
+                    }}
+                    className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1.5 text-[11px] text-[#8f7f73] hover:text-[#dcd1c6] mt-1 pr-1"
+                    title="Điền lại yêu cầu này vào khung chat"
+                  >
+                    <RotateCcw size={12} /> Thử lại
+                  </button>
+                )}
               </div>
             );
           })
@@ -909,6 +1061,15 @@ export default function CreationChatPage({
       </div>
 
       {/* Input Bar */}
+      <CreationActivityBar
+        progress={progress}
+        isAiWorking={isAiWorking}
+        isBatchComposing={isBatchComposing}
+        canOpenLinkedDraft={canTransitionToEditor}
+        onOpenLinkedDraft={canTransitionToEditor ? handleOpenLinkedDraft : undefined}
+        canResumeInChat={canResumeInChat}
+        onResumeInChat={handleRetryCurrentStep}
+      />
       <div style={S.inputBar}>
         <textarea
           ref={inputRef}
@@ -932,6 +1093,12 @@ export default function CreationChatPage({
           rows={1}
           disabled={isAiWorking}
         />
+        <VoiceMicButton
+          onText={(text) => setDraftInput(text)}
+          disabled={isAiWorking}
+          variant="dark"
+          size={18}
+        />
         <button
           style={S.sendBtn(draftInput.trim().length > 0 && !isAiWorking)}
           onClick={handleSend}
@@ -948,7 +1115,7 @@ export default function CreationChatPage({
         isOpen={showChapterPanel}
         onClose={() => setShowChapterPanel(false)}
         onTransitionToEditor={handleTransitionToEditor}
-        canTransitionToEditor={canOpenLinkedDraft}
+        canTransitionToEditor={canTransitionToEditor}
       />
     </div>
   );

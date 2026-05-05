@@ -31,7 +31,7 @@ export function ensureChapterSequenceNumbers(chapters: Chapter[]): Chapter[] {
         ? chapter.sequenceNumber
         : canUseParsed
         ? (parsed[index] as number)
-        : chapters.length - index,
+        : index + 1,
   }));
 }
 

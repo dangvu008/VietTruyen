@@ -238,3 +238,59 @@
 
 **Next Session Should:**
 - Consider whether plot Q&A needs a richer deterministic formatter for specific question types like timeline order or payoff tracking.
+
+## [2026-05-02 08:46] Session Summary
+
+**Completed:**
+- [x] Added a new hybrid `viettruyen-canon-v1` export bundle for long-story storage.
+- [x] The bundle now emits `Markdown` canon docs, raw `JSON` snapshots, `context-map` indexes, and a lightweight structural graph in one zip.
+- [x] Wired the new export path into `ExportPage` as `CANON ZIP`.
+- [x] Added focused regression coverage for bundle structure, chapter frontmatter, graph edges, and zip packaging.
+- [x] Verified with `npm run test:run -- src/lib/canon/canon_bundle.test.ts`.
+- [x] Verified with `npm run build`.
+
+**In Progress:**
+- [ ] No active implementation items from this change set.
+
+**Blocked:**
+- [ ] None.
+
+**Next Session Should:**
+- Add import/rehydration support for `viettruyen-canon-v1` so exported bundles can round-trip back into the app or a backend worker.
+- Consider feeding `indexes/context-map.json` directly into the existing memory/RAG bootstrap path.
+
+## [2026-05-04 05:26] Session Summary
+
+**Completed:**
+- [x] Added persistent `story_debug_trace` infrastructure with console output and localStorage retention.
+- [x] Instrumented AI tracked calls, AI streaming chunks, workflow sessions, Creation Chat batch compose, project chapter persist/hydrate, storage provider init, auth login/logout, and app close/reload lifecycle.
+- [x] Added regression coverage for debug trace persistence/truncation.
+- [x] Verified with focused Vitest for debug, project, generation, auth, and app-session stores.
+- [x] Verified with `npm run build`.
+
+**In Progress:**
+- [ ] No active implementation items from this change set.
+
+**Blocked:**
+- [ ] No blocker. Build still emits pre-existing Vite warnings about externalized Node modules and large chunks.
+
+**Next Session Should:**
+- Use browser DevTools console filter `[StoryDebug]` while reproducing a real failed chapter generation, then inspect `localStorage["viettruyen-debug-trace"]` after reload/logout/login.
+
+## [2026-05-05 21:23] Session Summary
+
+**Completed:**
+- [x] Added AI plot direction analysis that returns 2-3 story-route options before plot surgery rewrite.
+- [x] Added `PlotDirectionPreview` to the Chữa Canon impact scan tab.
+- [x] Persisted the selected route in `SurgerySpec.selectedPlotDirection`.
+- [x] Injected the selected route into arc, chapter, and QA rewrite instructions.
+- [x] Added focused regression tests for prompt/JSON parsing and selected-direction instruction formatting.
+
+**In Progress:**
+- [ ] No active implementation items from this change set.
+
+**Blocked:**
+- [ ] No blocker. Build still emits pre-existing Vite warnings about externalized Node modules and large chunks.
+
+**Next Session Should:**
+- Smoke-test the Chữa Canon flow with a real AI provider and a blocked scan to verify option quality in a real story project.

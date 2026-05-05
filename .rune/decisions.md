@@ -76,3 +76,24 @@
 **Decision:** Route plot questions through local memory retrieval first, then fall back to the older deterministic heuristics, and only then use AI fallback if local evidence is insufficient.
 **Rationale:** `P1-2 Local-first plot query` is about cost reduction and better factual grounding. Local memory is both cheaper and often more up-to-date than raw project fields for continuity-sensitive questions.
 **Impact:** `plot_qa`, shared assistant surfaces, Story Editor Muse plot Q&A, and future local-memory-first query work.
+
+## [2026-05-02 08:46] Decision: Canon export uses hybrid MD + JSON + graph bundle
+
+**Context:** The product needs a storage/export shape for long-form story projects that stays editable for writers, precise for machines, and ready for future backend/RAG ingestion.
+**Decision:** Add a `viettruyen-canon-v1` export bundle that always includes raw JSON snapshots, Markdown canon documents with frontmatter, and lightweight graph/context indexes inside a zip archive.
+**Rationale:** Markdown alone is pleasant for writers but lossy for automation; JSON alone is precise but poor for direct editing. The hybrid bundle preserves one export that both humans and AI pipelines can trust.
+**Impact:** `core/exporter`, `ExportPage`, new `lib/canon/canon_bundle`, future import/RAG/server sync work.
+
+## [2026-05-04 05:26] Decision: Story debug trace persists outside auth session
+
+**Context:** The user needed to see where AI story generation, storage, retrieval, close/reopen, logout, and login flows fail.
+**Decision:** Add a shared `story_debug_trace` module that prints `[StoryDebug]` console events and persists the latest 300 sanitized events in `localStorage` under `viettruyen-debug-trace`; auth logout/login and app close do not clear this trace.
+**Rationale:** The failure may occur across transient UI state, storage provider swaps, or auth session changes. A local persistent timeline gives evidence after reload without changing production data flow.
+**Impact:** `tracked_ai_client`, `streaming_ai_client`, `creation_orchestrator`, workflow/generation/auth/storage/project stores, app bootstrap lifecycle hooks, and focused debug trace tests.
+
+## [2026-05-05 21:23] Decision: Plot Surgery requires direction preview before blocked rewrite queue
+
+**Context:** Impact scan only showed what would break when editing plot/canon, but did not show the alternate story directions available to the writer.
+**Decision:** Add an AI-assisted plot direction preview in `ChuaCanonPage` after impact scan. For blocked scans, creating the rewrite queue now requires selecting a direction unless the scan is already ready.
+**Rationale:** The writer should choose whether to preserve canon, pivot the arc, or use a twist before rewrite instructions are generated. The selected direction becomes part of `SurgerySpec` and is injected into arc/chapter/QA rewrite tasks.
+**Impact:** `plot_direction_ai`, `PlotDirectionPreview`, `use_plot_direction`, `SurgerySpec.selectedPlotDirection`, and Surgery rewrite queue instructions.
