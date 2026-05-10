@@ -220,6 +220,8 @@ async function persistDraftChapter(params: {
       content: writeResult.content,
       summary: writeResult.ledger.summary || existingChapter.summary,
       status: 'draft',
+      generationStatus: 'done',
+      generationStartedAt: undefined,
       updatedAt: now,
     };
     const nextProject = mergePersistedChapter(project, nextChapter);

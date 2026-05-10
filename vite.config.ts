@@ -10,7 +10,27 @@ export default defineConfig(async () => ({
   worker: {
     format: 'es',
   },
+
+  // [Perf] Pre-bundle heavy deps to eliminate waterfall discovery in dev
+  optimizeDeps: {
+    include: [
+      'react',
+      'react-dom',
+      'zustand',
+      'zustand/shallow',
+      'zustand/middleware',
+      '@supabase/supabase-js',
+      'lucide-react',
+      'clsx',
+      'dexie',
+    ],
+  },
+
   build: {
+    // [Perf] CSS code splitting — only load CSS for active route
+    cssCodeSplit: true,
+    // [Perf] Increase chunk size warning to suppress noise from vendor chunks
+    chunkSizeWarningLimit: 600,
     rollupOptions: {
       output: {
         manualChunks: {
@@ -18,6 +38,7 @@ export default defineConfig(async () => ({
           'vendor-supabase': ['@supabase/supabase-js'],
           'vendor-docs': ['mammoth', 'docx', '@llamaindex/liteparse', 'jszip'],
           'vendor-pdf': ['pdfjs-dist'],
+          'vendor-icons': ['lucide-react'],
         },
       },
     },
@@ -38,3 +59,4 @@ export default defineConfig(async () => ({
     },
   },
 }));
+

@@ -151,6 +151,7 @@ export default function StoryWorkspace({
   const startWorkflowIntent = useWorkflowSessionStore((state) => state.startIntent);
   // [Domain:StoryEditor] Scratch streaming state from generation store
   const isScratchStreaming = useGenerationStore((s) => s.isScratchStreaming);
+  const generatingChapterId = useGenerationStore((s) => s.generatingChapterId);
   const startScratchStream = useGenerationStore((s) => s.startScratchStream);
   const appendScratchChunk = useGenerationStore((s) => s.appendScratchChunk);
   const stopScratchStream = useGenerationStore((s) => s.stopScratchStream);
@@ -168,9 +169,9 @@ export default function StoryWorkspace({
     () =>
       creationSession.linkedProjectId === project.id && activeChapterId
         ? buildStoryEditorSeedMessages(creationSession.messages, {
-            projectId: project.id,
-            chapterId: activeChapterId,
-          })
+          projectId: project.id,
+          chapterId: activeChapterId,
+        })
         : [],
     [activeChapterId, creationSession.linkedProjectId, creationSession.messages, project.id],
   );
@@ -730,11 +731,11 @@ export default function StoryWorkspace({
       const resolvedSelection =
         scope === 'fragment'
           ? selection
-            ?? resolveFocusedFragmentSelection(
-                localContents[targetId!] ?? activeChapter?.content ?? '',
-                activeSelection,
-              )
-            ?? undefined
+          ?? resolveFocusedFragmentSelection(
+            localContents[targetId!] ?? activeChapter?.content ?? '',
+            activeSelection,
+          )
+          ?? undefined
           : undefined;
 
       setProposalMap((prev) => ({
@@ -836,11 +837,11 @@ export default function StoryWorkspace({
       const resolvedSelection =
         scope === 'fragment'
           ? selection
-            ?? resolveFocusedFragmentSelection(
-                localContents[targetId] ?? targetChapter?.content ?? '',
-                activeSelection,
-              )
-            ?? undefined
+          ?? resolveFocusedFragmentSelection(
+            localContents[targetId] ?? targetChapter?.content ?? '',
+            activeSelection,
+          )
+          ?? undefined
           : undefined;
 
       applyProposalToDraft({
@@ -1026,15 +1027,15 @@ export default function StoryWorkspace({
       const nextChapters = chapters.map((chapter) =>
         chapter.id === capturedChapterId
           ? {
-              ...chapter,
-              title: writeResult?.title || targetChapter.title,
-              content: finalContent,
-              summary: writeResult?.ledger?.summary || targetChapter.summary,
-              status: 'draft' as const,
-              generationStatus: controller.signal.aborted ? 'partial' as const : 'done' as const,
-              generationStartedAt: undefined,
-              updatedAt: nextUpdatedAt,
-            }
+            ...chapter,
+            title: writeResult?.title || targetChapter.title,
+            content: finalContent,
+            summary: writeResult?.ledger?.summary || targetChapter.summary,
+            status: 'draft' as const,
+            generationStatus: controller.signal.aborted ? 'partial' as const : 'done' as const,
+            generationStartedAt: undefined,
+            updatedAt: nextUpdatedAt,
+          }
           : chapter,
       );
       await replaceProjectChapters(project.id, nextChapters, { storageMode: 'indexeddb' });
@@ -1190,11 +1191,11 @@ export default function StoryWorkspace({
       workingChapters = workingChapters.map((chapter) =>
         chapter.id === ch.id
           ? {
-              ...chapter,
-              generationStatus: 'generating' as const,
-              generationStartedAt,
-              updatedAt: generationStartedAt,
-            }
+            ...chapter,
+            generationStatus: 'generating' as const,
+            generationStartedAt,
+            updatedAt: generationStartedAt,
+          }
           : chapter,
       );
       await replaceProjectChapters(project.id, workingChapters, { storageMode: 'indexeddb' });
@@ -1235,11 +1236,11 @@ export default function StoryWorkspace({
           workingChapters = workingChapters.map((chapter) =>
             chapter.id === ch.id
               ? {
-                  ...chapter,
-                  generationStatus: 'failed' as const,
-                  generationStartedAt: undefined,
-                  updatedAt: failedAt,
-                }
+                ...chapter,
+                generationStatus: 'failed' as const,
+                generationStartedAt: undefined,
+                updatedAt: failedAt,
+              }
               : chapter,
           );
           await replaceProjectChapters(project.id, workingChapters, { storageMode: 'indexeddb' });
@@ -1251,15 +1252,15 @@ export default function StoryWorkspace({
         workingChapters = workingChapters.map((chapter) =>
           chapter.id === ch.id
             ? {
-                ...chapter,
-                title: writeResult.title || ch.title,
-                content: writeResult.content,
-                summary: writeResult.ledger.summary || ch.summary,
-                status: 'draft' as const,
-                generationStatus: 'done' as const,
-                generationStartedAt: undefined,
-                updatedAt: nextUpdatedAt,
-              }
+              ...chapter,
+              title: writeResult.title || ch.title,
+              content: writeResult.content,
+              summary: writeResult.ledger.summary || ch.summary,
+              status: 'draft' as const,
+              generationStatus: 'done' as const,
+              generationStartedAt: undefined,
+              updatedAt: nextUpdatedAt,
+            }
             : chapter,
         );
         await replaceProjectChapters(project.id, workingChapters, { storageMode: 'indexeddb' });
@@ -1283,11 +1284,11 @@ export default function StoryWorkspace({
         workingChapters = workingChapters.map((chapter) =>
           chapter.id === ch.id
             ? {
-                ...chapter,
-                generationStatus: 'failed' as const,
-                generationStartedAt: undefined,
-                updatedAt: failedAt,
-              }
+              ...chapter,
+              generationStatus: 'failed' as const,
+              generationStartedAt: undefined,
+              updatedAt: failedAt,
+            }
             : chapter,
         );
         await replaceProjectChapters(project.id, workingChapters, { storageMode: 'indexeddb' });
@@ -1828,7 +1829,8 @@ export default function StoryWorkspace({
             lastSavedAt={lastSavedAt}
             isDirty={isDirty}
             emptyStateVariant={emptyStateVariant}
-            isGeneratingFromScratch={isScratchStreaming}
+            isGeneratingFromScratch={isScratchStreaming && generatingChapterId === activeChapter?.id}
+            isScratchGenerationRunning={isScratchStreaming}
             isReloadingChapterContent={isReloadingChapterContent}
             isRestoringImportedSource={isRestoringImportedSource}
             batchProgress={batchProgress}

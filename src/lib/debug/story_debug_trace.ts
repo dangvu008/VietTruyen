@@ -36,16 +36,21 @@ export function traceStoryDebugEvent(
   event: Omit<StoryDebugEvent, 'id' | 'timestamp'>,
   options: TraceOptions = {},
 ): StoryDebugEvent {
+  // [Perf] Early exit before any allocation when debug is off
+  if (!isStoryDebugEnabled()) {
+    return {
+      ...event,
+      id: '',
+      timestamp: '',
+    } as StoryDebugEvent;
+  }
+
   const entry: StoryDebugEvent = {
     ...event,
     id: createTraceId(),
     timestamp: new Date().toISOString(),
     details: sanitizeDebugValue(event.details) as Record<string, unknown> | undefined,
   };
-
-  if (!isStoryDebugEnabled()) {
-    return entry;
-  }
 
   if (options.console !== false) {
     printDebugEvent(entry);
@@ -70,6 +75,7 @@ export function clearStoryDebugTrace(): void {
 export function setStoryDebugEnabled(enabled: boolean): void {
   if (!hasLocalStorage()) return;
   localStorage.setItem(TRACE_ENABLED_KEY, enabled ? 'true' : 'false');
+  cachedDebugEnabled = enabled;
 }
 
 export function previewDebugText(value: string | null | undefined, maxLength = MAX_STRING_LENGTH): string {
@@ -153,22 +159,47 @@ export function installStoryDebugLifecycleTrace(): void {
   });
 }
 
+// [Perf] Cache debug-enabled flag to avoid localStorage read on every trace call
+let cachedDebugEnabled: boolean | null = null;
+
 function isStoryDebugEnabled(): boolean {
-  if (!hasLocalStorage()) return true;
-  return localStorage.getItem(TRACE_ENABLED_KEY) !== 'false';
+  if (cachedDebugEnabled !== null) return cachedDebugEnabled;
+  if (!hasLocalStorage()) {
+    cachedDebugEnabled = true;
+    return true;
+  }
+  cachedDebugEnabled = localStorage.getItem(TRACE_ENABLED_KEY) !== 'false';
+  return cachedDebugEnabled;
+}
+
+// [Perf] Batch localStorage writes to avoid N serial JSON.parse + JSON.stringify per startup
+let pendingEntries: StoryDebugEvent[] = [];
+let flushTimerId: ReturnType<typeof setTimeout> | null = null;
+const FLUSH_DELAY_MS = 500;
+
+function flushPendingEntries(): void {
+  if (!hasLocalStorage() || pendingEntries.length === 0) return;
+
+  try {
+    const entries = readTraceEntries();
+    entries.push(...pendingEntries);
+    pendingEntries = [];
+    const trimmed = entries.slice(-MAX_TRACE_EVENTS);
+    localStorage.setItem(TRACE_STORAGE_KEY, JSON.stringify(trimmed));
+  } catch (error) {
+    console.warn('[StoryDebug][storage/batch_write_failed]', error);
+    pendingEntries = [];
+  }
 }
 
 function persistDebugEvent(entry: StoryDebugEvent): void {
   if (!hasLocalStorage()) return;
 
-  try {
-    const entries = readTraceEntries();
-    entries.push(entry);
-    const trimmed = entries.slice(-MAX_TRACE_EVENTS);
-    localStorage.setItem(TRACE_STORAGE_KEY, JSON.stringify(trimmed));
-  } catch (error) {
-    console.warn('[StoryDebug][storage/write_failed]', error);
+  pendingEntries.push(entry);
+  if (flushTimerId !== null) {
+    clearTimeout(flushTimerId);
   }
+  flushTimerId = setTimeout(flushPendingEntries, FLUSH_DELAY_MS);
 }
 
 function readTraceEntries(): StoryDebugEvent[] {

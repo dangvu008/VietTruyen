@@ -1,5 +1,6 @@
 import { create } from 'zustand';
-import { persist, createJSONStorage } from 'zustand/middleware';
+import { persist } from 'zustand/middleware';
+import { createDebouncedPersistStorage } from '../lib/storage/debounced_local_storage';
 import { createId } from '../core/id';
 import {
   deleteChapter as deleteStoredChapter,
@@ -89,9 +90,20 @@ function sanitizePersistedChapter(chapter: Chapter): Chapter {
 }
 
 function normalizeChapterCollection(chapters: Chapter[]): Chapter[] {
-  return ensureChapterSequenceNumbers(
-    chapters.map((chapter) => sanitizePersistedChapter({ ...chapter })),
-  );
+  // [Perf] Only create new objects when sanitization actually modifies content.
+  // Previously: chapters.map(ch => sanitize({...ch})) — always created new objects.
+  const sanitized = chapters.map((chapter) => {
+    const guarded = guardChapterContent(chapter.content);
+    if (!guarded.sanitized && !guarded.rejected) {
+      return chapter; // No change needed — preserve object identity
+    }
+    return {
+      ...chapter,
+      content: guarded.content,
+      generationStatus: guarded.rejected ? 'failed' : chapter.generationStatus,
+    } as Chapter;
+  });
+  return ensureChapterSequenceNumbers(sanitized);
 }
 
 const createUniqueProjectTitle = (projects: Project[], requestedTitle?: string): string => {
@@ -204,11 +216,15 @@ const stripPersistedChapter = (chapter: Chapter): Chapter => ({
   summary: undefined,
 });
 
-const stripPersistedProject = (project: Project): Project =>
-  normalizeProject({
-    ...project,
-    chapters: (project.chapters || []).map((chapter) => stripPersistedChapter(chapter)),
-  });
+// [Perf] Strip chapter content for localStorage persistence.
+// INTENTIONALLY skips normalizeProject — data is already normalized in memory.
+// Re-normalizing on every persist was the #1 performance killer (runs 
+// guardChapterContent + ensureChapterSequenceNumbers + normalizeCharacter 
+// for every chapter/character on every state change).
+const stripPersistedProject = (project: Project): Project => ({
+  ...project,
+  chapters: (project.chapters || []).map((chapter) => stripPersistedChapter(chapter)),
+});
 
 function hasChapterPayload(chapter: Chapter): boolean {
   return Boolean(chapter.content?.trim() || chapter.summary?.trim());
@@ -523,22 +539,22 @@ async function persistProjectChapters(projectId: string, chapters: Chapter[]): P
   const provider = useStorageStore.getState().provider;
   const providerPromise = provider
     ? provider.replaceProjectChapters(projectId, normalized).catch((providerError) => {
-        console.warn(
-          '[persistProjectChapters] Provider replaceProjectChapters failed; kept IndexedDB cache:',
-          providerError instanceof Error ? providerError.message : providerError,
-        );
-        traceStoryDebugEvent({
-          domain: 'storage',
-          action: 'chapters.persist.provider_failed',
-          level: 'error',
-          summary: 'Provider chapter persistence failed; IndexedDB remains the local cache.',
-          details: {
-            projectId,
-            providerMode: provider.mode,
-            error: providerError,
-          },
-        });
-      })
+      console.warn(
+        '[persistProjectChapters] Provider replaceProjectChapters failed; kept IndexedDB cache:',
+        providerError instanceof Error ? providerError.message : providerError,
+      );
+      traceStoryDebugEvent({
+        domain: 'storage',
+        action: 'chapters.persist.provider_failed',
+        level: 'error',
+        summary: 'Provider chapter persistence failed; IndexedDB remains the local cache.',
+        details: {
+          projectId,
+          providerMode: provider.mode,
+          error: providerError,
+        },
+      });
+    })
     : Promise.resolve();
 
   const results = await Promise.allSettled([indexedDbPromise, providerPromise]);
@@ -690,7 +706,7 @@ async function loadProjectWithFullChapters(project: Project): Promise<Project> {
     if (
       recoveredChapters.length > 0 &&
       recoveredChapters.filter((chapter) => chapter.content?.trim()).length >
-        fullChapters.filter((chapter) => chapter.content?.trim()).length
+      fullChapters.filter((chapter) => chapter.content?.trim()).length
     ) {
       fullChapters = recoveredChapters;
       chapterStorageMode = 'indexeddb';
@@ -1068,7 +1084,7 @@ export const useProjectStore = create<ProjectState>()(
             projects: updateProjectArray(state.projects, id, (project) => ({
               ...project,
               characters: project.characters.map((char) =>
-                char.id === charId ? normalizeCharacter({ ...char, ...patch }) : normalizeCharacter(char)
+                char.id === charId ? normalizeCharacter({ ...char, ...patch }) : char
               ),
               updatedAt: now(),
             })),
@@ -1338,11 +1354,11 @@ export const useProjectStore = create<ProjectState>()(
           // simultaneously via Promise.allSettled, ensuring provider gets data ASAP.
           const nextProject = project
             ? normalizeProject({
-                ...project,
-                chapters: normalizedChapters,
-                storageMode: nextStorageMode,
-                updatedAt: nextUpdatedAt,
-              })
+              ...project,
+              chapters: normalizedChapters,
+              storageMode: nextStorageMode,
+              updatedAt: nextUpdatedAt,
+            })
             : null;
 
           // Fire persistence and provider snapshot sync in parallel — don't await sequentially.
@@ -1425,7 +1441,7 @@ export const useProjectStore = create<ProjectState>()(
           const mergedChapters = loadedChapters.map((loaded) => {
             const existing = currentChapters.find(
               (c) => c.id === loaded.id ||
-              (c.sequenceNumber != null && c.sequenceNumber === loaded.sequenceNumber)
+                (c.sequenceNumber != null && c.sequenceNumber === loaded.sequenceNumber)
             );
             if (!existing) return loaded;
             // Nếu loaded có content → dùng loaded; nếu không → giữ existing
@@ -1435,6 +1451,35 @@ export const useProjectStore = create<ProjectState>()(
               summary: loaded.summary?.trim() ? loaded.summary : existing.summary,
             };
           });
+
+          // [Domain:Storage] FIX — Clear stale generationStatus: 'generating' after reload.
+          // When the app reloads mid-generation, the ephemeral generation store resets
+          // but chapter objects retain 'generating' in IndexedDB forever.
+          // Detect and recover: if no active generation process exists, transition
+          // stuck chapters to 'partial' (has content) or 'idle' (empty).
+          for (let i = 0; i < mergedChapters.length; i++) {
+            const ch = mergedChapters[i];
+            if (ch.generationStatus === 'generating') {
+              const hasContent = Boolean(ch.content?.trim());
+              mergedChapters[i] = {
+                ...ch,
+                generationStatus: hasContent ? 'partial' : 'idle',
+                generationStartedAt: undefined,
+              };
+              traceStoryDebugEvent({
+                domain: 'storage',
+                action: 'project.hydrate.stale_generation_recovered',
+                level: 'warn',
+                summary: `Recovered stale generating chapter "${ch.title}" → ${hasContent ? 'partial' : 'idle'}.`,
+                details: {
+                  projectId: id,
+                  chapterId: ch.id,
+                  chapterTitle: ch.title,
+                  hadContent: hasContent,
+                },
+              });
+            }
+          }
 
           set((state) => ({
             projects: updateProjectArray(state.projects, id, () => ({
@@ -1652,14 +1697,64 @@ export const useProjectStore = create<ProjectState>()(
     },
     {
       name: 'viettruyen-projects',
-      storage: createJSONStorage(() => localStorage),
-      partialize: (state) => ({
-        projects: state.projects.map((project) => stripPersistedProject(project)),
-        activeProjectId: state.activeProjectId,
-      }),
+      // [Perf] Debounced PersistStorage — defers BOTH JSON.stringify AND localStorage.setItem
+      // to requestIdleCallback. The default createJSONStorage does JSON.stringify synchronously
+      // on every state change, which blocks main thread during mouse interactions.
+      storage: createDebouncedPersistStorage(500),
+      // [Perf] Memoized partialize — stripPersistedProject creates O(N*M) objects
+      // (N projects × M chapters). Cache the result and only recompute when the
+      // projects array reference actually changes. This eliminates the #1 CPU cost
+      // during mouse interactions that don't modify project data.
+      partialize: (() => {
+        let cachedProjects: Project[] | null = null;
+        let cachedStripped: Project[] | null = null;
+        let cachedActiveId: string | null = null;
+        let cachedResult: { projects: Project[]; activeProjectId: string | null } | null = null;
+
+        return (state: ProjectState) => {
+          if (
+            cachedProjects === state.projects &&
+            cachedActiveId === state.activeProjectId &&
+            cachedResult
+          ) {
+            return cachedResult;
+          }
+
+          // Only recompute stripped projects if the array reference changed
+          if (cachedProjects !== state.projects) {
+            cachedStripped = state.projects.map((project) => stripPersistedProject(project));
+            cachedProjects = state.projects;
+          }
+
+          cachedActiveId = state.activeProjectId;
+          cachedResult = {
+            projects: cachedStripped!,
+            activeProjectId: state.activeProjectId,
+          };
+          return cachedResult;
+        };
+      })(),
       onRehydrateStorage: () => (state) => {
         if (!state) return;
         state.projects = state.projects.map((project) => normalizeProject(project));
+
+        // [Domain:Storage] FIX — Clear stale generationStatus: 'generating' on rehydrate.
+        // After page reload, no generation process is active, so any chapter still
+        // marked 'generating' is orphaned. Transition to 'partial' or 'idle'.
+        for (const project of state.projects) {
+          for (let i = 0; i < project.chapters.length; i++) {
+            const ch = project.chapters[i];
+            if (ch.generationStatus === 'generating') {
+              const hasContent = Boolean(ch.content?.trim());
+              project.chapters[i] = {
+                ...ch,
+                generationStatus: hasContent ? 'partial' : 'idle',
+                generationStartedAt: undefined,
+              };
+            }
+          }
+        }
+
         if (!state.activeProjectId && state.projects[0]) {
           state.activeProjectId = state.projects[0].id;
         }

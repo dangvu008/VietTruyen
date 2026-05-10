@@ -17,7 +17,9 @@ export function ensureChapterSequenceNumbers(chapters: Chapter[]): Chapter[] {
     .filter((value): value is number => Number.isFinite(value) && (value ?? 0) > 0);
 
   if (existing.length === chapters.length) {
-    return chapters.map((chapter) => ({ ...chapter }));
+    // [Perf] All chapters have valid sequence numbers — return original array
+    // to preserve object identity and prevent unnecessary re-renders.
+    return chapters;
   }
 
   const parsed = chapters.map((chapter) => extractSequenceNumberFromTitle(chapter.title));

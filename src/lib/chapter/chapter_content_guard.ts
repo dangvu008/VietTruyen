@@ -348,6 +348,13 @@ export function guardChapterContent(
 ): ChapterContentGuardResult {
   const allowEmptyAfterSanitize = options.allowEmptyAfterSanitize ?? false;
   let content = String(rawContent || '').trim();
+
+  // [Perf] Early exit for empty content — avoids running 70+ regex operations
+  // during partialize which strips all content to '' before calling this.
+  if (!content) {
+    return { content: '', sanitized: false, rejected: false, reasons: [] };
+  }
+
   let sanitized = false;
   const reasons: string[] = [];
 

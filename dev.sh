@@ -61,7 +61,11 @@ echo ""
 start_server "VietTruyen" "1420" "$ROOT_DIR" "npm run dev:ui" "$GREEN"
 
 # --- Server 2: 9router AI Gateway (Next.js) ---
-start_server "9router" "20128" "$ROOT_DIR/9router" "npm run dev" "$BLUE"
+if [ -f "$ROOT_DIR/9router/package.json" ]; then
+  start_server "9router" "20128" "$ROOT_DIR/9router" "npm run dev" "$BLUE"
+else
+  echo -e "${YELLOW}⚠ [9router] Bỏ qua vì không tìm thấy package.json${NC}"
+fi
 
 echo ""
 echo -e "${GREEN}✅ Tất cả servers đang chạy:${NC}"

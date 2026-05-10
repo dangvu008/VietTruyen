@@ -7,9 +7,14 @@
     <title>VietTruyen - Trợ lý sáng tác ảo</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Lora:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Manrope:wght@400;500;600;700;800&family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Newsreader:ital,wght@0,400;0,500;0,600;1,400;1,500;1,600&display=swap" rel="stylesheet">
-    <script type="module" crossorigin src="/assets/index-Bvm0sx52.js"></script>
-    <link rel="modulepreload" crossorigin href="/assets/vendor-react-G4AtvMTS.js">
+    <!-- Critical UI fonts: Inter + Manrope (render-blocking, small) -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Decorative/content fonts: Lora, Playfair Display, Newsreader (non-blocking, lazy) -->
+    <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Newsreader:ital,wght@0,400;0,500;0,600;1,400;1,500;1,600&display=swap">
+    <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Newsreader:ital,wght@0,400;0,500;0,600;1,400;1,500;1,600&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+    <script type="module" crossorigin src="/assets/index-UIkFEVK5.js"></script>
+    <link rel="modulepreload" crossorigin href="/assets/vendor-icons-CGw5KEnb.js">
+    <link rel="modulepreload" crossorigin href="/assets/vendor-react-Ccsj1QOb.js">
     <link rel="modulepreload" crossorigin href="/assets/vendor-supabase-DywSbxor.js">
     <link rel="stylesheet" crossorigin href="/assets/index-C0EaieLJ.css">
   </head>

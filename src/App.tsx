@@ -4,18 +4,21 @@
  * Layer: UI Root
  * Domain: App → [routing, layout, state orchestration]
  */
-import React, { Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import React, { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { Bell, Sparkles } from 'lucide-react';
 import { shallow } from 'zustand/shallow';
 
 import GlobalShell from './components/layout/GlobalShell';
 import ProjectWorkspace from './components/layout/ProjectWorkspace';
 import LoginPage from './components/pages/LoginPage';
-import AiAssistant, { type AssistantAction } from './components/shared/AiAssistant';
-import AiActivityOverlay from './components/shared/AiActivityOverlay';
-import RetconImpactModal from './components/shared/RetconImpactModal';
-import NotificationCenter from './components/shared/NotificationCenter';
+import type { AssistantAction } from './components/shared/AiAssistant';
 import NotificationToast from './components/shared/NotificationToast';
+
+// [Perf] Lazy-load overlay components — never shown on initial render
+const AiAssistant = lazy(() => import('./components/shared/AiAssistant'));
+const AiActivityOverlay = lazy(() => import('./components/shared/AiActivityOverlay'));
+const RetconImpactModal = lazy(() => import('./components/shared/RetconImpactModal'));
+const NotificationCenter = lazy(() => import('./components/shared/NotificationCenter'));
 import MemoryBootstrap from './components/system/MemoryBootstrap';
 import LanguageSwitcher from './components/shared/LanguageSwitcher';
 
@@ -29,7 +32,7 @@ import { applyAppearanceToDocument, useAppearanceStore } from './store/use_appea
 import { useAppSessionStore } from './store/use_app_session_store';
 import { useAuthStore } from './store/use_auth_store';
 import { useCreationChatStore } from './store/use_creation_chat_store';
-import { useGenerationStore } from './store/use_generation_store';
+
 import { useProjectStore } from './store/use_project_store';
 import { getUnreadCount, useNotificationStore } from './store/use_notification_store';
 import { useStorageStore } from './store/use_storage_store';
@@ -187,7 +190,7 @@ const App: React.FC = () => {
         activeProjectId: activeProject?.id ?? null,
       },
     });
-    useGenerationStore.getState().reset();
+    import('./store/use_generation_store').then(({ useGenerationStore }) => useGenerationStore.getState().reset());
     useAiActivityStore.getState().reset();
     setShowAi(false);
     previousAuthSessionKey.current = authSessionKey;
@@ -438,26 +441,36 @@ const App: React.FC = () => {
         </ProjectWorkspace>
       )}
 
-      {/* ── Global Overlays (shell-agnostic) ── */}
-      <AiAssistant
-        isOpen={showAi}
-        onClose={() => setShowAi(false)}
-        contextHint={resolvedShell === 'project' ? projectTab : globalTab}
-        project={activeProject}
-        onNavigate={handleAssistantNavigate}
-        onOpenSettings={() => {
-          setShowAi(false);
-          handleNavigateToSettings();
-        }}
-      />
+      {/* ── Global Overlays (shell-agnostic, lazy-loaded) ── */}
+      <Suspense fallback={null}>
+        {showAi && (
+          <AiAssistant
+            isOpen={showAi}
+            onClose={() => setShowAi(false)}
+            contextHint={resolvedShell === 'project' ? projectTab : globalTab}
+            project={activeProject}
+            onNavigate={handleAssistantNavigate}
+            onOpenSettings={() => {
+              setShowAi(false);
+              handleNavigateToSettings();
+            }}
+          />
+        )}
+      </Suspense>
 
-      <NotificationCenter
-        isOpen={showNotifCenter}
-        onClose={() => setShowNotifCenter(false)}
-      />
+      <Suspense fallback={null}>
+        {showNotifCenter && (
+          <NotificationCenter
+            isOpen={showNotifCenter}
+            onClose={() => setShowNotifCenter(false)}
+          />
+        )}
+      </Suspense>
       <NotificationToast />
-      <RetconImpactModal />
-      <AiActivityOverlay />
+      <Suspense fallback={null}>
+        <RetconImpactModal />
+        <AiActivityOverlay />
+      </Suspense>
     </>
     </StorageContext.Provider>
   );
