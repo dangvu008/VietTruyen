@@ -195,6 +195,7 @@ export const useStorageStore = create<StorageState>()(
           // first hydration may happen before the provider exists and yield empty chapters.
           try {
             const { useProjectStore } = await import('./use_project_store');
+            await useProjectStore.getState().syncProjectsFromProvider();
             const { activeProjectId, hydrateProjectChapters } = useProjectStore.getState();
             if (activeProjectId) {
               traceStoryDebugEvent({

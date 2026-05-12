@@ -32,8 +32,8 @@ export function ensureChapterSequenceNumbers(chapters: Chapter[]): Chapter[] {
       chapter.sequenceNumber && chapter.sequenceNumber > 0
         ? chapter.sequenceNumber
         : canUseParsed
-        ? (parsed[index] as number)
-        : index + 1,
+          ? (parsed[index] as number)
+          : index + 1,
   }));
 }
 
@@ -44,7 +44,14 @@ export function getNextChapterSequenceNumber(chapters: Chapter[]): number {
 }
 
 export function sortChaptersBySequence(chapters: Chapter[]): Chapter[] {
-  return ensureChapterSequenceNumbers(chapters).sort(
+  const normalized = ensureChapterSequenceNumbers(chapters);
+  const alreadySorted = normalized.every((chapter, index) => {
+    if (index === 0) return true;
+    return (normalized[index - 1].sequenceNumber ?? 0) <= (chapter.sequenceNumber ?? 0);
+  });
+
+  const sortable = alreadySorted ? [...normalized] : normalized;
+  return sortable.sort(
     (left, right) => (left.sequenceNumber ?? 0) - (right.sequenceNumber ?? 0)
   );
 }

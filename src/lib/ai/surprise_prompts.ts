@@ -126,6 +126,14 @@ QUY TẮC:
 14. Nếu context có mục "ERA, REGION, AND REGISTER LOCK" thì coi đó là luật ngôn ngữ ưu tiên cao: phải giữ đúng trục thời gian, trục văn minh-khu vực, tầng ngôn ngữ, và mode diễn giải; không được trộn thuật ngữ xuyên thời đại hay sai vùng văn hóa.
 15. Không được thêm nhân vật mới chỉ để làm đông cảnh. Nếu cần người mới, họ phải có chức năng rõ ràng và để lại hệ quả hoặc dư âm đủ nhớ.
 16. TUYỆT ĐỐI KHÔNG được đưa bất kỳ thuật ngữ lập trình, kỹ thuật máy tính, hoặc ký tự lạ nào vào phần CONTENT. Các từ như "Runtime", "Promise", "function", "module", "Error", "async", "null", "undefined", "JSON", "API", "config", "export", "import", "interface" v.v. là metadata nội bộ hệ thống, KHÔNG BAO GIỜ xuất hiện trong văn xuôi truyện. Nếu context chứa các từ này, phải bỏ qua hoàn toàn khi viết CONTENT.
+17. ĐỊNH DẠNG VĂN XUÔI (BẮT BUỘC):
+   - Mỗi đoạn văn (paragraph) cách nhau bằng MỘT dòng trống.
+   - Mỗi lượt thoại của nhân vật đứng trên MỘT dòng riêng, bắt đầu bằng dấu "—" (em-dash) hoặc "–" (en-dash).
+   - KHÔNG gộp nhiều lượt thoại lên cùng một dòng.
+   - Dấu câu (chấm, phẩy, chấm hỏi, chấm than) đặt NGAY SAU từ cuối, KHÔNG có khoảng trắng phía trước.
+   - Sau dấu chấm (.) hoặc chấm hỏi (?) kết thúc câu, nếu câu tiếp theo cùng đoạn thì xuống dòng mới.
+   - KHÔNG ngắt câu giữa chừng chỉ vì hết dòng; mỗi dòng phải là một câu hoàn chỉnh hoặc một đơn vị ý nghĩa trọn vẹn.
+   - KHÔNG bắt đầu câu bằng dấu phẩy hoặc dấu câu.
 
 ⚠️ CRITICAL: Output PHẢI bắt đầu bằng dòng @@ECOT_ANALYSIS@@. Viết phân tích ngắn gọn về Động lực tâm lý nhân vật, Biểu hiện cơ thể dự kiến, và Danh sách từ cấm.
 Tiếp theo là @@LEDGER@@ (JSON hợp lệ).

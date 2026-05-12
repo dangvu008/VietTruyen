@@ -3,6 +3,17 @@
  * Purpose: Default AI model presets for VietTruyen writing assistant
  * Layer: Data
  * Domain: AI → [model configuration]
+ *
+ * References — Vietnamese NLP Research:
+ * - PhoBERT / PhoGPT (VinAI):   https://github.com/VinAIResearch/PhoBERT
+ *                                https://github.com/VinAIResearch/PhoGPT
+ * - VinaLLaMA (BKAI):           https://huggingface.co/vilm/vinallama-7b-chat
+ * - SeaLLM (Alibaba DAMO):      https://github.com/DAMO-NLP-SG/SeaLLMs
+ * - Underthesea toolkit:        https://github.com/undertheseanlp/underthesea
+ * - VnCoreNLP:                  https://github.com/vncorenlp/VnCoreNLP
+ * - NLP-Vietnamese-progress:    https://github.com/undertheseanlp/NLP-Vietnamese-progress
+ * - Awesome-Vietnamese-NLP:     https://github.com/vndee/awesome-vietnamese-nlp
+ * - VMLU benchmark:             https://vmlu.ai
  */
 import type { AiModel } from '../types/story';
 
@@ -299,12 +310,56 @@ export const DEFAULT_AI_MODELS: AiModel[] = [
     name: 'Vistral 7B (Ollama)',
     provider: 'ollama',
     modelId: 'vistral:7b',
-    description: 'Model chuyên tiếng Việt, nhẹ, chạy trên mọi máy',
+    // ref: https://huggingface.co/Viet-Mistral/Vistral-7B-Chat
+    description: 'Mistral-7B fine-tune tiếng Việt, chat tốt, chạy local',
     isCustom: false,
     tier: 'fast',
     inputCostPer1M: 0,
     outputCostPer1M: 0,
     contextWindow: 32_000,
+    capabilities: ['local', 'cheap', 'vietnamese', 'creative_writing'],
+  },
+  {
+    id: 'ollama-phogpt-4b',
+    name: 'PhoGPT 4B (Ollama)',
+    provider: 'ollama',
+    modelId: 'phogpt:4b',
+    // ref: https://github.com/VinAIResearch/PhoGPT (VinAI Research)
+    description: 'Model tiếng Việt của VinAI, 3.7B param, tokenizer riêng, ctx 8K',
+    isCustom: false,
+    tier: 'fast',
+    inputCostPer1M: 0,
+    outputCostPer1M: 0,
+    contextWindow: 8_192,
     capabilities: ['local', 'cheap', 'vietnamese'],
+  },
+  {
+    id: 'ollama-vinallama-7b',
+    name: 'VinaLLaMA 7B Chat (Ollama)',
+    provider: 'ollama',
+    modelId: 'vinallama:7b-chat',
+    // ref: https://huggingface.co/vilm/vinallama-7b-chat (BKAI Lab)
+    description: 'LLaMA fine-tune tiếng Việt của BKAI, tốt cho hội thoại & truyện',
+    isCustom: false,
+    tier: 'balanced',
+    inputCostPer1M: 0,
+    outputCostPer1M: 0,
+    contextWindow: 4_096,
+    capabilities: ['local', 'cheap', 'vietnamese', 'creative_writing'],
+  },
+  // ── Vietnamese-Optimised Cloud Models ─────────────────
+  {
+    id: 'openrouter-seallm-7b-v3',
+    name: 'SeaLLM 7B v3 (OpenRouter)',
+    provider: 'openrouter',
+    modelId: 'alibaba/seallm-7b-v3',
+    // ref: https://github.com/DAMO-NLP-SG/SeaLLMs (Alibaba DAMO)
+    description: 'LLM tối ưu Đông Nam Á (VI/TH/ID/MS…), v3 giảm hallucination, ctx 32K',
+    isCustom: false,
+    tier: 'balanced',
+    inputCostPer1M: 0.18,
+    outputCostPer1M: 0.18,
+    contextWindow: 32_000,
+    capabilities: ['cheap', 'vietnamese', 'creative_writing', 'summarization'],
   },
 ];

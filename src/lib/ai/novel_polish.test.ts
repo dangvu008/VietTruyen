@@ -38,14 +38,99 @@ describe('novel_polish', () => {
     expect(instruction).toContain('Do not add new events');
   });
 
-  it('defines the five requested polish modes in user-facing order', () => {
-    expect(NOVEL_POLISH_MODES.map((mode) => mode.id)).toEqual([
+  it('defines quick polish modes first in user-facing order', () => {
+    const quickModes = NOVEL_POLISH_MODES.filter((mode) => mode.category === 'quick');
+    expect(quickModes.map((mode) => mode.id)).toEqual([
       'comprehensive',
       'find_errors',
       'remove_ai_tone',
       'enhance_details',
       'optimize_dialogue',
     ]);
+  });
+
+  it('defines the deep 5-pass modes followed by the critique-then-fix two-agent mode', () => {
+    const deepModes = NOVEL_POLISH_MODES.filter((mode) => mode.category === 'deep');
+    expect(deepModes.map((mode) => mode.id)).toEqual([
+      'anti_ai_tic',
+      'metaphor_sanity',
+      'consistency_audit',
+      'pacing_by_scene_type',
+      'lexical_surgery',
+      'critique_then_fix',
+    ]);
+  });
+
+  it('anti_ai_tic mode enforces max 1 occurrence per pattern per chapter', () => {
+    const instruction = buildNovelPolishInstruction({
+      mode: 'anti_ai_tic',
+      rawText: 'Không gợn sóng, không tiếng gió, không cả tiếng thủy thủ. Cây cầu trước mặt.',
+    });
+
+    expect(instruction).toContain('không X, không Y, không');
+    expect(instruction).toContain('tối đa 1 lần/chương');
+    expect(instruction).toContain('Rồi');
+    expect(instruction).toContain('Đột nhiên');
+    expect(instruction).toContain('BẢO TỒN');
+  });
+
+  it('metaphor_sanity mode applies the 3-gate test', () => {
+    const instruction = buildNovelPolishInstruction({
+      mode: 'metaphor_sanity',
+      rawText: 'Mây đen cuộn lại như vết thương đang lành trên da trời.',
+    });
+
+    expect(instruction).toContain('3-GATE TEST');
+    expect(instruction).toContain('GATE 1 (LOGIC)');
+    expect(instruction).toContain('GATE 2 (SETTING)');
+    expect(instruction).toContain('GATE 3 (NECESSITY)');
+    // The instruction should call out the archetypal dead metaphor.
+    expect(instruction).toContain('mây đen cuộn lại như vết thương đang lành');
+  });
+
+  it('consistency_audit mode produces a four-section report without rewriting', () => {
+    const mode = getNovelPolishMode('consistency_audit');
+    const instruction = buildNovelPolishInstruction({
+      mode: 'consistency_audit',
+      rawText: 'Lục Phong rút tay khỏi vạt áo, mười ngón chân bấm vào ván gỗ.',
+    });
+
+    expect(mode.outputKind).toBe('report');
+    expect(instruction).toContain('STATE INTRODUCED');
+    expect(instruction).toContain('CONTRADICTIONS');
+    expect(instruction).toContain('DANGLING DETAILS');
+    expect(instruction).toContain('LAZY TRANSITIONS');
+    expect(instruction).toContain('TUYỆT ĐỐI KHÔNG rewrite');
+  });
+
+  it('pacing_by_scene_type mode encodes explicit per-scene sentence budgets', () => {
+    const instruction = buildNovelPolishInstruction({
+      mode: 'pacing_by_scene_type',
+      rawText: 'Đoàn hạm đội bảy chiếc bổ nhào vào mạn tàu.',
+    });
+
+    expect(instruction).toContain('action:');
+    expect(instruction).toContain('5–10 chữ');
+    expect(instruction).toContain('tension:');
+    expect(instruction).toContain('contemplative:');
+    expect(instruction).toContain('dialogue:');
+    expect(instruction).toContain('20–30 chữ');
+  });
+
+  it('lexical_surgery mode flags dubious Han-Viet and era violations as a report', () => {
+    const mode = getNovelPolishMode('lexical_surgery');
+    const instruction = buildNovelPolishInstruction({
+      mode: 'lexical_surgery',
+      rawText: 'Ánh nắng tan biệt nơi vực thẳm, mang sức nặng của ngàn năm im tiếng súng.',
+    });
+
+    expect(mode.outputKind).toBe('report');
+    expect(instruction).toContain('HÁN VIỆT NGHI VẤN');
+    expect(instruction).toContain('ERA/CONTEXT VIOLATIONS');
+    expect(instruction).toContain('WRONG CONTEXT WORDS');
+    expect(instruction).toContain('DEAD METAPHORS');
+    expect(instruction).toContain('tiếng súng');
+    expect(instruction).toContain('TUYỆT ĐỐI KHÔNG rewrite');
   });
 
   it('builds an editor instruction that preserves the raw text contract', () => {

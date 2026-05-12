@@ -349,4 +349,30 @@ export interface TranslationMap {
     tabQueue: string;
     subtitle: string;
   };
+  aiAssistantPanel: {
+    statusEmpty: string;
+    statusAiDraft: string;
+    statusGenerating: string;
+    statusIncomplete: string;
+    statusEditing: string;
+    statusWritten: string;
+    statusComplete: string;
+    statusPublished: string;
+    actionContinue: string;
+    actionExpand: string;
+    actionRewrite: string;
+    actionSummarizeChapter: string;
+    actionSummarizeStory: string;
+    tacticNovelPolish: string;
+    tacticRewrite: string;
+    tacticPromptConfirm: string;
+    tacticPromptSubText: string;
+    actionPromptPrefix: string;
+    buttonApplyStory: string;
+    buttonApply: string;
+    buttonViewChanges: string;
+    buttonCopy: string;
+    tacticTasks: string;
+    tacticTasksSub: string;
+  };
 }

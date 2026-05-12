@@ -102,6 +102,26 @@ interface GenerationState {
 
 // ─── Store ──────────────────────────────────────────────
 
+const STREAM_DEBUG_MIN_INTERVAL_MS = 2_000;
+const STREAM_DEBUG_MIN_CHAR_DELTA = 2_000;
+
+let lastChatChunkTraceAt = 0;
+let lastChatChunkTraceChars = 0;
+let lastScratchChunkTraceAt = 0;
+let lastScratchChunkTraceChars = 0;
+
+function shouldTraceStreamChunk(
+  now: number,
+  accumulatedChars: number,
+  lastTraceAt: number,
+  lastTraceChars: number,
+): boolean {
+  return (
+    now - lastTraceAt >= STREAM_DEBUG_MIN_INTERVAL_MS ||
+    accumulatedChars - lastTraceChars >= STREAM_DEBUG_MIN_CHAR_DELTA
+  );
+}
+
 export const useGenerationStore = create<GenerationState>((set, get) => ({
   isStreaming: false,
   streamedText: '',
@@ -161,18 +181,22 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
       streamedText: state.streamedText + chunk,
     }));
     const state = get();
-    traceStoryDebugEvent({
-      domain: 'generation',
-      action: 'chat_stream.chunk',
-      level: 'info',
-      summary: `AI chat stream appended ${chunk.length} chars.`,
-      details: {
-        messageId: state.streamingMessageId,
-        chunkChars: chunk.length,
-        accumulatedChars: state.streamedText.length,
-        chunk,
-      },
-    });
+    const now = Date.now();
+    if (shouldTraceStreamChunk(now, state.streamedText.length, lastChatChunkTraceAt, lastChatChunkTraceChars)) {
+      lastChatChunkTraceAt = now;
+      lastChatChunkTraceChars = state.streamedText.length;
+      traceStoryDebugEvent({
+        domain: 'generation',
+        action: 'chat_stream.chunk',
+        level: 'info',
+        summary: `AI chat stream appended ${chunk.length} chars.`,
+        details: {
+          messageId: state.streamingMessageId,
+          chunkChars: chunk.length,
+          accumulatedChars: state.streamedText.length,
+        },
+      });
+    }
   },
 
   stopStream: () => {
@@ -324,19 +348,23 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
       return { scratchStreamedText: next };
     });
     const state = get();
-    traceStoryDebugEvent({
-      domain: 'generation',
-      action: 'scratch_stream.chunk',
-      level: 'info',
-      summary: `Scratch chapter generation appended ${chunk.length} chars.`,
-      details: {
-        chapterId: state.generatingChapterId,
-        generationJobId: state.generationJobId,
-        chunkChars: chunk.length,
-        accumulatedChars: state.scratchStreamedText.length,
-        chunk,
-      },
-    });
+    const now = Date.now();
+    if (shouldTraceStreamChunk(now, state.scratchStreamedText.length, lastScratchChunkTraceAt, lastScratchChunkTraceChars)) {
+      lastScratchChunkTraceAt = now;
+      lastScratchChunkTraceChars = state.scratchStreamedText.length;
+      traceStoryDebugEvent({
+        domain: 'generation',
+        action: 'scratch_stream.chunk',
+        level: 'info',
+        summary: `Scratch chapter generation appended ${chunk.length} chars.`,
+        details: {
+          chapterId: state.generatingChapterId,
+          generationJobId: state.generationJobId,
+          chunkChars: chunk.length,
+          accumulatedChars: state.scratchStreamedText.length,
+        },
+      });
+    }
   },
 
   stopScratchStream: () => {

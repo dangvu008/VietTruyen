@@ -322,7 +322,7 @@ const TopMenu: React.FC<TopMenuProps> = ({ activeTab, onTabChange, project, proj
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" size={16} />
             <input 
               type="text" 
-              placeholder="Tìm kiếm truyện hoặc công cụ..." 
+              placeholder={t('common.searchPlaceholder')} 
               className="w-64 rounded-full border border-border-subtle bg-bg-surface py-2 pl-9 pr-4 text-sm text-text-primary placeholder-text-muted focus:border-secondary/30 focus:outline-none transition-all"
             />
           </div>
@@ -333,7 +333,7 @@ const TopMenu: React.FC<TopMenuProps> = ({ activeTab, onTabChange, project, proj
           <div className="hidden md:flex items-center gap-3 mr-2">
             <div className="text-right">
               <p className="text-[13px] font-semibold text-text-primary leading-tight">Thanh Tùng</p>
-              <p className="text-[9px] font-bold tracking-widest text-secondary uppercase mt-0.5">Bậc Thầy Kể Chuyện</p>
+              <p className="text-[9px] font-bold tracking-widest text-secondary uppercase mt-0.5">{t('user.roleMasterStoryteller')}</p>
             </div>
             <img src="https://i.pravatar.cc/150?u=a042581f4e29026704d" alt="Avatar" className="h-9 w-9 rounded-full border border-border-subtle object-cover" />
           </div>

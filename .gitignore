@@ -17,3 +17,13 @@ supabase/.env
 /blob-report/
 /playwright/.cache/
 /playwright/.auth/
+/.playwright-mcp/
+
+# Temp scripts & data files
+ast_translate_assistant.mjs
+find_vi_strings.mjs
+inject_assistant_translations.mjs
+seed-large-project-result.json
+vi_strings.txt
+chinese_strings.json
+chinese_to_vi.json

@@ -158,32 +158,46 @@ export const ChapterEditorPane: React.FC<Props> = ({
     }
   }, [chapter?.id]);
 
-  // Ensure robust textarea resizing
+  // Ensure robust textarea resizing.
+  // Do NOT observe the textarea itself with ResizeObserver: adjusting its height
+  // inside the observer callback can retrigger layout/observer cycles and make
+  // editor interactions feel frozen on long chapters.
   useEffect(() => {
     const textarea = textareaRef.current;
     if (!textarea) return;
 
-    const adjustHeight = () => {
+    let rafId: number | null = null;
+
+    const adjustHeightNow = () => {
       textarea.style.height = 'auto';
-      textarea.style.height = `${textarea.scrollHeight}px`;
+      const nextHeight = `${textarea.scrollHeight}px`;
+      if (textarea.style.height !== nextHeight) {
+        textarea.style.height = nextHeight;
+      }
+      rafId = null;
     };
 
-    // Initial and on content change
-    adjustHeight();
+    const scheduleAdjustHeight = () => {
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+      }
+      rafId = requestAnimationFrame(adjustHeightNow);
+    };
+
+    // Initial and on content/style changes
+    scheduleAdjustHeight();
 
     // On font load
-    document.fonts?.ready.then(adjustHeight);
+    document.fonts?.ready.then(scheduleAdjustHeight);
 
     // On window resize
-    window.addEventListener('resize', adjustHeight);
-
-    // Resize observer to catch any container layout changes
-    const resizeObserver = new ResizeObserver(() => adjustHeight());
-    resizeObserver.observe(textarea);
+    window.addEventListener('resize', scheduleAdjustHeight);
 
     return () => {
-      window.removeEventListener('resize', adjustHeight);
-      resizeObserver.disconnect();
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+      }
+      window.removeEventListener('resize', scheduleAdjustHeight);
     };
   }, [localContent, mode, readerFontSize, isReadingModeFullscreen]);
 
@@ -614,8 +628,8 @@ export const ChapterEditorPane: React.FC<Props> = ({
                   key={item.id}
                   onClick={() => onModeChange?.(item.id as EditorMode)}
                   className={`rounded-full px-3.5 py-1.5 text-[12px] font-medium transition sm:px-4 ${(mode === item.id || ((mode === 'write' || mode === 'detail') && item.id === 'write'))
-                      ? 'bg-[#2a2420] text-text-primary shadow-sm border border-white/5'
-                      : 'text-[#8f7f73] hover:text-[#c8beb0]'
+                    ? 'bg-[#2a2420] text-text-primary shadow-sm border border-white/5'
+                    : 'text-[#8f7f73] hover:text-[#c8beb0]'
                     }`}
                 >
                   {item.label}
@@ -913,8 +927,8 @@ export const ChapterEditorPane: React.FC<Props> = ({
                 </span>
                 <ArrowRight className="h-3.5 w-3.5 text-[#5f544b]" />
                 <span className={`rounded-full border px-3 py-1 text-[12px] ${isDirty
-                    ? 'border-accent-amber/20 bg-[#362a22] text-accent-amber'
-                    : 'border-white/5 bg-[#181412] text-[#c8beb0]'
+                  ? 'border-accent-amber/20 bg-[#362a22] text-accent-amber'
+                  : 'border-white/5 bg-[#181412] text-[#c8beb0]'
                   }`}>
                   {draftFlowLabel}
                 </span>

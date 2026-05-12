@@ -9,7 +9,8 @@
  * - Output: TokenStats aggregated data for dashboard
  */
 import { create } from 'zustand';
-import { persist, createJSONStorage } from 'zustand/middleware';
+import { persist } from 'zustand/middleware';
+import { createDebouncedPersistStorage } from '../lib/storage/debounced_local_storage';
 import { resolveModelCostRates } from '../lib/ai/token_estimator';
 import type {
   TokenUsageRecord,
@@ -201,7 +202,7 @@ export const useTokenStore = create<TokenState>()(
     }),
     {
       name: 'viettruyen-token-usage',
-      storage: createJSONStorage(() => localStorage),
+      storage: createDebouncedPersistStorage(500),
       partialize: (state) => ({
         records: state.records,
         pipelineSessions: state.pipelineSessions,

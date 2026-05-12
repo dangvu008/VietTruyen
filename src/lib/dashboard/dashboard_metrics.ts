@@ -2,6 +2,7 @@ import type { TokenUsageRecord } from '../../types/token_tracker';
 import type { Project } from '../../types/story';
 import type { SharedStory } from '../../types/community';
 import type { Notification } from '../../store/use_notification_store';
+import { countWords } from '../project/project_display_stats';
 import type { ProjectDisplayStats } from '../project/project_display_stats';
 
 export interface DashboardMetrics {
@@ -36,12 +37,6 @@ export interface DashboardActivityItem {
 export type ProjectStatsById = Record<string, ProjectDisplayStats>;
 
 const DAY_LABELS = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
-
-function countWords(text: string): number {
-  const trimmed = text.trim();
-  if (!trimmed) return 0;
-  return trimmed.split(/\s+/).filter(Boolean).length;
-}
 
 function safeTime(iso?: string): number {
   if (!iso) return 0;
@@ -101,7 +96,11 @@ export function buildDashboardMetrics(
   };
 }
 
-export function buildWeeklyWritingStats(projects: Project[], now: Date = new Date()): WeeklyWritingDay[] {
+export function buildWeeklyWritingStats(
+  projects: Project[],
+  now: Date = new Date(),
+  statsByProjectId: ProjectStatsById = {},
+): WeeklyWritingDay[] {
   const today = startOfLocalDay(now);
   const days = Array.from({ length: 7 }, (_, index) => {
     const date = new Date(today);
@@ -116,6 +115,7 @@ export function buildWeeklyWritingStats(projects: Project[], now: Date = new Dat
   });
 
   const dayByKey = new Map(days.map((day) => [day.key, day]));
+  const seenProjectIdsByDay = new Map<string, Set<string>>();
 
   for (const project of projects) {
     for (const chapter of project.chapters) {
@@ -124,7 +124,23 @@ export function buildWeeklyWritingStats(projects: Project[], now: Date = new Dat
       const updatedDay = startOfLocalDay(new Date(updatedAt)).toISOString().slice(0, 10);
       const day = dayByKey.get(updatedDay);
       if (!day) continue;
-      day.words += countWords(chapter.content || '');
+
+      const content = chapter.content || '';
+      if (content.trim()) {
+        day.words += countWords(content);
+        continue;
+      }
+
+      // Dashboard projects are often restored from localStorage with stripped
+      // chapter content. Do not force full hydration just to draw the weekly
+      // chart; use the already-computed project total once per project/day.
+      const fallbackWordCount = statsByProjectId[project.id]?.wordCount ?? 0;
+      if (fallbackWordCount <= 0) continue;
+      const seenProjectIds = seenProjectIdsByDay.get(day.key) ?? new Set<string>();
+      if (seenProjectIds.has(project.id)) continue;
+      seenProjectIds.add(project.id);
+      seenProjectIdsByDay.set(day.key, seenProjectIds);
+      day.words += fallbackWordCount;
     }
   }
 
@@ -140,9 +156,17 @@ export function buildWeeklyWritingStats(projects: Project[], now: Date = new Dat
   }));
 }
 
-function buildChapterActivities(projects: Project[]): DashboardActivityItem[] {
-  return projects.flatMap((project) =>
-    project.chapters.map((chapter, index) => {
+function buildChapterActivities(projects: Project[], perProjectLimit = 3): DashboardActivityItem[] {
+  return projects.flatMap((project) => {
+    const recentChapters = project.chapters
+      .map((chapter, index) => ({ chapter, index }))
+      .filter(({ chapter }) => safeTime(chapter.updatedAt || project.updatedAt) > 0)
+      .sort((left, right) =>
+        safeTime(right.chapter.updatedAt || project.updatedAt) - safeTime(left.chapter.updatedAt || project.updatedAt)
+      )
+      .slice(0, perProjectLimit);
+
+    return recentChapters.map(({ chapter, index }) => {
       const chapterNumber = chapter.sequenceNumber ?? index + 1;
       const isPublished = chapter.status === 'published';
 
@@ -156,8 +180,8 @@ function buildChapterActivities(projects: Project[]): DashboardActivityItem[] {
         detail: `Truyện: ${project.title}`,
         timestamp: chapter.updatedAt || project.updatedAt,
       };
-    }),
-  );
+    });
+  });
 }
 
 function buildNotificationActivities(notifications: Notification[]): DashboardActivityItem[] {
@@ -199,11 +223,13 @@ export function buildDashboardActivities(
   tokenRecords: TokenUsageRecord[],
   limit = 5,
 ): DashboardActivityItem[] {
+  const perProjectChapterLimit = Math.max(1, Math.min(3, limit));
+
   return [
-    ...buildNotificationActivities(notifications),
-    ...buildChapterActivities(projects),
+    ...buildNotificationActivities(notifications).slice(0, limit * 2),
+    ...buildChapterActivities(projects, perProjectChapterLimit),
     ...buildTokenActivities(tokenRecords),
-    ...buildProjectActivities(projects),
+    ...buildProjectActivities(projects).slice(0, limit * 2),
   ]
     .filter((item) => safeTime(item.timestamp) > 0)
     .sort((left, right) => safeTime(right.timestamp) - safeTime(left.timestamp))

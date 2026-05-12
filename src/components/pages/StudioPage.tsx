@@ -58,14 +58,14 @@ const truncate = (value: string, limit: number) => {
   return `${value.slice(0, limit).trim()}...`;
 };
 
-const formatStepState = (state: StepState) => {
+const formatStepState = (state: StepState, t: any = (k:string)=>k) => {
   switch (state) {
     case 'complete':
-      return 'Hoàn tất';
+      return t('studio.statusLabel.complete');
     case 'ready':
-      return 'Sẵn sàng';
+      return t('studio.statusLabel.ready');
     default:
-      return 'Cần bổ sung';
+      return t('studio.statusLabel.attention');
   }
 };
 
@@ -80,11 +80,11 @@ const getStepTone = (state: StepState) => {
   }
 };
 
-const formatStamp = (value?: string) => {
-  if (!value) return 'Chưa cập nhật';
+const formatStamp = (value?: string, t: any = (k:string)=>k) => {
+  if (!value) return t('studio.statusLabel.notUpdated');
 
   const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return 'Chưa cập nhật';
+  if (Number.isNaN(parsed.getTime())) return t('studio.statusLabel.notUpdated');
 
   return parsed.toLocaleDateString('vi-VN', {
     day: '2-digit',
@@ -223,44 +223,44 @@ const StudioPage: React.FC<StudioPageProps> = ({
       ? latestParagraphs
       : latestSnippet
         ? [truncate(latestSnippet, 720)]
-        : ['Chương này chưa có nội dung hiển thị.'];
+        : [t('studio.manuscript.noContent')];
   const chapterBadge = latestChapter
-    ? `Chương ${latestChapter.sequenceNumber ?? orderedChapters.length}`
-    : 'Bản thảo trống';
+    ? `${t('studio.labels.chapterPrefix')} ${latestChapter.sequenceNumber ?? orderedChapters.length}`
+    : t('studio.statusLabel.emptyDraft');
   const storySummary =
     project.logline ||
     project.mainPlot ||
-    'Ghim lại trục nhân vật, xung đột và lộ trình triển khai để bắt đầu chu kỳ viết ổn định.';
+    t('studio.manuscript.summaryPlaceholder');
 
   const hasOutline = project.outline.length > 0 || (project.masterOutline?.volumes.length ?? 0) > 0;
   const worldScore = getWorldScore(project);
   const foundationRows = [
     {
-      label: 'Nhân vật chính',
+      label: t('studio.labels.protagonist'),
       detail:
         project.characters.length > 0
-          ? `${project.characters.length} hồ sơ đang hoạt động`
-          : 'Chưa có tuyến nhân vật nào được khóa.',
+          ? `${project.characters.length} ${t('studio.labels.activeProfiles')}`
+          : t('studio.labels.noCharacters'),
       ready: project.characters.length > 0,
       progress: project.characters.length > 0 ? 100 : 18,
       icon: <Users size={15} />,
     },
     {
-      label: 'Thế giới truyện',
+      label: t('studio.labels.world'),
       detail:
         worldScore > 0
-          ? `${worldScore}/3 cụm thông tin đã được dựng`
-          : 'Địa lý, luật vận hành và phe phái vẫn đang trống.',
+          ? `${worldScore}/3 ${t('studio.labels.infoClusters')}`
+          : t('studio.labels.worldEmpty'),
       ready: worldScore > 0,
       progress: worldScore > 0 ? Math.max(34, Math.round((worldScore / 3) * 100)) : 14,
       icon: <Globe2 size={15} />,
     },
     {
-      label: 'Dàn ý triển khai',
+      label: t('studio.labels.outline'),
       detail:
         hasOutline
-          ? `${project.outline.length || project.masterOutline?.volumes.length || 1} mảng nội dung đã có`
-          : 'Chưa có khung dàn ý để neo nhịp truyện.',
+          ? `${project.outline.length || project.masterOutline?.volumes.length || 1} ${t('studio.labels.outlineBlocks')}`
+          : t('studio.labels.noOutline'),
       ready: hasOutline,
       progress: hasOutline ? 100 : 16,
       icon: <LayoutList size={15} />,
@@ -269,19 +269,19 @@ const StudioPage: React.FC<StudioPageProps> = ({
 
   const studioMetrics = [
     {
-      label: 'workflow',
+      label: t('studio.labels.workflow'),
       value: `${workflow.progressPercent}%`,
-      note: `${workflow.completedCount}/${workflow.totalCount} chặng đã chốt`,
+      note: `${workflow.completedCount}/${workflow.totalCount} ${t('studio.labels.milestonesLocked')}`,
     },
     {
-      label: 'bản nháp',
+      label: t('studio.metrics2.drafts'),
       value: `${project.chapters.length}`,
-      note: latestChapter ? `${chapterBadge} đang là mốc gần nhất` : 'Chưa có chương nào được viết',
+      note: latestChapter ? `${chapterBadge} ${t('studio.metrics2.latestMilestone')}` : t('studio.metrics2.noChaptersWritten'),
     },
     {
-      label: 'token tháng',
+      label: t('studio.labels.monthlyTokens'),
       value: `${tokenPercentage}%`,
-      note: `Còn ${remainingTokens.toLocaleString('vi-VN')} token khả dụng`,
+      note: t('studio.labels.remainingTokens').replace('{count}', remainingTokens.toLocaleString('vi-VN')),
     },
   ];
 
@@ -303,7 +303,7 @@ const StudioPage: React.FC<StudioPageProps> = ({
                 </h1>
                 <span className="vt-pill mt-2 border-[#f0c59a]/25 bg-[#f0c59a]/10 text-[#f0c59a]">
                   <Sparkles size={14} />
-                  {workflow.progressPercent}% vận hành
+                  {workflow.progressPercent}% {t('studio.metrics2.operational')}
                 </span>
               </div>
               <p className="max-w-[54ch] text-base leading-8 text-[#c7b7ab] sm:text-lg">
@@ -320,19 +320,19 @@ const StudioPage: React.FC<StudioPageProps> = ({
                 }`}
               >
                 <Bot size={14} />
-                {aiConfigured ? 'AI đã sẵn sàng' : 'Thiếu cấu hình AI'}
+                {aiConfigured ? t('studio.metrics2.aiReady') : t('studio.metrics2.aiMissing')}
               </span>
               <span className="vt-pill">
                 <BookOpen size={14} />
-                {project.genre || 'Chưa chọn thể loại'}
+                {project.genre || t('studio.metrics2.noGenre')}
               </span>
               <span className="vt-pill">
                 <Users size={14} />
-                {workflow.foundationReady ? 'Nền móng đủ dày' : `${workflow.foundationScore}/3 trụ nền`}
+                {workflow.foundationReady ? t('studio.metrics2.foundationSolid') : `${workflow.foundationScore}/3 ${t('studio.metrics2.foundationPillars')}`}
               </span>
               <span className="vt-pill">
                 <PenTool size={14} />
-                {workflow.hasDraft ? `${project.chapters.length} chương hiện có` : 'Chưa có bản nháp'}
+                {workflow.hasDraft ? `${project.chapters.length} ${t('studio.metrics2.chaptersAvailable')}` : t('studio.metrics2.noDrafts')}
               </span>
             </div>
 
@@ -360,7 +360,7 @@ const StudioPage: React.FC<StudioPageProps> = ({
                 onClick={() => onNavigate(workflow.hasDraft ? 'review' : 'brainstorm')}
                 className="vt-quiet-button"
               >
-                {workflow.hasDraft ? 'Mở bàn viết' : 'Khoá ý tưởng'}
+                {workflow.hasDraft ? t('studio.actions.openWriter') : t('studio.actions.lockIdea')}
                 <ArrowUpRight size={16} />
               </button>
             </div>
@@ -370,13 +370,13 @@ const StudioPage: React.FC<StudioPageProps> = ({
             <span className="vt-kicker">current pulse</span>
             <div className="mt-3 flex items-start justify-between gap-4">
               <div>
-                <p className="text-sm text-[#c8bbb1]">Hạng mục nên xử lý tiếp</p>
+                <p className="text-sm text-[#c8bbb1]">{t('studio.actions.nextItem')}</p>
                 <h2 className="mt-2 text-2xl font-semibold tracking-[-0.03em] text-[#fff4eb]">
                   {workflow.nextAction.title}
                 </h2>
               </div>
               <span className={`rounded-full border px-3 py-1 text-xs font-medium ${getStepTone(workflow.nextAction.state)}`}>
-                {formatStepState(workflow.nextAction.state)}
+                {formatStepState(workflow.nextAction.state, t)}
               </span>
             </div>
 
@@ -398,27 +398,27 @@ const StudioPage: React.FC<StudioPageProps> = ({
 
               <dl className="space-y-4 text-sm text-[#c9bbb0]">
                 <div className="flex items-start justify-between gap-4 border-b border-white/8 pb-4">
-                  <dt className="text-[#8f8176]">Mô hình AI</dt>
+                  <dt className="text-[#8f8176]">{t('studio.ai.model')}</dt>
                   <dd className="max-w-[180px] text-right text-[#f0e4d9]">
-                    {aiConfigured ? aiModelLabel : 'Chưa cấu hình'}
+                    {aiConfigured ? aiModelLabel : t('studio.ai.notConfigured')}
                   </dd>
                 </div>
                 <div className="flex items-start justify-between gap-4 border-b border-white/8 pb-4">
-                  <dt className="text-[#8f8176]">Token còn lại</dt>
+                  <dt className="text-[#8f8176]">{t('studio.ai.tokensRemaining')}</dt>
                   <dd className="vt-data text-right text-[#f0e4d9]">
                     {remainingTokens.toLocaleString('vi-VN')}
                   </dd>
                 </div>
                 <div className="flex items-start justify-between gap-4 border-b border-white/8 pb-4">
-                  <dt className="text-[#8f8176]">Chương đã polish</dt>
+                  <dt className="text-[#8f8176]">{t('studio.ai.polishedChapters')}</dt>
                   <dd className="vt-data text-right text-[#f0e4d9]">
                     {workflow.polishedCount}
                   </dd>
                 </div>
                 <div className="flex items-start justify-between gap-4">
-                  <dt className="text-[#8f8176]">Bản cập nhật gần nhất</dt>
+                  <dt className="text-[#8f8176]">{t('studio.ai.lastUpdate')}</dt>
                   <dd className="text-right text-[#f0e4d9]">
-                    {latestChapter ? formatStamp(latestChapter.updatedAt) : 'Chưa có'}
+                    {latestChapter ? formatStamp(latestChapter.updatedAt, t) : t('studio.ai.none')}
                   </dd>
                 </div>
               </dl>
@@ -441,12 +441,12 @@ const StudioPage: React.FC<StudioPageProps> = ({
             <div>
               <span className="vt-kicker">latest manuscript</span>
               <h2 className="mt-2 max-w-[14ch] text-balance font-script text-4xl leading-[0.95] tracking-[-0.04em] text-[#fff7ef]">
-                {latestChapter ? latestChapter.title : 'Chưa có bản thảo nào được mở'}
+                {latestChapter ? latestChapter.title : t('studio.manuscript.noManuscript')}
               </h2>
               <p className="mt-3 text-sm leading-7 text-[#b6a89d]">
                 {latestChapter
-                  ? `${chapterBadge} · ${formatStamp(latestChapter.updatedAt)} · ${countCharacters(latestChapter.content).toLocaleString('vi-VN')} ký tự`
-                  : 'Khởi động chương đầu tiên để tạo một điểm neo cho vòng brainstorm, review và xuất bản.'}
+                  ? `${chapterBadge} · ${formatStamp(latestChapter.updatedAt, t)} · ${countCharacters(latestChapter.content).toLocaleString('vi-VN')} ${t('studio.labels.charactersCount')}`
+                  : t('studio.manuscript.startAnchor')}
               </p>
             </div>
 
@@ -454,7 +454,7 @@ const StudioPage: React.FC<StudioPageProps> = ({
               onClick={() => onNavigate(latestChapter ? 'review' : workflow.nextAction.tab)}
               className="vt-quiet-button self-start sm:self-auto"
             >
-              {latestChapter ? 'Mở bàn viết' : workflow.nextAction.cta}
+              {latestChapter ? t('studio.actions.openWriter') : workflow.nextAction.cta}
               <ArrowUpRight size={16} />
             </button>
           </header>
@@ -475,27 +475,27 @@ const StudioPage: React.FC<StudioPageProps> = ({
                     <p className="vt-kicker">status</p>
                     <p className="mt-2 text-lg font-medium text-[#fff2e7]">
                       {latestChapter.status === 'draft'
-                        ? 'Đang ở dạng nháp'
+                        ? t('studio.statusLabel.draft')
                         : latestChapter.status === 'revised'
-                          ? 'Đã qua chỉnh sửa'
-                          : 'Đã khóa bản cuối'}
+                          ? t('studio.statusLabel.revised')
+                          : t('studio.statusLabel.locked')}
                     </p>
                   </div>
                   <div>
-                    <p className="vt-kicker">điểm nối tiếp theo</p>
+                    <p className="vt-kicker">{t('studio.suggestions.nextPoint')}</p>
                     <p className="mt-2 text-sm leading-7 text-[#b7a89c]">
                       {workflow.hasDraft
-                        ? 'Tiếp tục viết hoặc chuyển sang review để khóa nhịp và độ căng của chương.'
-                        : 'Tạo chương đầu tiên để bắt đầu vòng lặp viết và phản hồi.'}
+                        ? t('studio.suggestions.continueOrReview')
+                        : t('studio.suggestions.createFirstChapter')}
                     </p>
                   </div>
                   <div>
-                    <p className="vt-kicker">gợi ý hành động</p>
+                    <p className="vt-kicker">{t('studio.suggestions.actionTitle')}</p>
                     <button
                       onClick={() => onNavigate(workflow.polishedCount > 0 ? 'export' : 'review')}
                       className="mt-3 inline-flex items-center gap-2 text-sm font-medium text-[#f0c59a] transition-colors hover:text-[#f6d8b6]"
                     >
-                      {workflow.polishedCount > 0 ? 'Chuẩn bị xuất bản' : 'Đưa vào review'}
+                      {workflow.polishedCount > 0 ? t('studio.actions.preparePublish') : t('studio.actions.submitReview')}
                       <ArrowRight size={15} />
                     </button>
                   </div>
@@ -508,10 +508,10 @@ const StudioPage: React.FC<StudioPageProps> = ({
                 </div>
                 <div className="space-y-3">
                   <h3 className="text-2xl font-semibold tracking-[-0.03em] text-[#fff3ea]">
-                    Chưa có bản thảo để đọc lại
+                    {t('studio.manuscript.noReviewDraft')}
                   </h3>
                   <p className="max-w-[54ch] text-sm leading-7 text-[#b5a79d]">
-                    Mọi tín hiệu nền móng đang nằm sẵn ở panel bên phải. Khi đã có ý tưởng hoặc dàn ý, hãy mở trình viết để tạo chương đầu tiên và đưa hệ thống vào nhịp.
+                    {t('studio.manuscript.foundationHint')}
                   </p>
                 </div>
                 <button onClick={() => onNavigate(workflow.nextAction.tab)} className="vt-primary-button">
@@ -527,10 +527,10 @@ const StudioPage: React.FC<StudioPageProps> = ({
           <div className="relative z-10">
             <span className="vt-kicker">story spine</span>
             <h2 className="mt-2 text-2xl font-semibold tracking-[-0.03em] text-[#fff4eb]">
-              Nền móng dự án
+              {t('studio.foundationPanel.title')}
             </h2>
             <p className="mt-3 text-sm leading-7 text-[#b5a79d]">
-              Ba trục dưới đây quyết định xem project đã đủ chắc để viết liên tục hay vẫn cần bổ sung.
+              {t('studio.foundationPanel.desc')}
             </p>
 
             <ul className="mt-8 space-y-6">
@@ -547,7 +547,7 @@ const StudioPage: React.FC<StudioPageProps> = ({
                       </div>
                     </div>
                     <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${item.ready ? 'bg-[#f0c59a]/10 text-[#f0c59a]' : 'bg-white/[0.04] text-[#8d7f74]'}`}>
-                      {item.ready ? 'Đủ' : 'Thiếu'}
+                      {item.ready ? t('studio.foundationPanel.sufficient') : t('studio.foundationPanel.lacking')}
                     </span>
                   </div>
                   <div className="h-px overflow-hidden rounded-full bg-white/10">
@@ -560,15 +560,15 @@ const StudioPage: React.FC<StudioPageProps> = ({
             <dl className="mt-8 space-y-4 border-t border-white/10 pt-6 text-sm">
               <div className="grid gap-1">
                 <dt className="vt-kicker">logline</dt>
-                <dd className="text-[#ece0d6]">{project.logline || 'Chưa chốt một câu tóm lược chính.'}</dd>
+                <dd className="text-[#ece0d6]">{project.logline || t('studio.foundationPanel.noLogline')}</dd>
               </div>
               <div className="grid gap-1">
                 <dt className="vt-kicker">tone</dt>
-                <dd className="text-[#ece0d6]">{project.tone || 'Chưa xác định tông chủ đạo.'}</dd>
+                <dd className="text-[#ece0d6]">{project.tone || t('studio.foundationPanel.noTone')}</dd>
               </div>
               <div className="grid gap-1">
                 <dt className="vt-kicker">endgame</dt>
-                <dd className="text-[#ece0d6]">{project.endgame || 'Chưa khóa trạng thái kết cục.'}</dd>
+                <dd className="text-[#ece0d6]">{project.endgame || t('studio.foundationPanel.noEndgame')}</dd>
               </div>
             </dl>
           </div>
@@ -581,11 +581,11 @@ const StudioPage: React.FC<StudioPageProps> = ({
             <div>
               <span className="vt-kicker">workflow rail</span>
               <h2 className="mt-2 text-3xl font-semibold tracking-[-0.04em] text-[#fff4ea]">
-                Lộ trình từ ý tưởng đến xuất bản
+                {t('studio.roadmap.title')}
               </h2>
             </div>
             <p className="max-w-[48ch] text-sm leading-7 text-[#b5a79d]">
-              Thay vì bốn card nhỏ tách rời, toàn bộ quy trình được gom vào một đường ray duy nhất để bạn thấy ngay phần nào đang chặn tiến độ.
+              {t('studio.roadmap.desc')}
             </p>
           </div>
 
@@ -597,7 +597,7 @@ const StudioPage: React.FC<StudioPageProps> = ({
                     {step.state === 'complete' ? <CheckCircle2 size={17} /> : index + 1}
                   </span>
                   <span className={`rounded-full border px-3 py-1 text-xs font-medium ${getStepTone(step.state)}`}>
-                    {formatStepState(step.state)}
+                    {formatStepState(step.state, t)}
                   </span>
                 </div>
 
@@ -629,7 +629,7 @@ const StudioPage: React.FC<StudioPageProps> = ({
           <div className="flex flex-col gap-2">
             <span className="vt-kicker">assistant</span>
             <h2 className="text-2xl font-semibold tracking-[-0.03em] text-[#fff3e8]">
-              Bàn cộng tác AI
+              {t('studio.assistant.title')}
             </h2>
           </div>
           {assistantPanel}

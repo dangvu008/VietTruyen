@@ -56,6 +56,7 @@ export interface ProjectState {
     options?: { storageMode?: ProjectStorageMode }
   ) => Promise<void>;
   hydrateProjectChapters: (id: string) => Promise<void>;
+  syncProjectsFromProvider: () => Promise<void>;
   migrateProjectsToDexie: () => Promise<void>;
   addForeshadowing: (id: string, foreshadowing: Foreshadowing) => void;
   updateForeshadowing: (id: string, foreshadowingId: string, patch: Partial<Foreshadowing>) => void;
@@ -67,6 +68,15 @@ export interface ProjectState {
 
 const now = () => new Date().toISOString();
 const DEFAULT_PROJECT_TITLE = 'Dự án mới';
+const MAX_AUTO_RESTORED_CONTENT_SYNC_CHAPTERS = 200;
+
+// [Domain:Storage] In-flight deduplication guard for hydrateProjectChapters.
+// Multiple callers (WriterPage, StoryWorkspace, onRehydrateStorage) may trigger
+// hydration simultaneously for the same project — e.g. on back-navigation.
+// Deduplication ensures only ONE IndexedDB read + Supabase fetch runs per project
+// at a time, returning the same Promise to all concurrent callers.
+const hydrateInFlight = new Map<string, Promise<void>>();
+let providerProjectSyncInFlight: Promise<void> | null = null;
 
 function sanitizePersistedChapter(chapter: Chapter): Chapter {
   const guarded = guardChapterContent(chapter.content);
@@ -185,6 +195,24 @@ const createProjectTemplate = (title?: string): Project => ({
   updatedAt: now(),
 });
 
+function hasMeaningfulProjectData(project: Project): boolean {
+  return Boolean(
+    project.logline.trim() ||
+    project.genre.trim() ||
+    project.mainPlot.trim() ||
+    project.notes.trim() ||
+    project.characters.length > 0 ||
+    project.outline.length > 0 ||
+    project.chapters.length > 0 ||
+    (project.foreshadowings || []).length > 0 ||
+    project.masterOutline?.volumes.length,
+  );
+}
+
+function isDefaultProjectShell(project: Project): boolean {
+  return project.title === 'VietTruyen Project' && !hasMeaningfulProjectData(project);
+}
+
 const updateProjectArray = (projects: Project[], id: string, updater: (project: Project) => Project) =>
   projects.map((project) => {
     if (project.id !== id) {
@@ -225,6 +253,31 @@ const stripPersistedProject = (project: Project): Project => ({
   ...project,
   chapters: (project.chapters || []).map((chapter) => stripPersistedChapter(chapter)),
 });
+
+function mergeProviderProjects(localProjects: Project[], providerProjects: Project[]): Project[] {
+  if (providerProjects.length === 0) return localProjects;
+
+  const localById = new Map(localProjects.map((project) => [project.id, project]));
+  const providerIds = new Set(providerProjects.map((project) => project.id));
+
+  const mergedProviderProjects = providerProjects.map((providerProject) => {
+    const localProject = localById.get(providerProject.id);
+    return normalizeProject({
+      ...providerProject,
+      chapters: (localProject?.chapters.length ? localProject.chapters : providerProject.chapters) || [],
+      storageMode: 'provider',
+    });
+  });
+
+  const localOnlyProjects = localProjects.filter((project) => {
+    if (providerIds.has(project.id)) return false;
+    return !isDefaultProjectShell(project);
+  });
+
+  return [...mergedProviderProjects, ...localOnlyProjects].sort((left, right) =>
+    right.updatedAt.localeCompare(left.updatedAt)
+  );
+}
 
 function hasChapterPayload(chapter: Chapter): boolean {
   return Boolean(chapter.content?.trim() || chapter.summary?.trim());
@@ -875,37 +928,26 @@ async function syncProjectMetadataToProvider(projectId: string) {
   const provider = useStorageStore.getState().provider;
   if (!provider) return;
 
-  const snap = await getProjectSnapshot(projectId);
-  if (!snap) return;
-
-  // [Domain:Storage] Guard — Phát hiện stripped snapshot
-  // partialize luôn strip content → snapshot sau loadProjectWithFullChapters
-  // PHẢI có content nếu chapters đã được lưu vào IndexedDB/provider.
-  // Nếu snap.chapters rỗng content trong khi project.chapters có content,
-  // loadProjectWithFullChapters bị race condition hoặc provider chưa sẵn sàng.
-  // Skip saveProject để tránh uploadProject xoá chapters có sẵn trên Supabase.
-  const snapHasContent = snap.chapters.some((ch) => ch.content?.trim());
-  const inMemoryHasContent = project.chapters.some((ch) => ch.content?.trim());
-
-  if (!snapHasContent && inMemoryHasContent) {
-    console.warn(
-      `[syncProjectMetadataToProvider] Skipping saveProject for ${projectId}: ` +
-      `snapshot chapters are all empty-content but in-memory state has content. ` +
-      `This prevents uploadProject from wiping Supabase chapters with stripped data.`
-    );
+  if (isDefaultProjectShell(project)) {
     traceStoryDebugEvent({
       domain: 'storage',
-      action: 'project.metadata_sync.skipped_stripped_snapshot',
-      level: 'warn',
-      summary: 'Skipped provider metadata sync because snapshot would strip chapter content.',
-      details: {
-        projectId,
-        snapshot: summarizeDebugChapters(snap.chapters),
-        inMemory: summarizeDebugChapters(project.chapters),
-      },
+      action: 'project.metadata_sync.skipped_default_shell',
+      level: 'info',
+      summary: 'Skipped provider metadata sync for the empty default project shell.',
+      details: { projectId, providerMode: provider.mode },
     });
     return;
   }
+
+  // Metadata sync must not hydrate the whole project. Hydrating here can fan out
+  // into IndexedDB reads/provider getProjectChapters calls while the user is
+  // typing or while dashboard cards are rendering. The Supabase uploader already
+  // treats stripped chapters as metadata-only updates, so the in-memory project is
+  // sufficient and avoids load/fallback storms.
+  const snap: Project = {
+    ...project,
+    chapters: (project.chapters || []).map((chapter) => stripPersistedChapter(chapter)),
+  };
 
   // [Domain:Storage] NOTE — allChaptersStripped guard REMOVED.
   // uploadProject in sync_service.ts already handles stripped chapters safely:
@@ -1383,148 +1425,265 @@ export const useProjectStore = create<ProjectState>()(
         },
 
         hydrateProjectChapters: async (id) => {
+          // [Domain:Storage] In-flight guard — deduplicate concurrent hydration
+          // calls for the same project (e.g. WriterPage + StoryWorkspace on back-nav).
+          const existing = hydrateInFlight.get(id);
+          if (existing) return existing;
+
           const project = get().projects.find((item) => item.id === id);
           if (!project) return;
-          traceStoryDebugEvent({
-            domain: 'storage',
-            action: 'project.hydrate.start',
-            level: 'info',
-            summary: `Hydrating project chapters for ${id}.`,
-            details: {
-              projectId: id,
-              current: summarizeDebugChapters(project.chapters),
-              storageMode: project.storageMode,
-            },
-          });
-          const fullProject = await loadProjectWithFullChapters(project);
 
-          // [Domain:Storage] STEP — Determine if state needs updating
-          // Compare chapter-level content to detect hydration payload arriving
-          const currentChapters = project.chapters;
-          const loadedChapters = fullProject.chapters;
-          const currentWithContent = currentChapters.filter((c) => c.content?.trim()).length;
-          const loadedWithContent = loadedChapters.filter((c) => c.content?.trim()).length;
-
-          const shouldUpdate =
-            project.storageMode !== fullProject.storageMode ||
-            currentChapters.length !== loadedChapters.length ||
-            // [Domain:Storage] FIX — Also update when loaded has MORE content chapters
-            // Previously, when both sides had empty content, hydration was skipped
-            loadedWithContent > currentWithContent ||
-            currentChapters.some((chapter, index) => {
-              const next = loadedChapters[index];
-              if (!next) return true;
-              // Nội dung mới đến từ storage → cần update
-              if (next.content?.trim() && !chapter.content?.trim()) return true;
-              // Content hoặc summary thay đổi
-              return chapter.content !== next.content || chapter.summary !== next.summary;
-            });
-
-          if (!shouldUpdate) {
+          const run = (async () => {
             traceStoryDebugEvent({
               domain: 'storage',
-              action: 'project.hydrate.no_update',
+              action: 'project.hydrate.start',
               level: 'info',
-              summary: `Hydration found no newer chapter payloads for ${id}.`,
+              summary: `Hydrating project chapters for ${id}.`,
               details: {
                 projectId: id,
-                currentWithContent,
-                loadedWithContent,
-                loaded: summarizeDebugChapters(loadedChapters),
+                current: summarizeDebugChapters(project.chapters),
+                storageMode: project.storageMode,
               },
             });
-            return;
-          }
+            const fullProject = await loadProjectWithFullChapters(project);
 
-          // [Domain:Storage] STEP — Merge: giữ content tốt nhất giữa current state và loaded
-          // Tránh ghi đè content có sẵn bằng content rỗng từ hydration thất bại
-          const mergedChapters = loadedChapters.map((loaded) => {
-            const existing = currentChapters.find(
-              (c) => c.id === loaded.id ||
-                (c.sequenceNumber != null && c.sequenceNumber === loaded.sequenceNumber)
-            );
-            if (!existing) return loaded;
-            // Nếu loaded có content → dùng loaded; nếu không → giữ existing
-            return {
-              ...loaded,
-              content: loaded.content?.trim() ? loaded.content : existing.content,
-              summary: loaded.summary?.trim() ? loaded.summary : existing.summary,
-            };
-          });
+            // [Domain:Storage] STEP — Determine if state needs updating
+            // Compare chapter-level content to detect hydration payload arriving
+            const currentChapters = project.chapters;
+            const loadedChapters = fullProject.chapters;
+            const currentWithContent = currentChapters.filter((c) => c.content?.trim()).length;
+            const loadedWithContent = loadedChapters.filter((c) => c.content?.trim()).length;
 
-          // [Domain:Storage] FIX — Clear stale generationStatus: 'generating' after reload.
-          // When the app reloads mid-generation, the ephemeral generation store resets
-          // but chapter objects retain 'generating' in IndexedDB forever.
-          // Detect and recover: if no active generation process exists, transition
-          // stuck chapters to 'partial' (has content) or 'idle' (empty).
-          for (let i = 0; i < mergedChapters.length; i++) {
-            const ch = mergedChapters[i];
-            if (ch.generationStatus === 'generating') {
-              const hasContent = Boolean(ch.content?.trim());
-              mergedChapters[i] = {
-                ...ch,
-                generationStatus: hasContent ? 'partial' : 'idle',
-                generationStartedAt: undefined,
-              };
+            const shouldUpdate =
+              project.storageMode !== fullProject.storageMode ||
+              currentChapters.length !== loadedChapters.length ||
+              // [Domain:Storage] FIX — Also update when loaded has MORE content chapters
+              // Previously, when both sides had empty content, hydration was skipped
+              loadedWithContent > currentWithContent ||
+              currentChapters.some((chapter, index) => {
+                const next = loadedChapters[index];
+                if (!next) return true;
+                // Nội dung mới đến từ storage → cần update
+                if (next.content?.trim() && !chapter.content?.trim()) return true;
+                // Content hoặc summary thay đổi
+                return chapter.content !== next.content || chapter.summary !== next.summary;
+              });
+
+            if (!shouldUpdate) {
               traceStoryDebugEvent({
                 domain: 'storage',
-                action: 'project.hydrate.stale_generation_recovered',
-                level: 'warn',
-                summary: `Recovered stale generating chapter "${ch.title}" → ${hasContent ? 'partial' : 'idle'}.`,
+                action: 'project.hydrate.no_update',
+                level: 'info',
+                summary: `Hydration found no newer chapter payloads for ${id}.`,
                 details: {
                   projectId: id,
-                  chapterId: ch.id,
-                  chapterTitle: ch.title,
-                  hadContent: hasContent,
+                  currentWithContent,
+                  loadedWithContent,
+                  loaded: summarizeDebugChapters(loadedChapters),
                 },
               });
+              return;
             }
-          }
 
-          set((state) => ({
-            projects: updateProjectArray(state.projects, id, () => ({
+            // [Domain:Storage] STEP — Merge: giữ content tốt nhất giữa current state và loaded
+            // Tránh ghi đè content có sẵn bằng content rỗng từ hydration thất bại
+            const mergedChapters = loadedChapters.map((loaded) => {
+              const existing = currentChapters.find(
+                (c) => c.id === loaded.id ||
+                  (c.sequenceNumber != null && c.sequenceNumber === loaded.sequenceNumber)
+              );
+              if (!existing) return loaded;
+              // Nếu loaded có content → dùng loaded; nếu không → giữ existing
+              return {
+                ...loaded,
+                content: loaded.content?.trim() ? loaded.content : existing.content,
+                summary: loaded.summary?.trim() ? loaded.summary : existing.summary,
+              };
+            });
+
+            // [Domain:Storage] FIX — Clear stale generationStatus: 'generating' after reload.
+            // When the app reloads mid-generation, the ephemeral generation store resets
+            // but chapter objects retain 'generating' in IndexedDB forever.
+            // Detect and recover: if no active generation process exists, transition
+            // stuck chapters to 'partial' (has content) or 'idle' (empty).
+            for (let i = 0; i < mergedChapters.length; i++) {
+              const ch = mergedChapters[i];
+              if (ch.generationStatus === 'generating') {
+                const hasContent = Boolean(ch.content?.trim());
+                mergedChapters[i] = {
+                  ...ch,
+                  generationStatus: hasContent ? 'partial' : 'idle',
+                  generationStartedAt: undefined,
+                };
+                traceStoryDebugEvent({
+                  domain: 'storage',
+                  action: 'project.hydrate.stale_generation_recovered',
+                  level: 'warn',
+                  summary: `Recovered stale generating chapter "${ch.title}" → ${hasContent ? 'partial' : 'idle'}.`,
+                  details: {
+                    projectId: id,
+                    chapterId: ch.id,
+                    chapterTitle: ch.title,
+                    hadContent: hasContent,
+                  },
+                });
+              }
+            }
+
+            const hydratedProject = {
               ...fullProject,
               chapters: mergedChapters,
               updatedAt: project.updatedAt,
-            })),
-          }));
-          traceStoryDebugEvent({
-            domain: 'storage',
-            action: 'project.hydrate.updated',
-            level: 'info',
-            summary: `Hydration updated chapter payloads for ${id}.`,
-            details: {
-              projectId: id,
-              beforeContentChapters: currentWithContent,
-              loadedContentChapters: loadedWithContent,
-              merged: summarizeDebugChapters(mergedChapters),
-              storageMode: fullProject.storageMode,
-            },
-          });
+            };
 
-          // [Domain:Storage] STEP — Sync restored content to cloud
-          // If hydration brought back content that wasn't in state before
-          // (e.g. content was only in IndexedDB because provider was null
-          // during initial AI generation), push it to cloud now.
-          const restoredWithContent = mergedChapters.filter((c) => c.content?.trim()).length;
-          if (restoredWithContent > 0 && restoredWithContent > currentWithContent) {
-            console.log('[hydrateProjectChapters] Content restored — syncing to cloud', {
-              projectId: id,
-              before: currentWithContent,
-              after: restoredWithContent,
-            });
+            set((state) => ({
+              projects: state.projects.map((item) => (item.id === id ? hydratedProject : item)),
+            }));
             traceStoryDebugEvent({
               domain: 'storage',
-              action: 'project.hydrate.restored_content_sync',
+              action: 'project.hydrate.updated',
               level: 'info',
-              summary: 'Hydration restored chapter content and queued cloud sync.',
+              summary: `Hydration updated chapter payloads for ${id}.`,
               details: {
+                projectId: id,
+                beforeContentChapters: currentWithContent,
+                loadedContentChapters: loadedWithContent,
+                merged: summarizeDebugChapters(mergedChapters),
+                storageMode: fullProject.storageMode,
+              },
+            });
+
+            // [Domain:Storage] STEP — Sync restored content to cloud
+            // If hydration brought back content that wasn't in state before
+            // (e.g. content was only in IndexedDB because provider was null
+            // during initial AI generation), push it to cloud now.
+            const restoredWithContent = mergedChapters.filter((c) => c.content?.trim()).length;
+            const provider = useStorageStore.getState().provider;
+            if (
+              restoredWithContent > 0 &&
+              restoredWithContent > currentWithContent &&
+              fullProject.storageMode !== 'provider' &&
+              provider &&
+              restoredWithContent <= MAX_AUTO_RESTORED_CONTENT_SYNC_CHAPTERS
+            ) {
+              console.log('[hydrateProjectChapters] Content restored — syncing to cloud', {
                 projectId: id,
                 before: currentWithContent,
                 after: restoredWithContent,
+              });
+              traceStoryDebugEvent({
+                domain: 'storage',
+                action: 'project.hydrate.restored_content_sync',
+                level: 'info',
+                summary: 'Hydration restored chapter content and queued cloud sync.',
+                details: {
+                  projectId: id,
+                  before: currentWithContent,
+                  after: restoredWithContent,
+                },
+              });
+              void persistProjectChapters(id, mergedChapters);
+            }
+          })();
+
+          hydrateInFlight.set(id, run);
+          try {
+            await run;
+          } finally {
+            // [Domain:Storage] Clear in-flight entry so next intentional hydration
+            // (e.g. after a project switch) is not accidentally de-duped.
+            hydrateInFlight.delete(id);
+          }
+        },
+
+        syncProjectsFromProvider: async () => {
+          if (providerProjectSyncInFlight) return providerProjectSyncInFlight;
+
+          const provider = useStorageStore.getState().provider;
+          if (!provider) return;
+
+          const run = (async () => {
+            traceStoryDebugEvent({
+              domain: 'storage',
+              action: 'projects.provider_sync.start',
+              level: 'info',
+              summary: 'Syncing project list from storage provider.',
+              details: { providerMode: provider.mode },
+            });
+
+            const summaries = await provider.listProjects();
+            if (summaries.length === 0) {
+              traceStoryDebugEvent({
+                domain: 'storage',
+                action: 'projects.provider_sync.empty',
+                level: 'info',
+                summary: 'Provider returned no projects; keeping local project list.',
+                details: { providerMode: provider.mode },
+              });
+              return;
+            }
+
+            const providerProjects = (
+              await Promise.all(
+                summaries.map(async (summary) => {
+                  try {
+                    return await provider.getProject(summary.id);
+                  } catch (error) {
+                    console.warn(
+                      `[syncProjectsFromProvider] Provider getProject failed for ${summary.id}:`,
+                      error instanceof Error ? error.message : error,
+                    );
+                    return null;
+                  }
+                }),
+              )
+            ).filter((project): project is Project => Boolean(project));
+
+            if (providerProjects.length === 0) {
+              traceStoryDebugEvent({
+                domain: 'storage',
+                action: 'projects.provider_sync.no_metadata',
+                level: 'warn',
+                summary: 'Provider listed projects but no metadata could be loaded.',
+                details: {
+                  providerMode: provider.mode,
+                  summaryCount: summaries.length,
+                },
+              });
+              return;
+            }
+
+            set((state) => {
+              const projects = mergeProviderProjects(state.projects, providerProjects);
+              const activeProjectId = projects.some((project) => project.id === state.activeProjectId)
+                ? state.activeProjectId
+                : providerProjects[0]?.id ?? projects[0]?.id ?? null;
+
+              return {
+                projects,
+                activeProjectId,
+              };
+            });
+
+            traceStoryDebugEvent({
+              domain: 'storage',
+              action: 'projects.provider_sync.success',
+              level: 'info',
+              summary: 'Project list synced from storage provider.',
+              details: {
+                providerMode: provider.mode,
+                providerCount: providerProjects.length,
+                finalCount: get().projects.length,
+                activeProjectId: get().activeProjectId,
               },
             });
-            void persistProjectChapters(id, mergedChapters);
+          })();
+
+          providerProjectSyncInFlight = run;
+          try {
+            await run;
+          } finally {
+            providerProjectSyncInFlight = null;
           }
         },
 
@@ -1807,7 +1966,7 @@ export const useProjectStore = create<ProjectState>()(
               domain: 'storage',
               action: 'project_store.rehydrate.auto_hydrate',
               level: 'info',
-              summary: 'Auto-hydrating active project after project store rehydrate.',
+              summary: 'Auto-syncing provider projects and hydrating active project after project store rehydrate.',
               details: {
                 projectId,
                 providerReady,
@@ -1815,15 +1974,32 @@ export const useProjectStore = create<ProjectState>()(
               },
             });
 
-            // [Domain:Storage] STEP 2 — Hydrate (will use provider if available, IndexedDB fallback otherwise)
-            useProjectStore.getState().hydrateProjectChapters(projectId)
+            // [Domain:Storage] STEP 2 — Pull provider project metadata before hydrating.
+            // This prevents an old/local seed project from being the only visible item
+            // in "Kho truyện" when Supabase already has the user's real projects.
+            await useProjectStore.getState().syncProjectsFromProvider().catch((err) => {
+              console.warn('[onRehydrateStorage] Provider project sync failed:', err);
+              traceStoryDebugEvent({
+                domain: 'storage',
+                action: 'project_store.rehydrate.provider_sync_failed',
+                level: 'warn',
+                summary: 'Provider project sync failed during project store rehydrate.',
+                details: { projectId, error: err },
+              });
+            });
+
+            const activeProjectId = useProjectStore.getState().activeProjectId ?? projectId;
+            if (!activeProjectId) return;
+
+            // [Domain:Storage] STEP 3 — Hydrate (will use provider if available, IndexedDB fallback otherwise)
+            useProjectStore.getState().hydrateProjectChapters(activeProjectId)
               .then(() => {
-                // [Domain:Storage] STEP 3 — After hydration restores content,
+                // [Domain:Storage] STEP 4 — After hydration restores content,
                 // trigger metadata sync so project metadata (title, world,
                 // characters, etc.) also reaches Supabase. The allChaptersStripped
                 // guard is removed, so this will succeed even if some chapters
                 // are still stripped.
-                void syncProjectMetadataToProvider(projectId);
+                void syncProjectMetadataToProvider(activeProjectId);
               })
               .catch((err) => {
                 console.warn('[onRehydrateStorage] Auto-hydrate failed:', err);
@@ -1832,7 +2008,7 @@ export const useProjectStore = create<ProjectState>()(
                   action: 'project_store.rehydrate.auto_hydrate_failed',
                   level: 'error',
                   summary: 'Auto-hydrate failed after project store rehydrate.',
-                  details: { projectId, error: err },
+                  details: { projectId: activeProjectId, error: err },
                 });
               });
           });

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const hydrateProjectChapters = vi.fn();
+const syncProjectsFromProvider = vi.fn(async () => undefined);
 const init = vi.fn(async () => undefined);
 const dispose = vi.fn(async () => undefined);
 
@@ -35,6 +36,7 @@ vi.mock('./use_project_store', () => ({
     getState: () => ({
       activeProjectId: 'project-1',
       hydrateProjectChapters,
+      syncProjectsFromProvider,
     }),
   },
 }));
@@ -72,6 +74,7 @@ describe('use_storage_store', () => {
     await Promise.resolve();
 
     expect(init).toHaveBeenCalledOnce();
+    expect(syncProjectsFromProvider).toHaveBeenCalledOnce();
     expect(hydrateProjectChapters).toHaveBeenCalledWith('project-1');
   });
 
@@ -92,6 +95,7 @@ describe('use_storage_store', () => {
     expect(init).toHaveBeenCalledTimes(2);
     expect(dispose).toHaveBeenCalledTimes(1);
     expect(useStorageStore.getState().providerUserId).toBe('user-2');
+    expect(syncProjectsFromProvider).toHaveBeenCalledTimes(2);
     expect(hydrateProjectChapters).toHaveBeenCalledTimes(2);
   });
 });

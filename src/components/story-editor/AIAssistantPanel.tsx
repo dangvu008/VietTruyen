@@ -59,52 +59,57 @@ import {
   Play,
   X,
   RotateCcw,
+  Wand2,
+  RefreshCcw,
+  HelpCircle,
+  BookOpen,
 } from 'lucide-react';
 import VoiceMicButton from '../shared/VoiceMicButton';
 import { createId } from '../../core/id';
 import { useNotificationStore } from '../../store/use_notification_store';
+import { useTranslation } from '../../hooks/use_translation';
 
 /* ── Status badge styling ─────────────────────────────── */
 const STATUS_META: Record<ChapterUIStatus, { label: string; badge: string; dot: string }> = {
   empty: {
-    label: 'Trống',
+    label: 'aiAssistantPanel.statusEmpty',
     badge: 'border-white/10 bg-white/[0.03] text-[#8f7f73]',
     dot: 'bg-white/20',
   },
   'ai-draft': {
-    label: 'AI nháp',
+    label: 'aiAssistantPanel.statusAiDraft',
     badge: 'border-[#c6a6ff]/15 bg-[#c6a6ff]/10 text-[#ceb9f4]',
     dot: 'bg-[#c6a6ff]',
   },
   generating: {
-    label: 'Đang tạo',
+    label: 'aiAssistantPanel.statusGenerating',
     badge: 'border-[#f0c59a]/20 bg-[#f0c59a]/10 text-[#f0c59a]',
     dot: 'bg-[#f0c59a] animate-pulse',
   },
   interrupted: {
-    label: 'Tạo dở',
+    label: 'aiAssistantPanel.statusIncomplete',
     badge: 'border-amber-500/25 bg-amber-500/10 text-amber-300',
     dot: 'bg-amber-300',
   },
   reviewing: {
-    label: 'Đang sửa',
+    label: 'aiAssistantPanel.statusEditing',
     badge: 'border-[#f0c59a]/15 bg-[#f0c59a]/10 text-[#f0c59a]',
     dot: 'bg-[#f0c59a]',
   },
   edited: {
-    label: 'Đã viết',
+    label: 'aiAssistantPanel.statusWritten',
     badge: 'border-[#90b7ff]/15 bg-[#90b7ff]/10 text-[#a8c6ff]',
     dot: 'bg-[#90b7ff]',
   },
   approved: {
-    label: 'Hoàn tất',
-    badge: 'border-[#69d2a4]/15 bg-[#69d2a4]/10 text-[#7ce0b3]',
-    dot: 'bg-[#69d2a4]',
+    label: 'aiAssistantPanel.statusComplete',
+    badge: 'border-green-500/15 bg-green-500/10 text-green-300',
+    dot: 'bg-green-500',
   },
   published: {
-    label: 'Đã xuất bản',
-    badge: 'border-[#7fd7ff]/15 bg-[#7fd7ff]/10 text-[#9addff]',
-    dot: 'bg-[#7fd7ff]',
+    label: 'aiAssistantPanel.statusPublished',
+    badge: 'border-white/20 bg-white/10 text-white',
+    dot: 'bg-white',
   },
 };
 
@@ -153,8 +158,9 @@ interface Props {
 type RightPanelTab = 'chapters' | 'muse';
 
 interface QuickActionConfig {
+  id: string;
   label: string;
-  icon: string;
+  icon: React.ReactNode;
   prompt: string;
   scope: PromptScope;
   requiresSelection?: boolean;
@@ -162,49 +168,50 @@ interface QuickActionConfig {
 
 const WRITING_ACTIONS: QuickActionConfig[] = [
   {
-    label: 'Viết tiếp',
-    icon: '✍️',
+    id: 'continue',
+    label: 'aiAssistantPanel.actionContinue',
+    icon: <Play className="h-3 w-3" />,
     prompt: 'Viết tiếp chương này với nhịp kể tự nhiên và giữ đúng giọng văn hiện tại.',
     scope: 'chapter',
   },
   {
-    label: 'Mở rộng cảnh',
-    icon: '🌿',
+    id: 'expand',
+    label: 'aiAssistantPanel.actionExpand',
+    icon: <Wand2 className="h-3 w-3" />,
     prompt: 'Mở rộng cảnh này bằng chi tiết cảm xúc, hành động và bối cảnh nhưng không làm lệch sự kiện chính.',
-    scope: 'chapter',
-  },
-  {
-    label: 'Viết lại đoạn chọn',
-    icon: '🪄',
-    prompt: 'Viết lại đoạn đang chọn, giữ ý chính nhưng làm câu chữ rõ, mượt và giàu nhịp hơn.',
     scope: 'fragment',
     requiresSelection: true,
   },
   {
-    label: 'Plot Q&A',
-    icon: '💡',
-    prompt: 'Hãy trả lời câu hỏi về cốt truyện, nhân vật hoặc diễn biến. Tôi muốn hỏi:',
-    scope: 'story',
+    id: 'rewrite',
+    label: 'aiAssistantPanel.actionRewrite',
+    icon: <RefreshCcw className="h-3 w-3" />,
+    prompt: 'Viết lại đoạn đang chọn, giữ ý chính nhưng làm câu chữ rõ, mượt và giàu nhịp hơn.',
+    scope: 'fragment',
+    requiresSelection: true,
   },
 ];
 
 const READING_ACTIONS: QuickActionConfig[] = [
   {
-    label: 'Tóm tắt chương',
-    icon: '📝',
+    id: 'ask_plot',
+    label: 'aiAssistantPanel.actionPlotQA',
+    icon: <HelpCircle className="h-3 w-3" />,
+    prompt: 'Hãy trả lời câu hỏi về cốt truyện, nhân vật hoặc diễn biến. Tôi muốn hỏi:',
+    scope: 'story',
+  },
+  {
+    id: 'summarize_chapter',
+    label: 'aiAssistantPanel.actionSummarizeChapter',
+    icon: <FileText className="h-3 w-3" />,
     prompt: 'Tóm tắt chương đang mở thành các ý chính ngắn gọn, rõ mạch sự kiện và cảm xúc.',
     scope: 'chapter',
   },
   {
-    label: 'Tóm tắt truyện',
-    icon: '🧭',
+    id: 'summarize_story',
+    label: 'aiAssistantPanel.actionSummarizeStory',
+    icon: <BookOpen className="h-3 w-3" />,
     prompt: 'Tóm tắt toàn bộ truyện đến thời điểm hiện tại: mạch chính, bước ngoặt, trạng thái nhân vật và xung đột đang mở.',
-    scope: 'story',
-  },
-  {
-    label: 'Plot Q&A',
-    icon: '💡',
-    prompt: 'Hãy trả lời câu hỏi về cốt truyện, nhân vật hoặc diễn biến. Tôi muốn hỏi:',
     scope: 'story',
   },
 ];
@@ -232,6 +239,7 @@ interface PendingScopeConfirmation {
 }
 
 const STREAM_STALE_AFTER_MS = 15_000;
+const STREAM_MESSAGE_RENDER_INTERVAL_MS = 120;
 
 function formatTokenCount(tokens: number): string {
   if (tokens >= 1000) return `${(tokens / 1000).toFixed(1)}K`;
@@ -338,6 +346,7 @@ function buildEditorSuccessNotificationTitle(isQuestion: boolean, instruction: s
 }
 
 export function AIAssistantPanel(props: Props) {
+  const { t } = useTranslation();
   const {
     editorMode,
     chapterContent,
@@ -435,9 +444,28 @@ export function AIAssistantPanel(props: Props) {
     () => getModelForTask('polish_style', models, undefined, activeModelId, taskModelOverrides, modelHealth, [], preferredProvider),
     [models, activeModelId, taskModelOverrides, modelHealth, preferredProvider],
   );
-  const resolvedStorySource = useMemo(
-    () => buildNovelPolishStorySource(storySourceChapters ?? chapters),
-    [chapters, storySourceChapters],
+  const storySourceCandidates = storySourceChapters ?? chapters;
+  const storySourceCharCount = useMemo(
+    () => storySourceCandidates.reduce((sum, chapter) => {
+      const content = chapter.id === selectedChapterId ? chapterContent : chapter.content || '';
+      return sum + content.trim().length;
+    }, 0),
+    [chapterContent, selectedChapterId, storySourceCandidates],
+  );
+  const hasStorySource = storySourceCharCount > 0;
+  const buildResolvedStorySource = useCallback(
+    () => buildNovelPolishStorySource(
+      storySourceCandidates.map((chapter) => (
+        chapter.id === selectedChapterId
+          ? {
+            ...chapter,
+            content: chapterContent,
+            title: chapterTitle || chapter.title,
+          }
+          : chapter
+      )),
+    ),
+    [chapterContent, chapterTitle, selectedChapterId, storySourceCandidates],
   );
 
   // [Domain:StoryEditor] STEP 1 — Auto-scroll to bottom on new messages
@@ -559,10 +587,10 @@ export function AIAssistantPanel(props: Props) {
     const renameChapter = onRenameChapter;
     const titleCommand = renameChapter
       ? resolveChapterTitleCommand({
-          instruction,
-          messages,
-          currentTitle: chapterTitle,
-        })
+        instruction,
+        messages,
+        currentTitle: chapterTitle,
+      })
       : null;
 
     if (titleCommand && renameChapter) {
@@ -609,12 +637,12 @@ export function AIAssistantPanel(props: Props) {
     const scopeInference = options.scopeOverride
       ? null
       : inferPromptScopeForInstruction({
-          instruction,
-          currentScope: scope,
-          selection,
-          chapterContent,
-          chapterCount: (storySourceChapters ?? chapters).length,
-        });
+        instruction,
+        currentScope: scope,
+        selection,
+        chapterContent,
+        chapterCount: (storySourceChapters ?? chapters).length,
+      });
     if (scopeInference?.needsConfirmation) {
       setPendingScopeConfirmation({
         instruction,
@@ -688,6 +716,7 @@ export function AIAssistantPanel(props: Props) {
     };
     const updatedMessages = [...messages, userMessage, streamingAssistantMsg];
     let latestAssistantContent = '';
+    let flushStreamingMessage: () => void = () => undefined;
     onMessagesChange(updatedMessages);
     setStreamRuntime({
       messageId: assistantMessageId,
@@ -716,23 +745,23 @@ export function AIAssistantPanel(props: Props) {
         selection,
         storyBudget: runScope === 'story'
           ? (() => {
-              const tokenBudget = Math.min(
-                contextSize || 16000,
-                selectedModel.contextWindow ?? (contextSize || 16000),
-              );
-              const totalChars = estimateStoryContextCharBudget(tokenBudget);
-              return {
-                totalChars,
-                activeChapterChars: estimateActiveChapterCharBudget(totalChars),
-                inactiveChapterFloorChars: 1200,
-              };
-            })()
+            const tokenBudget = Math.min(
+              contextSize || 16000,
+              selectedModel.contextWindow ?? (contextSize || 16000),
+            );
+            const totalChars = estimateStoryContextCharBudget(tokenBudget);
+            return {
+              totalChars,
+              activeChapterChars: estimateActiveChapterCharBudget(totalChars),
+              inactiveChapterFloorChars: 1200,
+            };
+          })()
           : undefined,
         chapterNeighborContext: isCreativeContinuation && runScope === 'chapter'
           ? {
-              includePrevious: true,
-              previousChars: 5200,
-            }
+            includePrevious: true,
+            previousChars: 5200,
+          }
           : undefined,
       });
       const conversationHistory = buildStoryEditorChatTranscript(messages);
@@ -782,6 +811,25 @@ QUY TẮC BÁM NGỮ CẢNH:
       });
 
       const latestMessagesRef = updatedMessages;
+      let pendingStreamingMessages: ChatMessage[] | null = null;
+      let streamingRenderTimer: ReturnType<typeof setTimeout> | null = null;
+      flushStreamingMessage = () => {
+        if (!pendingStreamingMessages) return;
+        onMessagesChange(pendingStreamingMessages);
+        pendingStreamingMessages = null;
+        if (streamingRenderTimer) {
+          clearTimeout(streamingRenderTimer);
+          streamingRenderTimer = null;
+        }
+      };
+      const scheduleStreamingMessageRender = (nextMessages: ChatMessage[]) => {
+        pendingStreamingMessages = nextMessages;
+        if (streamingRenderTimer) return;
+        streamingRenderTimer = setTimeout(() => {
+          streamingRenderTimer = null;
+          flushStreamingMessage();
+        }, STREAM_MESSAGE_RENDER_INTERVAL_MS);
+      };
 
       const result = await callAiStreaming({
         provider: selectedModel.provider,
@@ -799,11 +847,11 @@ QUY TẮC BÁM NGỮ CẢNH:
           setStreamRuntime((current) =>
             current?.messageId === assistantMessageId
               ? {
-                  ...current,
-                  lastChunkAt: Date.now(),
-                  streamedChars: accumulated.length,
-                  chunkCount: current.chunkCount + 1,
-                }
+                ...current,
+                lastChunkAt: Date.now(),
+                streamedChars: accumulated.length,
+                chunkCount: current.chunkCount + 1,
+              }
               : current,
           );
           const nextMessages = latestMessagesRef.map((msg) =>
@@ -811,26 +859,27 @@ QUY TẮC BÁM NGỮ CẢNH:
               ? { ...msg, content: accumulated, isStreaming: true }
               : msg,
           );
-          onMessagesChange(nextMessages);
+          scheduleStreamingMessageRender(nextMessages);
         },
       });
 
+      flushStreamingMessage();
       // [Domain:StoryEditor] STEP — Finalize the message
       const finalContent = result.text.trim();
       setStreamRuntime(null);
       const finalMessages = latestMessagesRef.map((msg) =>
         msg.id === assistantMessageId
           ? {
-              ...msg,
-              content: finalContent,
-              isStreaming: false,
-              isPartialStop: !result.completed,
-              canInsertToDraft: result.completed && !isQuestion && runScope !== 'story' && Boolean(finalContent.trim()),
-              insertScope: runScope,
-              tokenCount: result.usage
-                ? result.usage.inputTokens + result.usage.outputTokens
-                : Math.ceil(finalContent.length / 2),
-            }
+            ...msg,
+            content: finalContent,
+            isStreaming: false,
+            isPartialStop: !result.completed,
+            canInsertToDraft: result.completed && !isQuestion && runScope !== 'story' && Boolean(finalContent.trim()),
+            insertScope: runScope,
+            tokenCount: result.usage
+              ? result.usage.inputTokens + result.usage.outputTokens
+              : Math.ceil(finalContent.length / 2),
+          }
           : msg,
       );
       onMessagesChange(finalMessages);
@@ -858,6 +907,7 @@ QUY TẮC BÁM NGỮ CẢNH:
         }
       }
     } catch (err) {
+      flushStreamingMessage();
       const shouldPreserveStoppedState = useGenerationStore.getState().canResume;
       if (!shouldPreserveStoppedState) {
         finishStream();
@@ -868,11 +918,11 @@ QUY TẮC BÁM NGỮ CẢNH:
         const failedMessages = updatedMessages.map((msg) =>
           msg.id === assistantMessageId
             ? {
-                ...msg,
-                content: partialContent,
-                isStreaming: false,
-                isPartialStop: true,
-                tokenCount: Math.ceil(partialContent.length / 2),
+              ...msg,
+              content: partialContent,
+              isStreaming: false,
+              isPartialStop: true,
+              tokenCount: Math.ceil(partialContent.length / 2),
             }
             : msg,
         );
@@ -951,29 +1001,30 @@ QUY TẮC BÁM NGỮ CẢNH:
     sourceScope: NovelPolishSourceScope;
   }) => {
     const activeMode = getNovelPolishMode(mode);
-    const chunks = splitNovelPolishRawText(rawText);
+    const resolvedStorySource = sourceScope === 'story' ? buildResolvedStorySource() : null;
+    const chunks = sourceScope === 'story' ? [] : splitNovelPolishRawText(rawText);
     const selectionForReplacement =
       sourceScope === 'selection' && selection?.text?.trim()
         ? {
-            start: selection.start,
-            end: selection.end,
-            text: selection.text.trim(),
-          }
+          start: selection.start,
+          end: selection.end,
+          text: selection.text.trim(),
+        }
         : sourceScope === 'chapter' && chapterContent.trim()
           ? {
-              start: 0,
-              end: chapterContent.length,
-              text: chapterContent,
-            }
+            start: 0,
+            end: chapterContent.length,
+            text: chapterContent,
+          }
           : null;
-    const instruction = sourceScope === 'story'
+    const instruction = sourceScope === 'story' && resolvedStorySource
       ? `Chạy preset "${activeMode.label}" cho toàn bộ truyện (${resolvedStorySource.chapters.length} chương có nội dung).`
       : buildNovelPolishInstruction({
-          mode,
-          rawText,
-          chunkIndex: chunks.length > 1 ? 1 : undefined,
-          chunkCount: chunks.length > 1 ? chunks.length : undefined,
-        });
+        mode,
+        rawText,
+        chunkIndex: chunks.length > 1 ? 1 : undefined,
+        chunkCount: chunks.length > 1 ? chunks.length : undefined,
+      });
     setPolishAutoCollapseSignal((current) => current + 1);
     setPolishInstruction(instruction);
     setPolishModeId(mode);
@@ -983,7 +1034,7 @@ QUY TẮC BÁM NGỮ CẢNH:
     setPolishStoryRewrites([]);
     setPolishReplacementSelection(selectionForReplacement);
 
-    if (sourceScope === 'story' && resolvedStorySource.chapters.length === 0) {
+    if (sourceScope === 'story' && (!resolvedStorySource || resolvedStorySource.chapters.length === 0)) {
       setPolishModeId(null);
       setPolishSourceScope(null);
       setPolishError('Chưa có chương nào có nội dung để chạy preset cho toàn bộ truyện.');
@@ -1052,6 +1103,10 @@ QUY TẮC TRAU CHUỐT:
       };
 
       if (sourceScope === 'story') {
+        if (!resolvedStorySource) {
+          throw new Error('Chưa có nguồn toàn truyện để trau chuốt.');
+        }
+
         const chapterResults: Array<{ chapterId: string; title: string; content: string }> = [];
         for (let chapterIndex = 0; chapterIndex < resolvedStorySource.chapters.length; chapterIndex += 1) {
           const storyChapter = resolvedStorySource.chapters[chapterIndex];
@@ -1157,12 +1212,12 @@ QUY TẮC TRAU CHUỐT:
     const nextMessages = messages.map((msg) => (
       msg.id === activeMessageId
         ? {
-            ...msg,
-            content: partialText || msg.content,
-            isStreaming: false,
-            isPartialStop: true,
-            tokenCount: msg.tokenCount ?? Math.ceil((partialText || msg.content).length / 2),
-          }
+          ...msg,
+          content: partialText || msg.content,
+          isStreaming: false,
+          isPartialStop: true,
+          tokenCount: msg.tokenCount ?? Math.ceil((partialText || msg.content).length / 2),
+        }
         : msg
     ));
     onMessagesChange(nextMessages);
@@ -1191,6 +1246,25 @@ QUY TẮC TRAU CHUỐT:
     );
     const messagesWithResume = [...updatedMessages, resumeMsg];
     let latestContinuationContent = '';
+    let pendingResumeMessages: ChatMessage[] | null = null;
+    let resumeRenderTimer: ReturnType<typeof setTimeout> | null = null;
+    const flushResumeMessage = () => {
+      if (!pendingResumeMessages) return;
+      onMessagesChange(pendingResumeMessages);
+      pendingResumeMessages = null;
+      if (resumeRenderTimer) {
+        clearTimeout(resumeRenderTimer);
+        resumeRenderTimer = null;
+      }
+    };
+    const scheduleResumeMessageRender = (nextMessages: ChatMessage[]) => {
+      pendingResumeMessages = nextMessages;
+      if (resumeRenderTimer) return;
+      resumeRenderTimer = setTimeout(() => {
+        resumeRenderTimer = null;
+        flushResumeMessage();
+      }, STREAM_MESSAGE_RENDER_INTERVAL_MS);
+    };
     onMessagesChange(messagesWithResume);
     setStreamRuntime({
       messageId: resumeMessageId,
@@ -1223,11 +1297,11 @@ QUY TẮC TRAU CHUỐT:
           setStreamRuntime((current) =>
             current?.messageId === resumeMessageId
               ? {
-                  ...current,
-                  lastChunkAt: Date.now(),
-                  streamedChars: accumulated.length,
-                  chunkCount: current.chunkCount + 1,
-                }
+                ...current,
+                lastChunkAt: Date.now(),
+                streamedChars: accumulated.length,
+                chunkCount: current.chunkCount + 1,
+              }
               : current,
           );
           const nextMessages = messagesWithResume.map((msg) =>
@@ -1235,25 +1309,26 @@ QUY TẮC TRAU CHUỐT:
               ? { ...msg, content: accumulated, isStreaming: true }
               : msg,
           );
-          onMessagesChange(nextMessages);
+          scheduleResumeMessageRender(nextMessages);
         },
       });
 
+      flushResumeMessage();
       const continuedContent = result.text.trim();
       setStreamRuntime(null);
       const finalMessages = messagesWithResume.map((msg) =>
         msg.id === resumeMessageId
           ? {
-              ...msg,
-              content: continuedContent,
-              isStreaming: false,
-              isPartialStop: !result.completed,
-              canInsertToDraft: false,
-              insertScope: context.scope,
-              tokenCount: result.usage
-                ? result.usage.inputTokens + result.usage.outputTokens
-                : Math.ceil(continuedContent.length / 2),
-            }
+            ...msg,
+            content: continuedContent,
+            isStreaming: false,
+            isPartialStop: !result.completed,
+            canInsertToDraft: false,
+            insertScope: context.scope,
+            tokenCount: result.usage
+              ? result.usage.inputTokens + result.usage.outputTokens
+              : Math.ceil(continuedContent.length / 2),
+          }
           : msg,
       );
       onMessagesChange(finalMessages);
@@ -1278,6 +1353,7 @@ QUY TẮC TRAU CHUỐT:
         }
       }
     } catch (err) {
+      flushResumeMessage();
       const shouldPreserveStoppedState = useGenerationStore.getState().canResume;
       if (!shouldPreserveStoppedState) {
         finishStream();
@@ -1288,11 +1364,11 @@ QUY TẮC TRAU CHUỐT:
         const failedResumeMessages = messagesWithResume.map((msg) =>
           msg.id === resumeMessageId
             ? {
-                ...msg,
-                content: partialContinuation,
-                isStreaming: false,
-                isPartialStop: true,
-                tokenCount: Math.ceil(partialContinuation.length / 2),
+              ...msg,
+              content: partialContinuation,
+              isStreaming: false,
+              isPartialStop: true,
+              tokenCount: Math.ceil(partialContinuation.length / 2),
             }
             : msg,
         );
@@ -1325,11 +1401,10 @@ QUY TẮC TRAU CHUỐT:
           <button
             type="button"
             onClick={() => setActiveTab('chapters')}
-            className={`flex h-8 items-center justify-center gap-1.5 rounded-full text-[12px] font-semibold tracking-wide transition ${
-              activeTab === 'chapters'
-                ? 'bg-[#251d18] text-accent-amber shadow-sm'
-                : 'text-[#8f7f73] hover:text-[#c8beb0]'
-            }`}
+            className={`flex h-8 items-center justify-center gap-1.5 rounded-full text-[12px] font-semibold tracking-wide transition ${activeTab === 'chapters'
+              ? 'bg-[#251d18] text-accent-amber shadow-sm'
+              : 'text-[#8f7f73] hover:text-[#c8beb0]'
+              }`}
           >
             <Book className="h-4 w-4" />
             Mục lục
@@ -1337,11 +1412,10 @@ QUY TẮC TRAU CHUỐT:
           <button
             type="button"
             onClick={() => setActiveTab('muse')}
-            className={`flex h-8 items-center justify-center gap-1.5 rounded-full text-[12px] font-semibold tracking-wide transition ${
-              activeTab === 'muse'
-                ? 'bg-[#251d18] text-accent-amber shadow-sm'
-                : 'text-[#8f7f73] hover:text-[#c8beb0]'
-            }`}
+            className={`flex h-8 items-center justify-center gap-1.5 rounded-full text-[12px] font-semibold tracking-wide transition ${activeTab === 'muse'
+              ? 'bg-[#251d18] text-accent-amber shadow-sm'
+              : 'text-[#8f7f73] hover:text-[#c8beb0]'
+              }`}
           >
             <Sparkles className="h-4 w-4" />
             Trợ lý AI
@@ -1373,11 +1447,10 @@ QUY TẮC TRAU CHUỐT:
                     key={f}
                     type="button"
                     onClick={() => setChapterFilterStatus(f)}
-                    className={`h-7 rounded-full px-2 text-[10px] font-medium transition-colors ${
-                      chapterFilterStatus === f
-                        ? 'bg-[#f0c59a] text-[#2a1c14]'
-                        : 'border border-white/[0.06] bg-white/[0.02] text-[#8f7f73] hover:text-[#d0c6bd]'
-                    }`}
+                    className={`h-7 rounded-full px-2 text-[10px] font-medium transition-colors ${chapterFilterStatus === f
+                      ? 'bg-[#f0c59a] text-[#2a1c14]'
+                      : 'border border-white/[0.06] bg-white/[0.02] text-[#8f7f73] hover:text-[#d0c6bd]'
+                      }`}
                   >
                     {f === 'all' ? 'Tất cả' : f === 'empty' ? 'Trống' : f === 'edited' ? 'Viết' : 'Xong'}
                   </button>
@@ -1421,11 +1494,10 @@ QUY TẮC TRAU CHUỐT:
                       )}
 
                       <div
-                        className={`w-full rounded-2xl border px-3 py-3 text-left transition-all ${
-                          isSelected
-                            ? 'border-[#f0c59a]/18 bg-[#f0c59a]/10 shadow-[0_8px_24px_rgba(240,197,154,0.08)]'
-                            : 'border-white/[0.04] bg-white/[0.02] hover:border-white/[0.08] hover:bg-white/[0.04]'
-                        }`}
+                        className={`w-full rounded-2xl border px-3 py-3 text-left transition-all ${isSelected
+                          ? 'border-[#f0c59a]/18 bg-[#f0c59a]/10 shadow-[0_8px_24px_rgba(240,197,154,0.08)]'
+                          : 'border-white/[0.04] bg-white/[0.02] hover:border-white/[0.08] hover:bg-white/[0.04]'
+                          }`}
                       >
                         <div className="flex items-start justify-between gap-2">
                           <button
@@ -1434,9 +1506,8 @@ QUY TẮC TRAU CHUỐT:
                             className="min-w-0 flex-1 text-left"
                           >
                             <div className="flex items-center gap-2">
-                              <span className={`inline-flex h-6 min-w-[34px] items-center justify-center rounded-full px-2 text-[10px] font-bold ${
-                                isSelected ? 'bg-[#f0c59a] text-[#2a1c14]' : 'bg-white/[0.05] text-[#8f7f73]'
-                              }`}>
+                              <span className={`inline-flex h-6 min-w-[34px] items-center justify-center rounded-full px-2 text-[10px] font-bold ${isSelected ? 'bg-[#f0c59a] text-[#2a1c14]' : 'bg-white/[0.05] text-[#8f7f73]'
+                                }`}>
                                 {String(sequence).padStart(2, '0')}
                               </span>
                               <div className={`h-1.5 w-1.5 rounded-full ${meta.dot}`} />
@@ -1493,19 +1564,19 @@ QUY TẮC TRAU CHUỐT:
                             <button type="button"
                               onClick={async (e) => { e.stopPropagation(); await onToggleChapterFavorite?.(chapter.id); setChapterMenuId(null); }}
                               className="flex w-full items-center gap-2.5 px-3 py-2 text-[12px] text-[#d0c6bd] hover:bg-white/[0.06]">
-                              <Star className={`h-3.5 w-3.5 ${chapter.isFavorite ? 'fill-accent-amber text-accent-amber' : 'text-[#8f7f73]'}`} /> 
-                              {chapter.isFavorite ? 'Bỏ yêu thích' : 'Đánh dấu yêu thích'}
+                              <Star className={`h-3.5 w-3.5 ${chapter.isFavorite ? 'fill-accent-amber text-accent-amber' : 'text-[#8f7f73]'}`} />
+                              {chapter.isFavorite ? t('chapter.unfavorite') : t('chapter.favorite')}
                             </button>
                             <div className="mx-3 my-1 border-t border-white/[0.05]" />
                             <button type="button"
                               onClick={async (e) => { e.stopPropagation(); await onDuplicateChapter?.(chapter); setChapterMenuId(null); }}
                               className="flex w-full items-center gap-2.5 px-3 py-2 text-[12px] text-[#d0c6bd] hover:bg-white/[0.06]">
-                              <Copy className="h-3.5 w-3.5 text-[#8f7f73]" /> Nhân bản
+                              <Copy className="h-3.5 w-3.5 text-[#8f7f73]" /> {t('chapter.duplicate')}
                             </button>
                             <button type="button"
                               onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(chapter.id); setChapterMenuId(null); }}
                               className="flex w-full items-center gap-2.5 px-3 py-2 text-[12px] text-red-400 hover:bg-red-500/10">
-                              <Trash2 className="h-3.5 w-3.5" /> Xóa chương
+                              <Trash2 className="h-3.5 w-3.5" /> {t('chapter.delete')}
                             </button>
                           </div>
                         </div>
@@ -1524,7 +1595,7 @@ QUY TẮC TRAU CHUỐT:
               onClick={onNewChapter}
               className="flex w-full items-center justify-center gap-1.5 rounded-2xl bg-accent-amber/90 py-2.5 text-[13px] font-bold tracking-wide text-[#2a1c14] shadow-sm transition hover:bg-accent-amber active:scale-[0.98]"
             >
-              <Plus className="h-4 w-4" /> Tạo chương mới
+              <Plus className="h-4 w-4" /> {t('chapter.createNew')}
             </button>
           </div>
         </div>
@@ -1539,9 +1610,9 @@ QUY TẮC TRAU CHUỐT:
                   <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-[#1e1917]">
                     <Sparkles className="h-5 w-5 text-accent-amber" />
                   </div>
-                  <p className="text-sm font-medium text-text-primary tracking-wide">Trợ lý AI đang chờ lệnh</p>
+                  <p className="text-sm font-medium text-text-primary tracking-wide">{t('aiAssistantPanel.emptyTitle')}</p>
                   <p className="mt-1 max-w-[240px] text-[12px] leading-5 text-[#8f7f73]">
-                    Nhập yêu cầu bên dưới hoặc chọn thao tác nhanh để bắt đầu viết cùng AI.
+                    {t('aiAssistantPanel.emptySub')}
                   </p>
                 </div>
               ) : null}
@@ -1576,10 +1647,10 @@ QUY TẮC TRAU CHUỐT:
                             <button
                               onClick={() => setPrompt(msg.content)}
                               className="flex items-center gap-1.5 text-[11px] text-[#8f7f73] transition hover:text-[#dcd1c6]"
-                              title="Điền lại yêu cầu này vào khung chat"
+                              title={t('aiAssistantPanel.retryTitle')}
                             >
                               <RotateCcw className="h-3 w-3" />
-                              Thử lại
+                              {t('aiAssistantPanel.retryLabel')}
                             </button>
                           </div>
                         </div>
@@ -1591,7 +1662,7 @@ QUY TẮC TRAU CHUỐT:
                           <div className="flex min-w-0 items-center gap-2">
                             <Sparkles className={`h-4 w-4 shrink-0 text-accent-amber ${msg.isStreaming ? 'animate-pulse' : ''}`} />
                             <span className="truncate text-[12px] font-bold tracking-wide text-accent-amber">
-                              {msg.isStreaming ? 'Đang viết...' : msg.isPartialStop ? 'Đã tạm dừng' : 'Trợ lý AI'}
+                              {msg.isStreaming ? t('aiAssistantPanel.statusWriting') : msg.isPartialStop ? t('aiAssistantPanel.statusPaused') : t('aiAssistantPanel.statusAssistant')}
                             </span>
                             {msg.isStreaming && (
                               <span className="animate-pulse text-[11px] text-[#8f7f73]">●</span>
@@ -1604,21 +1675,20 @@ QUY TẮC TRAU CHUỐT:
                               className="flex shrink-0 items-center gap-1.5 rounded-full border border-red-400/30 bg-red-400/10 px-2.5 py-1 text-[11px] font-bold text-red-300 transition hover:bg-red-400/20 active:scale-95"
                             >
                               <Square className="h-3 w-3 fill-current" />
-                              Dừng
+                              {t('common.stop')}
                             </button>
                           )}
                         </div>
 
                         <div
-                          className={`w-full rounded-2xl border bg-[#1a1512] text-[14px] text-[#dcd1c6] shadow-md ${
-                            msg.isStreaming ? 'border-accent-amber/20' : msg.isPartialStop ? 'border-yellow-500/20' : 'border-white/[0.04]'
-                          } ${isCompactStreamingState ? 'px-4 py-3.5' : 'px-4 py-3.5 leading-relaxed'}`}
+                          className={`w-full rounded-2xl border bg-[#1a1512] text-[14px] text-[#dcd1c6] shadow-md ${msg.isStreaming ? 'border-accent-amber/20' : msg.isPartialStop ? 'border-yellow-500/20' : 'border-white/[0.04]'
+                            } ${isCompactStreamingState ? 'px-4 py-3.5' : 'px-4 py-3.5 leading-relaxed'}`}
                         >
                           {isCompactStreamingState ? (
                             <div className="flex flex-col gap-2 text-[13px] text-[#a59689]">
                               <div className="flex items-center gap-2">
                                 <Loader2 className="h-3.5 w-3.5 animate-spin text-accent-amber/70" />
-                                <span>AI đang soạn phản hồi...</span>
+                                <span>{t('aiAssistantPanel.statusDrafting')}</span>
                               </div>
                               {streamStatusLabel ? (
                                 <p className={`text-[11px] ${isStalled ? 'text-yellow-300' : 'text-[#8f7f73]'}`}>
@@ -1635,7 +1705,7 @@ QUY TẮC TRAU CHUỐT:
                               {streamStatusLabel ? (
                                 <p className={`mt-3 text-[11px] ${isStalled ? 'text-yellow-300' : 'text-[#8f7f73]'}`}>
                                   {streamStatusLabel}
-                                  {isStalled ? ' • Có thể stream đang chậm hoặc bị treo. Bạn có thể dừng để giữ phần đã nhận.' : ''}
+                                  {isStalled ? t('aiAssistantPanel.statusStalledDetail') : ''}
                                 </p>
                               ) : null}
                             </>
@@ -1655,7 +1725,7 @@ QUY TẮC TRAU CHUỐT:
                               <button
                                 onClick={() => handleCopyMessage(msg.content)}
                                 className="ml-2 text-[#8f7f73] transition hover:text-text-primary"
-                                title="Sao chép"
+                                title={t('common.copy')}
                               >
                                 <Copy className="h-[14px] w-[14px]" />
                               </button>
@@ -1670,7 +1740,7 @@ QUY TẮC TRAU CHUỐT:
                                   className="flex items-center gap-1.5 rounded-full border border-emerald-400/30 bg-emerald-400/10 px-3 py-1.5 text-[12px] font-bold text-emerald-300 transition hover:bg-emerald-400/20 active:scale-95 disabled:opacity-50"
                                 >
                                   <Play className="h-3 w-3 fill-current" />
-                                  Tiếp tục viết
+                                  {t('aiAssistantPanel.buttonResume')}
                                 </button>
                               )}
                               {msg.canInsertToDraft && (
@@ -1679,7 +1749,7 @@ QUY TẮC TRAU CHUỐT:
                                   className="flex items-center gap-1.5 rounded-full bg-accent-amber px-4 py-1.5 text-[12px] font-bold text-[#1B140F] transition hover:bg-accent-amber/90 active:scale-95"
                                 >
                                   <Plus className="h-3 w-3 -ml-1" />
-                                  Chèn vào bản thảo
+                                  {t('aiAssistantPanel.buttonInsertDraft')}
                                 </button>
                               )}
                             </div>
@@ -1696,12 +1766,12 @@ QUY TẮC TRAU CHUỐT:
                 <div className="flex flex-col gap-1.5 mb-6">
                   <div className="flex items-center gap-2 mb-1 pl-1">
                     <Sparkles className="h-4 w-4 text-accent-amber" />
-                    <span className="text-[12px] font-bold tracking-wide text-accent-amber">Trợ lý AI đang kết nối...</span>
+                    <span className="text-[12px] font-bold tracking-wide text-accent-amber">{t('aiAssistantPanel.statusConnecting')}</span>
                   </div>
                   <div className="rounded-2xl border border-white/[0.04] bg-[#1a1512] px-5 py-4">
                     <div className="flex items-center gap-2">
                       <Loader2 className="h-4 w-4 animate-spin text-accent-amber/60" />
-                      <span className="text-[13px] text-[#8f7f73]">Đang chuẩn bị stream...</span>
+                      <span className="text-[13px] text-[#8f7f73]">{t('aiAssistantPanel.statusPreparing')}</span>
                     </div>
                     {streamRuntime ? (
                       <p className="mt-2 text-[11px] text-[#8f7f73]">
@@ -1734,7 +1804,7 @@ QUY TẮC TRAU CHUỐT:
                 {reviewSummary ? (
                   <div className="mb-3 rounded-2xl border border-white/[0.06] bg-[#15110f] p-3.5">
                     <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-accent-amber">
-                      Review
+                      {t('aiAssistantPanel.reviewTitle')}
                     </p>
                     <p className="mt-1 text-[12px] leading-5 text-[#d6cbc0]">
                       {reviewSummary.summary}
@@ -1754,7 +1824,7 @@ QUY TẮC TRAU CHUỐT:
                     {reviewSummary.revisionTasks && reviewSummary.revisionTasks.length > 0 ? (
                       <div className="mt-3 rounded-xl border border-white/[0.06] bg-[#110e0c] px-3 py-2">
                         <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#a99b8f]">
-                          Suggested Revision Tasks
+                          {t('aiAssistantPanel.suggestedTasks')}
                         </p>
                         <div className="mt-2 space-y-1.5">
                           {reviewSummary.revisionTasks.slice(0, 4).map((task, index) => (
@@ -1771,11 +1841,13 @@ QUY TẮC TRAU CHUỐT:
                 <NovelPolishTool
                   selectedSourceText={selection?.text ?? ''}
                   chapterSourceText={chapterContent}
-                  storySourceText={resolvedStorySource.rawText}
-                  title="Preset review"
+                  storySourceText=""
+                  hasStorySourceOverride={hasStorySource}
+                  storySourceCharCount={storySourceCharCount}
+                  title={t('aiAssistantPanel.presetReview')}
                   disabled={isProcessing || isStreaming || isPolishing}
                   isRunning={isPolishing}
-                  runLabel={isPolishing ? 'Đang chạy review...' : 'Chạy review'}
+                  runLabel={isPolishing ? t('aiAssistantPanel.polishingRunning') : t('aiAssistantPanel.polishingRun')}
                   statusText={polishProgressText}
                   onRun={handleRunNovelPolish}
                   collapsible
@@ -1788,10 +1860,10 @@ QUY TẮC TRAU CHUỐT:
             {editorMode === 'read' ? (
               <div className="mb-3 rounded-2xl border border-white/[0.06] bg-[#15110f] p-3.5">
                 <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-accent-amber">
-                  Chế độ đọc
+                  {t('aiAssistantPanel.readModeTitle')}
                 </p>
                 <p className="mt-1 text-[12px] leading-5 text-[#a99b8f]">
-                  Chế độ này ưu tiên hiểu nội dung: tóm tắt, tra cứu, hỏi đáp cốt truyện. Các preset chỉnh văn nằm trong Review để tránh trộn lẫn vai trò.
+                  {t('aiAssistantPanel.readModeSub')}
                 </p>
                 <div className="mt-3 flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                   {READING_ACTIONS.map((action) => (
@@ -1802,7 +1874,7 @@ QUY TẮC TRAU CHUỐT:
                       className="shrink-0 rounded-full border border-white/10 bg-transparent px-3 py-1.5 text-[11px] font-medium text-[#c8beb0] transition hover:border-accent-amber/30 hover:text-accent-amber"
                     >
                       <span className="mr-1">{action.icon}</span>
-                      {action.label}
+                      {t(action.label as any)}
                     </button>
                   ))}
                 </div>
@@ -1811,7 +1883,7 @@ QUY TẮC TRAU CHUỐT:
                   onClick={onOpenReview}
                   className="mt-3 inline-flex items-center rounded-full border border-accent-amber/30 bg-accent-amber/10 px-3 py-1.5 text-[11px] font-semibold text-accent-amber transition hover:bg-accent-amber/15"
                 >
-                  Mở Review
+                  {t('aiAssistantPanel.buttonOpenReview')}
                 </button>
               </div>
             ) : null}
@@ -1835,11 +1907,11 @@ QUY TẮC TRAU CHUỐT:
                     <p className="mt-1 text-[11px] text-[#8f7f73]">
                       {getNovelPolishMode(polishModeId).outputKind === 'report'
                         ? polishSourceScope === 'story'
-                          ? 'Kết quả rà lỗi cho toàn bộ truyện, không tự chèn vào bản thảo.'
-                          : 'Kết quả rà lỗi, không tự chèn vào bản thảo.'
+                          ? t('aiAssistantPanel.polishResultReportStory')
+                          : t('aiAssistantPanel.polishResultReportChapter')
                         : polishSourceScope === 'story'
-                          ? 'Kết quả review toàn truyện đã sẵn sàng. Bạn có thể áp dụng hàng loạt lên các chương vừa xử lý.'
-                          : 'Kết quả review đã sẵn sàng. Bạn có thể áp dụng trực tiếp hoặc mở diff để so sánh.'}
+                          ? t('aiAssistantPanel.polishResultRewriteStory')
+                          : t('aiAssistantPanel.polishResultRewriteChapter')}
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
@@ -1848,7 +1920,7 @@ QUY TẮC TRAU CHUỐT:
                       onClick={() => void navigator.clipboard.writeText(polishResult)}
                       className="rounded-lg border border-white/10 px-3 py-1.5 text-[11px] font-semibold text-[#c8beb0] transition-colors hover:border-white/20 hover:text-white"
                     >
-                      Sao chép
+                      {t('aiAssistantPanel.buttonCopy')}
                     </button>
                     {getNovelPolishMode(polishModeId).outputKind === 'rewrite' ? (
                       <>
@@ -1857,7 +1929,7 @@ QUY TẮC TRAU CHUỐT:
                           onClick={handleApplyPolishResult}
                           className="rounded-lg bg-accent-amber px-3 py-1.5 text-[11px] font-semibold text-[#1b140f] transition-colors hover:bg-[#ffd7ab]"
                         >
-                          {polishSourceScope === 'story' ? 'Áp dụng toàn truyện' : 'Áp dụng'}
+                          {polishSourceScope === 'story' ? t('aiAssistantPanel.buttonApplyStory') : t('aiAssistantPanel.buttonApply')}
                         </button>
                         {polishSourceScope !== 'story' ? (
                           <button
@@ -1865,7 +1937,7 @@ QUY TẮC TRAU CHUỐT:
                             onClick={handlePreviewPolishResult}
                             className="rounded-lg border border-accent-amber/30 bg-accent-amber/10 px-3 py-1.5 text-[11px] font-semibold text-accent-amber transition-colors hover:bg-accent-amber/15"
                           >
-                            Xem thay đổi
+                            {t('aiAssistantPanel.buttonViewChanges')}
                           </button>
                         ) : null}
                       </>
@@ -1882,10 +1954,10 @@ QUY TẮC TRAU CHUỐT:
               <>
                 <div className="mb-1 flex items-center justify-between">
                   <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-accent-amber/80">
-                    Tác vụ sáng tác
+                    {t('aiAssistantPanel.tacticTasks')}
                   </p>
                   <p className="text-[10px] text-[#6f6259]">
-                    Action tức thời trong lúc viết
+                    {t('aiAssistantPanel.tacticTasksSub')}
                   </p>
                 </div>
                 <div className="mb-3 flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -1893,7 +1965,7 @@ QUY TẮC TRAU CHUỐT:
                     const isDisabled = action.requiresSelection && !selection?.text?.trim();
                     return (
                       <button
-                        key={action.label}
+                        key={action.id}
                         type="button"
                         onClick={() => handleQuickAction(action)}
                         disabled={isDisabled}
@@ -1901,7 +1973,7 @@ QUY TẮC TRAU CHUỐT:
                         title={isDisabled ? 'Chọn một đoạn trước khi dùng tác vụ này.' : undefined}
                       >
                         <span className="mr-1">{action.icon}</span>
-                        {action.label}
+                        {t(action.label as any)}
                       </button>
                     );
                   })}
@@ -1930,11 +2002,10 @@ QUY TẮC TRAU CHUỐT:
                         key={option.id}
                         type="button"
                         onClick={() => handleConfirmPromptScope(option.id)}
-                        className={`shrink-0 rounded-full border px-3 py-1.5 text-[11px] font-semibold transition ${
-                          isRecommended
-                            ? 'border-accent-amber/40 bg-accent-amber text-[#1b140f]'
-                            : 'border-white/10 bg-[#15110f] text-[#c8beb0] hover:border-white/20 hover:text-white'
-                        }`}
+                        className={`shrink-0 rounded-full border px-3 py-1.5 text-[11px] font-semibold transition ${isRecommended
+                          ? 'border-accent-amber/40 bg-accent-amber text-[#1b140f]'
+                          : 'border-white/10 bg-[#15110f] text-[#c8beb0] hover:border-white/20 hover:text-white'
+                          }`}
                       >
                         {isRecommended ? 'Dùng ' : ''}
                         {option.label}
@@ -1963,14 +2034,13 @@ QUY TẮC TRAU CHUỐT:
                           setScope(option.id);
                           setPendingScopeConfirmation(null);
                         }}
-                        className={`flex shrink-0 items-center justify-center gap-1.5 rounded-full border px-3 py-1.5 text-[11px] font-medium transition ${
-                          isActive
-                            ? 'border-accent-amber/30 bg-accent-amber/15 text-text-primary'
-                            : 'border-white/5 bg-[#1b1715] text-[#8f7f73] hover:border-white/10 hover:text-[#d6cbc0]'
-                        }`}
+                        className={`flex shrink-0 items-center justify-center gap-1.5 rounded-full border px-3 py-1.5 text-[11px] font-medium transition ${isActive
+                          ? 'border-accent-amber/30 bg-accent-amber/15 text-text-primary'
+                          : 'border-white/5 bg-[#1b1715] text-[#8f7f73] hover:border-white/10 hover:text-[#d6cbc0]'
+                          }`}
                       >
                         <Crosshair className={`h-3 w-3 ${isActive ? 'text-accent-amber' : 'text-[#6f6259]'}`} />
-                        <span>{option.label}</span>
+                        <span>{t(option.label as any) || option.label}</span>
                       </button>
                     );
                   })}
@@ -2010,14 +2080,14 @@ QUY TẮC TRAU CHUỐT:
                   variant="dark"
                   size={14}
                 />
-                 <button
-                   type="button"
-                   onClick={() => void handleGenerate()}
-                   disabled={!prompt.trim() || isProcessing || isStreaming}
-                   className="flex h-9 w-9 items-center justify-center rounded-full bg-accent-amber text-[#1B140F] transition hover:bg-[#F0C59A] active:scale-95 disabled:bg-[#2a2420] disabled:text-[#685c52] disabled:opacity-50"
-                 >
-                   <Send className="h-4 w-4 ml-0.5" />
-                 </button>
+                <button
+                  type="button"
+                  onClick={() => void handleGenerate()}
+                  disabled={!prompt.trim() || isProcessing || isStreaming}
+                  className="flex h-9 w-9 items-center justify-center rounded-full bg-accent-amber text-[#1B140F] transition hover:bg-[#F0C59A] active:scale-95 disabled:bg-[#2a2420] disabled:text-[#685c52] disabled:opacity-50"
+                >
+                  <Send className="h-4 w-4 ml-0.5" />
+                </button>
               </div>
             </div>
           </div>

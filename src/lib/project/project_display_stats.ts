@@ -29,9 +29,19 @@ interface BuildProjectDisplayStatsOptions {
 }
 
 export function countWords(text: string): number {
-  const trimmed = text.trim();
-  if (!trimmed) return 0;
-  return trimmed.split(/\s+/).filter(Boolean).length;
+  let count = 0;
+  let inWord = false;
+
+  for (let index = 0; index < text.length; index += 1) {
+    if (/\s/.test(text[index])) {
+      inWord = false;
+    } else if (!inWord) {
+      count += 1;
+      inWord = true;
+    }
+  }
+
+  return count;
 }
 
 export function getProjectWordCount(chapters?: Project['chapters']): number {

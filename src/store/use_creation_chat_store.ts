@@ -5,7 +5,7 @@
  * Domain: CreationChat → [phase management, workflow progress, autosave draft]
  */
 import { create } from 'zustand';
-import { persist, createJSONStorage } from 'zustand/middleware';
+import { persist } from 'zustand/middleware';
 import { createId } from '../core/id';
 import type {
   AcceptedChapter,
@@ -22,6 +22,7 @@ import type { BrainstormResult } from '../types/narrative_memory';
 import { normalizeCreationPlotPreview } from '../lib/creation/plot_preview_normalizer';
 import { normalizeCreationFramework } from '../lib/creation/framework_normalizer';
 import { useNotificationStore } from './use_notification_store';
+import { createDebouncedPersistStorage } from '../lib/storage/debounced_local_storage';
 
 interface WorkflowProgressPatch {
   linkedProjectId?: string | null;
@@ -238,9 +239,9 @@ function buildPersistedMessage(
 function normalizeFrameworkMessage(message: CreationMessage): CreationMessage {
   return message.type === 'framework_preview' && message.frameworkData
     ? {
-        ...message,
-        frameworkData: normalizeCreationFramework(message.frameworkData),
-      }
+      ...message,
+      frameworkData: normalizeCreationFramework(message.frameworkData),
+    }
     : message;
 }
 
@@ -492,11 +493,11 @@ export const useCreationChatStore = create<
           acceptedChapters: state.acceptedChapters.map((chapter) =>
             chapter.id === id
               ? {
-                  ...chapter,
-                  ...patch,
-                  charCount: patch.content !== undefined ? patch.content.length : chapter.charCount,
-                  updatedAt: touch(),
-                }
+                ...chapter,
+                ...patch,
+                charCount: patch.content !== undefined ? patch.content.length : chapter.charCount,
+                updatedAt: touch(),
+              }
               : chapter,
           ),
           draftSavedAt: touch(),
@@ -696,11 +697,11 @@ export const useCreationChatStore = create<
             error == null
               ? state.progress
               : {
-                  ...state.progress,
-                  status: 'error',
-                  error,
-                  updatedAt: touch(),
-                },
+                ...state.progress,
+                status: 'error',
+                error,
+                updatedAt: touch(),
+              },
           draftSavedAt: touch(),
         })),
 
@@ -708,7 +709,9 @@ export const useCreationChatStore = create<
     }),
     {
       name: 'viettruyen-creation-chat',
-      storage: createJSONStorage(() => localStorage),
+      // Creation chat can mirror streaming editor messages. Avoid synchronous
+      // JSON.stringify/localStorage writes on every streamed chunk.
+      storage: createDebouncedPersistStorage(500),
       onRehydrateStorage: () => (state, error) => {
         if (error || !state) return;
 

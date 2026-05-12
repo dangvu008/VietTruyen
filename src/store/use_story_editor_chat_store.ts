@@ -5,13 +5,14 @@
  * Domain: StoryEditor
  */
 import { create } from 'zustand';
-import { createJSONStorage, persist } from 'zustand/middleware';
+import { persist } from 'zustand/middleware';
 
 import type { ChatMessage } from '../components/story-editor/editor_types';
 import {
   normalizePersistedStoryEditorMessages,
   normalizeStoryEditorMessages,
 } from '../components/story-editor/story_editor_chat_history';
+import { createDebouncedPersistStorage } from '../lib/storage/debounced_local_storage';
 
 interface StoryEditorChatState {
   chapterMessagesByProject: Record<string, Record<string, ChatMessage[]>>;
@@ -117,7 +118,11 @@ export const useStoryEditorChatStore = create<
     }),
     {
       name: 'viettruyen-story-editor-chat',
-      storage: createJSONStorage(() => localStorage),
+      // Streaming Muse updates can arrive dozens of times per second. The
+      // default JSON storage stringifies synchronously on every chunk, freezing
+      // editor interactions. Debounced storage updates the in-memory snapshot
+      // immediately and flushes JSON/localStorage during idle time.
+      storage: createDebouncedPersistStorage(500),
       version: 1,
       migrate: (persistedState) =>
         normalizePersistedStoryEditorChatState(persistedState),

@@ -370,16 +370,6 @@ export default function StoryWorkspace({
     return localTitles[activeChapterId] ?? activeChapter?.title ?? '';
   }, [activeChapterId, localTitles, activeChapter]);
 
-  const storySourceChapters = useMemo(
-    () =>
-      chapters.map((chapter) => ({
-        ...chapter,
-        content: localContents[chapter.id] ?? chapter.content ?? '',
-        title: localTitles[chapter.id] ?? chapter.title,
-      })),
-    [chapters, localContents, localTitles],
-  );
-
   const activeSelection = useMemo(
     () => (activeChapterId ? selectionMap[activeChapterId] ?? null : null),
     [activeChapterId, selectionMap],
@@ -428,10 +418,20 @@ export default function StoryWorkspace({
         status = 'ai-draft';
       }
 
+      // [Domain:StoryEditor] FIX — Race condition: chapter.generationStatus may still be
+      // 'generating' in DB while the generation store has already cleared generatingChapterId
+      // (i.e. finishScratchStream() was called). If the chapter is NOT the current active
+      // generation target, treat it as if generation is done and re-derive real status.
+      if (status === 'generating' && ch.id !== generatingChapterId) {
+        // Derive status ignoring generationStatus field by checking content/flags
+        const chapterWithDoneStatus = { ...ch, generationStatus: 'done' as const };
+        status = deriveChapterUIStatus(chapterWithDoneStatus, Boolean(proposalMap[ch.id]), hasDirty);
+      }
+
       map[ch.id] = status;
     }
     return map;
-  }, [chapters, isHydrating, localContents, proposalMap]);
+  }, [chapters, generatingChapterId, isHydrating, localContents, proposalMap]);
 
   const projectInfo: ProjectInfo = useMemo(
     () => ({ id: project.id, title: project.title }),
@@ -578,7 +578,10 @@ export default function StoryWorkspace({
   const handleContentChange = useCallback(
     (content: string) => {
       if (!activeChapterId) return;
-      setLocalContents((prev) => ({ ...prev, [activeChapterId]: content }));
+      setLocalContents((prev) => {
+        if (prev[activeChapterId] === content) return prev;
+        return { ...prev, [activeChapterId]: content };
+      });
     },
     [activeChapterId],
   );
@@ -586,7 +589,10 @@ export default function StoryWorkspace({
   const handleTitleChange = useCallback(
     (title: string) => {
       if (!activeChapterId) return;
-      setLocalTitles((prev) => ({ ...prev, [activeChapterId]: title }));
+      setLocalTitles((prev) => {
+        if (prev[activeChapterId] === title) return prev;
+        return { ...prev, [activeChapterId]: title };
+      });
     },
     [activeChapterId],
   );
@@ -631,7 +637,26 @@ export default function StoryWorkspace({
   const handleSelectionChange = useCallback(
     (selection: EditorSelection | null) => {
       if (!activeChapterId) return;
-      setSelectionMap((prev) => ({ ...prev, [activeChapterId]: selection }));
+
+      // Textarea onSelect fires for cursor moves, focus changes, and selection
+      // drags. Avoid replacing state with an equivalent object on every event;
+      // those updates force the whole workspace/right panel to rerender and can
+      // freeze long chapters.
+      const normalizedSelection = selection?.text?.trim() ? selection : null;
+      setSelectionMap((prev) => {
+        const current = prev[activeChapterId] ?? null;
+        if (
+          current === normalizedSelection ||
+          (
+            current?.start === normalizedSelection?.start &&
+            current?.end === normalizedSelection?.end &&
+            current?.text === normalizedSelection?.text
+          )
+        ) {
+          return prev;
+        }
+        return { ...prev, [activeChapterId]: normalizedSelection };
+      });
     },
     [activeChapterId],
   );
@@ -1057,6 +1082,16 @@ export default function StoryWorkspace({
       }));
       setCurrentMode('write');
       setLastSavedAt(nextUpdatedAt);
+      // [Domain:StoryEditor] FIX — Cancel pending debounce timer BEFORE clearing draft.
+      // If timer fires after clearChapterDraft(), saveGeneratingDraft() would re-create
+      // the draft with generationStatus='generating', causing false recovery banner on next load.
+      if (chunkSaveTimerRef.current) {
+        clearTimeout(chunkSaveTimerRef.current);
+        chunkSaveTimerRef.current = null;
+      }
+      // [Domain:StoryEditor] FIX — Clear autosave draft after successful generation.
+      // Previously missing from happy path (was only called in applyProposalToDraft/handleSave).
+      clearChapterDraft(capturedChapterId);
       finishScratchStream();
 
       pushNotification({
@@ -1880,7 +1915,7 @@ export default function StoryWorkspace({
               project={projectInfo}
               fullProject={project}
               chapters={chapters}
-              storySourceChapters={storySourceChapters}
+              storySourceChapters={chapters}
               selectedChapterId={activeChapterId}
               statusMap={statusMap}
               onSelectChapter={handleSelectChapter}

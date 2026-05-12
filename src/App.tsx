@@ -19,7 +19,7 @@ const AiAssistant = lazy(() => import('./components/shared/AiAssistant'));
 const AiActivityOverlay = lazy(() => import('./components/shared/AiActivityOverlay'));
 const RetconImpactModal = lazy(() => import('./components/shared/RetconImpactModal'));
 const NotificationCenter = lazy(() => import('./components/shared/NotificationCenter'));
-import MemoryBootstrap from './components/system/MemoryBootstrap';
+const MemoryBootstrap = lazy(() => import('./components/system/MemoryBootstrap'));
 import LanguageSwitcher from './components/shared/LanguageSwitcher';
 
 import type { AnyTabId, AppShell, ProjectTabId } from './types/navigation';
@@ -407,71 +407,75 @@ const App: React.FC = () => {
 
   return (
     <StorageContext.Provider value={storageProvider}>
-    <>
-      {activeProject && <MemoryBootstrap project={activeProject} />}
-
-      {resolvedShell === 'global' ? (
-        <GlobalShell
-          activeTab={globalTab}
-          onNavigate={setGlobalTab}
-          onNavigateSettings={handleNavigateToSettings}
-          settingsTab={settingsTab}
-          onSettingsTabChange={setSettingsTab}
-          onEnterProject={handleEnterProject}
-          onOpenAi={() => setShowAi(true)}
-          onOpenNotifications={() => setShowNotifCenter((v) => !v)}
-          aiConfigured={aiConfigured}
-          unreadCount={unreadCount}
-          rightActions={sharedRightActions}
-        >
-          {pageContent}
-        </GlobalShell>
-      ) : (
-        <ProjectWorkspace
-          activeTab={projectTab}
-          onNavigate={setProjectTab}
-          onExitProject={handleExitProject}
-          onGoHome={handleGoHome}
-          onNavigateSettings={handleNavigateToSettings}
-          project={activeProject!}
-          projectTitle={activeProject!.title}
-          rightActions={sharedRightActions}
-        >
-          {pageContent}
-        </ProjectWorkspace>
-      )}
-
-      {/* ── Global Overlays (shell-agnostic, lazy-loaded) ── */}
-      <Suspense fallback={null}>
-        {showAi && (
-          <AiAssistant
-            isOpen={showAi}
-            onClose={() => setShowAi(false)}
-            contextHint={resolvedShell === 'project' ? projectTab : globalTab}
-            project={activeProject}
-            onNavigate={handleAssistantNavigate}
-            onOpenSettings={() => {
-              setShowAi(false);
-              handleNavigateToSettings();
-            }}
-          />
+      <>
+        {activeProject && resolvedShell === 'project' && (
+          <Suspense fallback={null}>
+            <MemoryBootstrap project={activeProject} />
+          </Suspense>
         )}
-      </Suspense>
 
-      <Suspense fallback={null}>
-        {showNotifCenter && (
-          <NotificationCenter
-            isOpen={showNotifCenter}
-            onClose={() => setShowNotifCenter(false)}
-          />
+        {resolvedShell === 'global' ? (
+          <GlobalShell
+            activeTab={globalTab}
+            onNavigate={setGlobalTab}
+            onNavigateSettings={handleNavigateToSettings}
+            settingsTab={settingsTab}
+            onSettingsTabChange={setSettingsTab}
+            onEnterProject={handleEnterProject}
+            onOpenAi={() => setShowAi(true)}
+            onOpenNotifications={() => setShowNotifCenter((v) => !v)}
+            aiConfigured={aiConfigured}
+            unreadCount={unreadCount}
+            rightActions={sharedRightActions}
+          >
+            {pageContent}
+          </GlobalShell>
+        ) : (
+          <ProjectWorkspace
+            activeTab={projectTab}
+            onNavigate={setProjectTab}
+            onExitProject={handleExitProject}
+            onGoHome={handleGoHome}
+            onNavigateSettings={handleNavigateToSettings}
+            project={activeProject!}
+            projectTitle={activeProject!.title}
+            rightActions={sharedRightActions}
+          >
+            {pageContent}
+          </ProjectWorkspace>
         )}
-      </Suspense>
-      <NotificationToast />
-      <Suspense fallback={null}>
-        <RetconImpactModal />
-        <AiActivityOverlay />
-      </Suspense>
-    </>
+
+        {/* ── Global Overlays (shell-agnostic, lazy-loaded) ── */}
+        <Suspense fallback={null}>
+          {showAi && (
+            <AiAssistant
+              isOpen={showAi}
+              onClose={() => setShowAi(false)}
+              contextHint={resolvedShell === 'project' ? projectTab : globalTab}
+              project={activeProject}
+              onNavigate={handleAssistantNavigate}
+              onOpenSettings={() => {
+                setShowAi(false);
+                handleNavigateToSettings();
+              }}
+            />
+          )}
+        </Suspense>
+
+        <Suspense fallback={null}>
+          {showNotifCenter && (
+            <NotificationCenter
+              isOpen={showNotifCenter}
+              onClose={() => setShowNotifCenter(false)}
+            />
+          )}
+        </Suspense>
+        <NotificationToast />
+        <Suspense fallback={null}>
+          <RetconImpactModal />
+          <AiActivityOverlay />
+        </Suspense>
+      </>
     </StorageContext.Provider>
   );
 };

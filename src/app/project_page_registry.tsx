@@ -132,7 +132,7 @@ export function renderProjectPage({
           onUpdateProject={projectActions.updateProject}
           onAddChapter={projectActions.addChapter}
           onOpenAi={showAi}
-          initialMode="detail"
+          initialMode="review"
           onNavigate={onNavigate as any}
           onOpenCreationChat={onOpenCreationChat}
         />

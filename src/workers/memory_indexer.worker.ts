@@ -1,26 +1,32 @@
 /// <reference lib="webworker" />
 
-import { backfillProjectMemory } from '../lib/memory/memory_indexer';
+import { backfillProjectMemory, syncProjectMemory } from '../lib/memory/memory_indexer';
 import type { Project } from '../types/story';
 
 declare const self: DedicatedWorkerGlobalScope;
 
 self.onmessage = async (
   event: MessageEvent<{
-    type: 'backfill';
+    type: 'backfill' | 'sync';
     project: Project;
     mirrorEmbeddings?: boolean;
   }>,
 ) => {
-  if (event.data.type !== 'backfill') return;
+  if (event.data.type !== 'backfill' && event.data.type !== 'sync') return;
 
   try {
-    await backfillProjectMemory(event.data.project, {
+    const options = {
       mirrorEmbeddings: event.data.mirrorEmbeddings,
-      onProgress: (processed, total) => {
+      onProgress: (processed: number, total: number) => {
         self.postMessage({ type: 'progress', processed, total });
       },
-    });
+    };
+
+    if (event.data.type === 'sync') {
+      await syncProjectMemory(event.data.project, options);
+    } else {
+      await backfillProjectMemory(event.data.project, options);
+    }
     self.postMessage({ type: 'done' });
   } catch (error) {
     self.postMessage({
@@ -30,4 +36,4 @@ self.onmessage = async (
   }
 };
 
-export {};
+export { };

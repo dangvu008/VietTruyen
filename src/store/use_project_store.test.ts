@@ -1,13 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { StoredChapter } from '../db/narrative_db';
-import type { Chapter } from '../types/story';
+import type { ProjectSummary } from '../lib/storage/storage_types';
+import type { Chapter, Project } from '../types/story';
 
 const mocks = vi.hoisted(() => {
   const provider = {
+    listProjects: vi.fn(async (): Promise<ProjectSummary[]> => []),
+    getProject: vi.fn(async (_projectId: string): Promise<Project | null> => null),
     getProjectChapters: vi.fn(async (): Promise<Chapter[]> => []),
     getChapter: vi.fn(async (_projectId: string, _chapterId: string): Promise<Chapter | null> => null),
     saveProject: vi.fn(async () => undefined),
     replaceProjectChapters: vi.fn(async () => undefined),
+    deleteProject: vi.fn(async () => undefined),
   };
 
   return {
@@ -67,13 +71,80 @@ function buildChapter(overrides: Partial<Chapter> = {}): Chapter {
   };
 }
 
+function buildProject(overrides: Partial<Project> = {}): Project {
+  return {
+    id: 'project-cloud-1',
+    title: 'Truyện trên Supabase',
+    logline: 'Logline cloud',
+    genre: 'Tiên hiệp',
+    subGenre: [],
+    writingStyle: '',
+    tone: '',
+    styleId: '',
+    targetChapters: 60,
+    endgame: '',
+    mainCharacterCount: 2,
+    supportCharacterCount: 3,
+    characterSetup: '',
+    worldSetting: '',
+    mainPlot: '',
+    world: {
+      geography: '',
+      magicSystem: '',
+      techLevel: '',
+      currency: '',
+      factions: [],
+      rules: '',
+      facts: [],
+    },
+    characters: [],
+    outline: [],
+    chapters: [],
+    foreshadowings: [],
+    notes: '',
+    canonVersion: 1,
+    storageMode: 'provider',
+    arcCount: 0,
+    hasGlobalIndex: false,
+    createdAt: '2026-05-11T00:00:00.000Z',
+    updatedAt: '2026-05-11T00:00:00.000Z',
+    ...overrides,
+  };
+}
+
 describe('use_project_store', () => {
   beforeEach(() => {
     vi.resetModules();
     vi.clearAllMocks();
+    mocks.provider.listProjects.mockResolvedValue([]);
+    mocks.provider.getProject.mockResolvedValue(null);
     mocks.provider.getProjectChapters.mockResolvedValue([]);
     mocks.provider.getChapter.mockResolvedValue(null);
     vi.stubGlobal('localStorage', createStorageMock());
+  });
+
+  it('syncs Supabase projects into the project store and drops the empty default seed', async () => {
+    const { useProjectStore } = await import('./use_project_store');
+    const cloudProject = buildProject();
+
+    mocks.provider.listProjects.mockResolvedValue([
+      {
+        id: cloudProject.id,
+        title: cloudProject.title,
+        genre: cloudProject.genre,
+        chapterCount: 0,
+        createdAt: cloudProject.createdAt,
+        updatedAt: cloudProject.updatedAt,
+      },
+    ]);
+    mocks.provider.getProject.mockResolvedValue(cloudProject);
+
+    await useProjectStore.getState().syncProjectsFromProvider();
+
+    expect(useProjectStore.getState().projects.map((project) => project.title)).toEqual([
+      cloudProject.title,
+    ]);
+    expect(useProjectStore.getState().activeProjectId).toBe(cloudProject.id);
   });
 
   it('keeps provider-backed uploaded chapters in IndexedDB for reload fallback', async () => {

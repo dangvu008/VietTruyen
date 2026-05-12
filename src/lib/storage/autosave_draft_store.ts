@@ -38,6 +38,10 @@ interface AutosaveDraftMap {
 
 const STORAGE_KEY = 'viettruyen-autosave-drafts';
 const MAX_DRAFTS_PER_PROJECT = 50;
+const STREAMING_DRAFT_FLUSH_DELAY_MS = 700;
+
+let cachedDraftMap: AutosaveDraftMap | null = null;
+let pendingDraftFlushTimer: ReturnType<typeof setTimeout> | null = null;
 
 // ── Internal helpers ───────────────────────────────────────
 
@@ -62,16 +66,20 @@ function normalizeRecoverableDraft(draft: AutosaveDraft): AutosaveDraft | null {
 }
 
 function readAllDrafts(): AutosaveDraftMap {
+  if (cachedDraftMap) return { ...cachedDraftMap };
+
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return {};
-    return JSON.parse(raw) as AutosaveDraftMap;
+    cachedDraftMap = raw ? JSON.parse(raw) as AutosaveDraftMap : {};
+    return { ...cachedDraftMap };
   } catch {
+    cachedDraftMap = {};
     return {};
   }
 }
 
 function writeAllDrafts(map: AutosaveDraftMap): void {
+  cachedDraftMap = { ...map };
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(map));
   } catch (error) {
@@ -83,6 +91,7 @@ function writeAllDrafts(map: AutosaveDraftMap): void {
         ([, a], [, b]) => new Date(a.savedAt).getTime() - new Date(b.savedAt).getTime()
       );
       const trimmed = Object.fromEntries(sorted.slice(sorted.length - MAX_DRAFTS_PER_PROJECT));
+      cachedDraftMap = { ...trimmed };
       try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(trimmed));
       } catch {
@@ -90,6 +99,25 @@ function writeAllDrafts(map: AutosaveDraftMap): void {
       }
     }
   }
+}
+
+function scheduleWriteAllDrafts(map: AutosaveDraftMap): void {
+  cachedDraftMap = { ...map };
+  if (pendingDraftFlushTimer) {
+    clearTimeout(pendingDraftFlushTimer);
+  }
+
+  pendingDraftFlushTimer = setTimeout(() => {
+    pendingDraftFlushTimer = null;
+    writeAllDrafts(cachedDraftMap || {});
+  }, STREAMING_DRAFT_FLUSH_DELAY_MS);
+}
+
+function flushPendingDraftWrite(): void {
+  if (!pendingDraftFlushTimer) return;
+  clearTimeout(pendingDraftFlushTimer);
+  pendingDraftFlushTimer = null;
+  writeAllDrafts(cachedDraftMap || {});
 }
 
 // ── Public API ─────────────────────────────────────────────
@@ -134,7 +162,7 @@ export function saveGeneratingDraft(
 
   if (!guarded.content.trim()) {
     delete map[key];
-    writeAllDrafts(map);
+    scheduleWriteAllDrafts(map);
     return;
   }
 
@@ -147,7 +175,7 @@ export function saveGeneratingDraft(
     generationStatus: 'generating',
     generationJobId: jobId,
   };
-  writeAllDrafts(map);
+  scheduleWriteAllDrafts(map);
 }
 
 /**
@@ -158,6 +186,7 @@ export function markDraftInterrupted(
   projectId: string,
   chapterId: string
 ): void {
+  flushPendingDraftWrite();
   const map = readAllDrafts();
   const key = compositeKey(projectId, chapterId);
   const existing = map[key];
@@ -198,6 +227,7 @@ export function saveDraftsBatch(
  * Get all drafts for a project.
  */
 export function getDrafts(projectId: string): AutosaveDraft[] {
+  flushPendingDraftWrite();
   const map = readAllDrafts();
   return Object.values(map)
     .filter((draft) => draft.projectId === projectId)
@@ -209,6 +239,7 @@ export function getDrafts(projectId: string): AutosaveDraft[] {
  * Get a single draft for a specific chapter.
  */
 export function getDraft(projectId: string, chapterId: string): AutosaveDraft | null {
+  flushPendingDraftWrite();
   const map = readAllDrafts();
   const draft = map[compositeKey(projectId, chapterId)] ?? null;
   if (!draft) return null;

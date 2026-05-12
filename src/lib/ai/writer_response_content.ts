@@ -41,28 +41,39 @@ function findJsonObjectEnd(text: string): number {
 }
 
 function normalizeWriterProse(text: string): string {
-  const normalizedLines = text
+  const lines = text
     .replace(/\r\n?/g, '\n')
     .replace(/[\u200B-\u200D\uFEFF]/g, '')
     .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '')
     .split('\n')
-    .map((line) => line
-      .replace(/^\s*```(?:\w+)?\s*$/u, '')
-      .replace(/^\s*#{1,6}\s+/u, '')
-      .replace(/^\s*>+\s?/u, '')
-      .replace(/^\s*(?:[-*+]|[–—])\s+/u, '')
-      .replace(/^\s*\d+[.)]\s+/u, '')
-      .replace(/\s+/g, ' ')
-      .trim())
+    .map((line) => {
+      let cleaned = line;
+      // [Domain:AI] Strip Markdown code fence markers (``` or ```lang)
+      cleaned = cleaned.replace(/^\s*```(?:\w+)?\s*$/u, '');
+      // [Domain:AI] Strip Markdown heading markers (# ## ### etc.)
+      cleaned = cleaned.replace(/^\s*#{1,6}\s+/u, '');
+      // [Domain:AI] Strip Markdown blockquote markers (> >>)
+      cleaned = cleaned.replace(/^\s*>+\s?/u, '');
+      // [Domain:AI] Strip Markdown numbered list markers (1. 2) etc.)
+      cleaned = cleaned.replace(/^\s*\d+[.)]\s+/u, '');
+      // [Domain:AI] Strip Markdown bullet markers (- * +) BUT preserve
+      // Vietnamese dialogue markers (– —) which use en-dash/em-dash
+      cleaned = cleaned.replace(/^\s*[-*+]\s+/u, '');
+      // [Domain:AI] Collapse intra-line whitespace (tabs, multiple spaces)
+      cleaned = cleaned.replace(/\s+/g, ' ');
+      return cleaned.trim();
+    })
+    // [Domain:AI] Remove Markdown horizontal rules (--- *** ___)
     .filter((line) => !/^(?:[-*_]\s*){3,}$/u.test(line));
 
-  return normalizedLines
+  // [Domain:AI] Reassemble: preserve single newlines (sentence/dialogue breaks),
+  // collapse 3+ blank lines to max double-newline (paragraph break),
+  // and drop fully empty trailing/leading lines.
+  return lines
     .join('\n')
     .replace(/\n{3,}/g, '\n\n')
-    .split(/\n{2,}/)
-    .map((paragraph) => paragraph.replace(/\n+/g, ' ').replace(/\s+/g, ' ').trim())
-    .filter(Boolean)
-    .join('\n\n')
+    .replace(/^\n+/, '')
+    .replace(/\n+$/, '')
     .trim();
 }
 

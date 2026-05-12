@@ -5,7 +5,7 @@
  * Domain: Navigation → [project routing]
  * Deps: StoryWorkspace, types/story, project store
  */
-import React, { useEffect } from 'react';
+import React from 'react';
 import type { Project, Chapter } from '../../types/story';
 import { useProjectStore } from '../../store/use_project_store';
 import StoryWorkspace from '../story-editor/StoryWorkspace';
@@ -32,11 +32,12 @@ const WriterPage: React.FC<WriterPageProps> = ({
   // [Domain:StoryEditor] STEP 1 — Get updateChapter action from Zustand store directly
   // This gives us per-chapter persistence (IndexedDB) without going through full project patch.
   const updateChapter = useProjectStore((state) => state.updateChapter);
-  const hydrateProjectChapters = useProjectStore((state) => state.hydrateProjectChapters);
 
-  useEffect(() => {
-    void hydrateProjectChapters(project.id);
-  }, [hydrateProjectChapters, project.id]);
+  // [Domain:StoryEditor] NOTE — Hydration is handled by StoryWorkspace.useEffect.
+  // Do NOT call hydrateProjectChapters here: doing so triggers a second parallel
+  // hydration pass every time the user navigates back to this page, causing
+  // double IndexedDB reads, Supabase race conditions, and Main Thread congestion
+  // that freezes mouse interactions.
 
   return (
     <StoryWorkspace
