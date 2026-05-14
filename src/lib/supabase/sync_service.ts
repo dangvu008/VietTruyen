@@ -284,7 +284,7 @@ export async function downloadProjects(): Promise<{ data: Project[]; error: Erro
       foreshadowings,
       notes: row.notes || '',
       canonVersion: 1,
-      storageMode: 'inline',
+      storageMode: 'cloud',
       arcCount: 0,
       hasGlobalIndex: false,
       sourceProjectId: row.source_project_id || undefined,

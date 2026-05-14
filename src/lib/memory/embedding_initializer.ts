@@ -11,7 +11,7 @@
  * 3. Fallback               → DeterministicStubAdapter  (48-dim,   hash bucket)
  */
 
-import { getDefaultEmbeddingAdapter, setDefaultEmbeddingAdapter } from './embedding_adapter';
+import { setDefaultEmbeddingAdapter } from './embedding_adapter';
 import { GeminiEmbeddingAdapter, GEMINI_EMBEDDING_DIMENSION } from './gemini_embedding_adapter';
 import { OpenRouterEmbeddingAdapter, OPENROUTER_EMBEDDING_DIMENSION } from './openrouter_embedding_adapter';
 

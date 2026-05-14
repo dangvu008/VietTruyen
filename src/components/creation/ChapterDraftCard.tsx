@@ -4,7 +4,7 @@
  * Layer: UI (Creation Component)
  * Domain: CreationChat → [chapter display, user actions]
  */
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { ExternalLink } from 'lucide-react';
 
 interface ChapterDraftCardProps {

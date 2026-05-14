@@ -5,6 +5,7 @@
  *          và Project Identity Block (~200 tokens wake-up).
  */
 import type { Project, Character, OutlineBeat, Foreshadowing } from '../../types/story';
+import { buildForeshadowReminderSection } from './foreshadow_tracker';
 import type { StyleRule } from '../../types/style_learning';
 import type {
   AnchorSet,
@@ -26,7 +27,7 @@ import type { EntitySnapshot } from '../../types/narrative_memory';
 import { extractTimeConstraints } from './time_constraint_tracker';
 import { buildContextContract, validateContextContract } from './context_contract';
 import { preprocessTextForLlmInput } from '../document';
-import { classifyAndBudget, type SceneContextBudget, type SceneTypeResult } from './scene_type_classifier';
+import { classifyAndBudget, type SceneTypeResult } from './scene_type_classifier';
 import { buildProjectIdentityBlock } from './project_identity_block';
 import { retrieveHscContext } from '../memory/hierarchical_summary_cache';
 import { retrieveForWriting } from '../memory/hybrid_memory_query';
@@ -50,7 +51,13 @@ interface WritingContext {
   sceneType?: SceneTypeResult;
 }
 
-const CONTEXT_MAX_CHARS = 18000;
+function getContextMaxChars(project: Project): number {
+  const count = project.chapters?.length ?? 0;
+  if (count <= 20) return 18000;
+  if (count <= 50) return 22000;
+  if (count <= 100) return 25000;
+  return 28000;
+}
 
 export async function buildWritingContext(
   project: Project,
@@ -78,7 +85,10 @@ export async function buildWritingContext(
 
   // Board 0.5: Long-Range Memory (HSC Tier 2+3) — only for chapter > 10
   // [Domain:ContextSelection] Injects global + arc summaries for long-range recall
-  const hscBudget = budget.recentSummaryChars > 1000 ? 1500 : 800;
+  const chapterCount = project.chapters?.length ?? 0;
+  const hscBudget = chapterCount > 20
+    ? (budget.recentSummaryChars > 1000 ? 2500 : 1500)
+    : (budget.recentSummaryChars > 1000 ? 1500 : 800);
   const hscBlock = await retrieveHscContext(project.id, targetChapterIndex, hscBudget);
   if (hscBlock) {
     sections.push(hscBlock.text);
@@ -160,12 +170,16 @@ export async function buildWritingContext(
     if (foreshadowing) sections.push(foreshadowing);
   }
 
+  // Board 7.5: Foreshadow urgency reminders for overdue threads
+  const foreshadowReminder = buildForeshadowReminderSection(project, targetChapterIndex);
+  if (foreshadowReminder) sections.push(foreshadowReminder);
+
   // Board 8: Reading Power Strategy
   sections.push(`## Board 8: Chiến lược sức hút (Reading Power)
 - Đảm bảo có ít nhất 1 Hook ở cuối chương.
 - Tạo Micro-payoff trong hội thoại hoặc phát triển kỹ năng.`);
 
-  const finalized = finalizeContext(sections);
+  const finalized = finalizeContext(sections, getContextMaxChars(project));
   finalized.sceneType = sceneType;
 
   // Context Contract Validation (Red-line checks)
@@ -261,12 +275,12 @@ export async function buildSurpriseContext(
   const writingContract = buildOutputContract(tensionLevel);
   if (writingContract) sections.push(writingContract);
 
-  return finalizeContext(sections);
+  return finalizeContext(sections, getContextMaxChars(project));
 }
 
-function finalizeContext(sections: string[]): WritingContext {
+function finalizeContext(sections: string[], maxChars = 18000): WritingContext {
   const contextText = sections.join('\n\n');
-  const compacted = preprocessTextForLlmInput(contextText, { maxChars: CONTEXT_MAX_CHARS });
+  const compacted = preprocessTextForLlmInput(contextText, { maxChars });
 
   const warnings: string[] = [];
   if (compacted.stats.reducedTokens > 0) {
@@ -414,65 +428,6 @@ async function buildClusterAwareNarrativeBrief(
       .join(' | ');
     lines.push(`- Continuity risks: ${warningSummary}`);
   }
-
-  return lines.join('\n');
-}
-
-function buildWritingRetrievalQuery(project: Project, targetChapterIndex: number): string {
-  const beat = project.outline?.[targetChapterIndex];
-  const previousChapter = (project.chapters || []).find((chapter) => (chapter.sequenceNumber ?? 0) === targetChapterIndex);
-  return [
-    beat?.title || '',
-    beat?.focus || '',
-    beat?.summary || '',
-    previousChapter?.summary || '',
-    project.mainPlot || '',
-  ]
-    .filter(Boolean)
-    .join(' | ');
-}
-
-async function buildHybridRetrievalSection(
-  project: Project,
-  targetChapterIndex: number,
-  maxChars?: number
-): Promise<string> {
-  const query = buildWritingRetrievalQuery(project, targetChapterIndex);
-  if (!query.trim()) return '';
-
-  const result = await retrieveForWriting(project, targetChapterIndex, query).catch(() => null);
-  if (!result) return '';
-
-  const budget = maxChars ?? 2000;
-  const lines: string[] = [];
-
-  const canonSection = renderPackSection('## CANON ƯU TIÊN', result.canonPack, { limit: 4 });
-  if (canonSection) lines.push(canonSection);
-
-  const stateSection = renderPackSection('## SNAPSHOT TRẠNG THÁI', result.statePack, { limit: 4 });
-  if (stateSection) lines.push(stateSection);
-
-  const hookSection = renderPackSection('## HOOK CHƯA THANH TOÁN', result.hookPack, { limit: 4 });
-  if (hookSection) lines.push(hookSection);
-
-  const graphSection = renderPackSection('## ĐIỂM NEO ĐỒ THỊ', result.graphPack, {
-    limit: 4,
-    includeTitles: true,
-  });
-  if (graphSection) lines.push(graphSection);
-
-  const semanticSection = renderPackSection('## TRÍCH ĐOẠN NGỮ NGHĨA LIÊN QUAN', result.semanticPack, {
-    limit: 3,
-    bodyMaxChars: Math.max(120, Math.round(budget / 2)),
-  });
-  if (semanticSection) lines.push(semanticSection);
-
-  const riskSection = renderPackSection('## RỦI RO CONTINUITY', result.riskPack, {
-    limit: 2,
-    bodyMaxChars: 220,
-    includeTitles: true,
-  });
-  if (riskSection) lines.push(riskSection);
 
   return lines.join('\n');
 }

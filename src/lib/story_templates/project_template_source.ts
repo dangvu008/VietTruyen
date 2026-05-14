@@ -34,7 +34,7 @@ function formatChapters(
   overrides: ProjectTemplateDraftOverrides,
 ): string {
   return sortChaptersBySequence(chapters)
-    .map((chapter, index) => resolveChapterWithDrafts(chapter, overrides))
+    .map((chapter) => resolveChapterWithDrafts(chapter, overrides))
     .filter((chapter) => chapter.content.trim())
     .map((chapter, index) =>
       joinNonEmptyLines([

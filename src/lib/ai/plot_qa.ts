@@ -56,7 +56,6 @@ interface PlotQuestionParams {
   project: Project;
   question: string;
   model?: AiModel;
-  apiKey?: string;
 }
 
 interface PlotAnswerResult {
@@ -138,7 +137,6 @@ export async function answerPlotQuestion({
   project,
   question,
   model,
-  apiKey,
 }: PlotQuestionParams): Promise<PlotAnswerResult> {
   const normalizedQuestion = normalizeText(question);
   const prefersWholeStorySummary = isWholeStoryReviewQuestion(normalizedQuestion);
@@ -163,7 +161,7 @@ export async function answerPlotQuestion({
     return { answer: localAnswer, source: 'local' };
   }
 
-  if (!model || !apiKey) {
+  if (!model) {
     return {
       answer: 'Tôi chưa đủ dữ liệu tóm tắt để trả lời chắc câu này ngay trong app. Hãy tóm tắt các chương liên quan hoặc cấu hình AI để tôi suy luận từ context nén.',
       source: 'insufficient',

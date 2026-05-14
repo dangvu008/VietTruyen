@@ -83,9 +83,12 @@ describe('buildCreationProjectSeed', () => {
     });
 
     expect(seed.projectPatch.title).toBe('Huyết Thư');
+    // [Note] buildCreationProjectSeed also hydrates draft chapter shells from
+    // the framework outline. Those consume createId() first, so outline and
+    // foreshadowing IDs are entity-2 and entity-3 here.
     expect(seed.projectPatch.outline).toEqual([
       {
-        id: 'entity-1',
+        id: 'entity-2',
         title: 'Biến cố mở màn',
         summary: 'Nam chính bị truy sát',
         focus: 'Sinh tồn',
@@ -93,7 +96,7 @@ describe('buildCreationProjectSeed', () => {
     ]);
     expect(seed.projectPatch.foreshadowings).toEqual([
       {
-        id: 'entity-2',
+        id: 'entity-3',
         description: 'Một nửa thiên thư nằm trong huyết mạch nam chính.',
         isResolved: false,
         createdAt: '2026-04-20T12:00:00.000Z',

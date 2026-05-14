@@ -8,6 +8,7 @@
  */
 
 import type { PersistStorage, StorageValue } from 'zustand/middleware';
+import { checkQuota } from './quota_guard';
 
 /**
  * Creates a Zustand PersistStorage that:
@@ -24,11 +25,62 @@ import type { PersistStorage, StorageValue } from 'zustand/middleware';
  *     storage: createDebouncedPersistStorage(500),
  *   })
  */
-export function createDebouncedPersistStorage<S>(debounceMs = 500): PersistStorage<S> {
+export interface DebouncedPersistStorage<S> extends PersistStorage<S> {
+  /**
+   * Immediately flush all pending writes to localStorage (synchronous).
+   * Call this before page navigation (e.g. OAuth redirect) to prevent data loss.
+   */
+  flushSync: () => void;
+}
+
+// Global registry so external code can flush all debounced stores before navigation.
+const allDebouncedStorages: Array<{ flushSync: () => void }> = [];
+
+/**
+ * Flush ALL debounced persist storages synchronously.
+ * Call before OAuth redirects or page unloads to prevent data loss.
+ */
+export function flushAllDebouncedStorages(): void {
+  for (const storage of allDebouncedStorages) {
+    storage.flushSync();
+  }
+}
+
+// [Domain:Storage] FIX — Auto-register beforeunload + visibilitychange listeners.
+// Prevents data loss when user closes tab or navigates away during debounce window.
+if (typeof window !== 'undefined') {
+  window.addEventListener('beforeunload', () => {
+    flushAllDebouncedStorages();
+  });
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') {
+      flushAllDebouncedStorages();
+    }
+  });
+}
+
+export function createDebouncedPersistStorage<S>(debounceMs = 500): DebouncedPersistStorage<S> {
   // In-memory cache so reads never hit localStorage for stale data
   const memoryCache = new Map<string, StorageValue<S>>();
   let writeTimer: ReturnType<typeof setTimeout> | null = null;
   let pendingKey: string | null = null;
+
+  function flushToLocalStorageSync(key: string): void {
+    const value = memoryCache.get(key);
+    if (value === undefined) return;
+
+    try {
+      localStorage.setItem(key, JSON.stringify(value));
+    } catch (error) {
+      const quota = checkQuota();
+      if (quota.level === 'critical') {
+        console.error('[DebouncedStorage] Storage quota critical (%d%). Write failed:', quota.percent, error);
+      } else {
+        console.warn('[DebouncedStorage] localStorage write failed:', error);
+      }
+    }
+  }
 
   function flushToLocalStorage(key: string): void {
     const value = memoryCache.get(key);
@@ -38,7 +90,12 @@ export function createDebouncedPersistStorage<S>(debounceMs = 500): PersistStora
       try {
         localStorage.setItem(key, JSON.stringify(value));
       } catch (error) {
-        console.warn('[DebouncedStorage] localStorage write failed:', error);
+        const quota = checkQuota();
+        if (quota.level === 'critical') {
+          console.error('[DebouncedStorage] Storage quota critical (%d%). Write failed:', quota.percent, error);
+        } else {
+          console.warn('[DebouncedStorage] localStorage write failed:', error);
+        }
       }
     };
 
@@ -50,7 +107,19 @@ export function createDebouncedPersistStorage<S>(debounceMs = 500): PersistStora
     }
   }
 
-  return {
+  const storage: DebouncedPersistStorage<S> = {
+    flushSync: () => {
+      if (writeTimer) {
+        clearTimeout(writeTimer);
+        writeTimer = null;
+      }
+      // Flush all cached entries synchronously
+      for (const key of memoryCache.keys()) {
+        flushToLocalStorageSync(key);
+      }
+      pendingKey = null;
+    },
+
     getItem: (name: string): StorageValue<S> | null => {
       // Return in-memory value if available (fresher than localStorage)
       const cached = memoryCache.get(name);
@@ -95,4 +164,7 @@ export function createDebouncedPersistStorage<S>(debounceMs = 500): PersistStora
       localStorage.removeItem(name);
     },
   };
+
+  allDebouncedStorages.push(storage);
+  return storage;
 }

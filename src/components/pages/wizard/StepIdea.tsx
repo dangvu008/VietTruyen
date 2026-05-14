@@ -5,7 +5,6 @@
  * Domain: WritingWizard → [idea capture]
  * Design: "The Nocturnal Editor" — Stitch screen "AI Writing Wizard - Step 1: Ý tưởng"
  */
-import React from 'react';
 import { Sparkles, ArrowRight } from 'lucide-react';
 import { useWritingWizardStore } from '../../../store/use_writing_wizard_store';
 

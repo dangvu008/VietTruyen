@@ -39,12 +39,14 @@ describe('use_story_editor_chat_store', () => {
 
   it('persists chapter messages by project and chapter', async () => {
     const { useStoryEditorChatStore } = await import('./use_story_editor_chat_store');
+    const { flushAllDebouncedStorages } = await import('../lib/storage/debounced_local_storage');
 
     useStoryEditorChatStore.getState().setChapterMessages('project-1', 'chapter-1', [
       buildMessage('msg-1', 'user', 'Viết lại mở đầu đậm không khí phản bội hơn.'),
       buildMessage('msg-2', 'assistant', 'Ta có thể bắt đầu bằng tiếng chuông báo tử.'),
     ]);
 
+    flushAllDebouncedStorages();
     const raw = localStorage.getItem('viettruyen-story-editor-chat');
     expect(raw).not.toBeNull();
 
@@ -56,6 +58,7 @@ describe('use_story_editor_chat_store', () => {
 
   it('does not persist runtime streaming state for editor chat messages', async () => {
     const { useStoryEditorChatStore } = await import('./use_story_editor_chat_store');
+    const { flushAllDebouncedStorages } = await import('../lib/storage/debounced_local_storage');
 
     useStoryEditorChatStore.getState().setChapterMessages('project-1', 'chapter-1', [
       {
@@ -69,6 +72,7 @@ describe('use_story_editor_chat_store', () => {
       },
     ]);
 
+    flushAllDebouncedStorages();
     const raw = localStorage.getItem('viettruyen-story-editor-chat');
     const persisted = JSON.parse(raw as string);
 

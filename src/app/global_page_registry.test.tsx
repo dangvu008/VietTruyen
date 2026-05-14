@@ -70,6 +70,8 @@ function createProjectActions(): ProjectActions {
     removeForeshadowing: vi.fn(),
     updateMasterOutline: vi.fn(),
     updateVolumeInMasterOutline: vi.fn(),
+    syncProjectToCloud: vi.fn(),
+    makeLocalCopy: vi.fn(),
   };
 }
 
@@ -82,7 +84,6 @@ describe('global_page_registry', () => {
       settingsTab: 'ai',
       onNavigate: vi.fn(),
       onEnterProject,
-      projects: [project],
       activeProject: project,
       projectActions: createProjectActions(),
     });

@@ -14,7 +14,6 @@
 
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { useAiStore } from '../../store/use_ai_store';
-import { useAuthStore } from '../../store/use_auth_store';
 import {
   getConfiguredLocalAiProxyKey,
   getConfiguredLocalAiProxyUrl,

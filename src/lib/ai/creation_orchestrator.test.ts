@@ -220,7 +220,6 @@ describe('creation_orchestrator', () => {
   it('creates a linked project and writes all chapter bodies on framework confirm', async () => {
     const {
       useCreationChatStore,
-      useNotificationStore,
       getProjectSnapshot,
       handleFrameworkConfirm,
     } = await loadModules();

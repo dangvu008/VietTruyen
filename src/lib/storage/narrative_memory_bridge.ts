@@ -134,7 +134,7 @@ export async function captureNarrativeMemorySnapshot(
  */
 export async function migrateProjectNarrativeMemory(
   projectId: string,
-  provider: StorageProvider,
+  _provider: StorageProvider,
 ): Promise<NarrativeMemoryMigrationResult> {
   const snapshot = await captureNarrativeMemorySnapshot(projectId);
 

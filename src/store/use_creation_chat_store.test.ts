@@ -28,6 +28,7 @@ describe('use_creation_chat_store', () => {
 
   it('autosaves draft input and workflow progress into localStorage', async () => {
     const { useCreationChatStore } = await import('./use_creation_chat_store');
+    const { flushAllDebouncedStorages } = await import('../lib/storage/debounced_local_storage');
 
     useCreationChatStore.getState().setDraftInput('Khung cốt truyện cần thêm phản diện.');
     useCreationChatStore.getState().setPlotPreview({
@@ -49,6 +50,7 @@ describe('use_creation_chat_store', () => {
         lastGeneratedChapterTitle: 'Chương 1',
       });
 
+    flushAllDebouncedStorages();
     const raw = localStorage.getItem('viettruyen-creation-chat');
     expect(raw).not.toBeNull();
 
@@ -110,10 +112,12 @@ describe('use_creation_chat_store', () => {
 
   it('does not persist transient loading messages into localStorage', async () => {
     const { useCreationChatStore } = await import('./use_creation_chat_store');
+    const { flushAllDebouncedStorages } = await import('../lib/storage/debounced_local_storage');
 
     useCreationChatStore.getState().addUserText('Viết mở đầu chương 1.');
     useCreationChatStore.getState().addLoadingMessage();
 
+    flushAllDebouncedStorages();
     const raw = localStorage.getItem('viettruyen-creation-chat');
     expect(raw).not.toBeNull();
 
@@ -275,6 +279,7 @@ describe('use_creation_chat_store', () => {
 
   it('persists edited plot preview content and clears confirmation state', async () => {
     const { useCreationChatStore } = await import('./use_creation_chat_store');
+    const { flushAllDebouncedStorages } = await import('../lib/storage/debounced_local_storage');
 
     useCreationChatStore.getState().setPlotPreview({
       title: 'Thiên Hà Mục Ca',
@@ -307,6 +312,7 @@ describe('use_creation_chat_store', () => {
       'Kẻ phản bội ở ngay bên cạnh',
     ]);
 
+    flushAllDebouncedStorages();
     const raw = localStorage.getItem('viettruyen-creation-chat');
     expect(raw).not.toBeNull();
 

@@ -151,8 +151,7 @@ const AiAssistant: React.FC<AiAssistantProps> = ({
   const [storyPreview, setStoryPreview] = useState<string>('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const isWorkspace = variant === 'workspace';
-  const _isWriterContext = ['writer', 'chapters', 'writing-wizard', 'review', 'export'].includes(contextHint);
-  const isDark = true; // Always output dark theme to sync with EtherealLayout Nocturnal Editor design
+  const isDark = true;
   const isVisible = isWorkspace || isOpen;
 
   const {
@@ -213,9 +212,6 @@ const AiAssistant: React.FC<AiAssistantProps> = ({
           project,
           question: prompt,
           model: plotModel,
-          // Proxy architecture: no client-side key needed. Sentinel bypasses the
-          // !apiKey guard inside answerPlotQuestion so the AI fallback path runs.
-          apiKey: '__proxy__',
         });
 
         setMessages((prev) => [...prev, { role: 'ai', content: plotAnswer.answer }]);

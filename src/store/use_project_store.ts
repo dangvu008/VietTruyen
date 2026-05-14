@@ -12,10 +12,15 @@ import {
 import { useStorageStore } from './use_storage_store';
 import { deriveAdaptationChapters } from '../lib/adaptation/derive_adaptation_chapters';
 import { guardChapterContent } from '../lib/chapter/chapter_content_guard';
+import { trashChapter } from '../lib/storage/trash_manager';
 import { summarizeDebugChapters, traceStoryDebugEvent } from '../lib/debug/story_debug_trace';
 import { ensureChapterSequenceNumbers, getNextChapterSequenceNumber } from '../lib/memory/chapter_order';
 import { normalizeCharacter, normalizeWorldRules } from '../lib/memory/memory_registry';
 import type { StorageProvider } from '../lib/storage/storage_provider';
+import type { StorageMode } from '../lib/storage/storage_types';
+import { isTauriEnvironment } from '../lib/storage/detect_environment';
+import { GitStorageProvider } from '../lib/storage/git_storage_provider';
+import { OnlineStorageProvider } from '../lib/storage/online_storage_provider';
 import type { AdaptationConfig } from '../types/adaptation';
 import type {
   Chapter,
@@ -57,6 +62,9 @@ export interface ProjectState {
   ) => Promise<void>;
   hydrateProjectChapters: (id: string) => Promise<void>;
   syncProjectsFromProvider: () => Promise<void>;
+  syncProjectToCloud: (id: string) => Promise<void>;
+  autoSyncLocalProjectsToCloud: () => Promise<void>;
+  makeLocalCopy: (id: string) => Promise<void>;
   migrateProjectsToDexie: () => Promise<void>;
   addForeshadowing: (id: string, foreshadowing: Foreshadowing) => void;
   updateForeshadowing: (id: string, foreshadowingId: string, patch: Partial<Foreshadowing>) => void;
@@ -68,7 +76,6 @@ export interface ProjectState {
 
 const now = () => new Date().toISOString();
 const DEFAULT_PROJECT_TITLE = 'Dự án mới';
-const MAX_AUTO_RESTORED_CONTENT_SYNC_CHAPTERS = 200;
 
 // [Domain:Storage] In-flight deduplication guard for hydrateProjectChapters.
 // Multiple callers (WriterPage, StoryWorkspace, onRehydrateStorage) may trigger
@@ -77,6 +84,78 @@ const MAX_AUTO_RESTORED_CONTENT_SYNC_CHAPTERS = 200;
 // at a time, returning the same Promise to all concurrent callers.
 const hydrateInFlight = new Map<string, Promise<void>>();
 let providerProjectSyncInFlight: Promise<void> | null = null;
+
+function projectModeFromStorageMode(mode: StorageMode): ProjectStorageMode {
+  return mode === 'local' ? 'local' : 'cloud';
+}
+
+function canonicalProjectStorageMode(mode?: ProjectStorageMode): 'inline' | 'local' | 'cloud' {
+  if (mode === 'cloud' || mode === 'provider') return 'cloud';
+  if (mode === 'local' || mode === 'indexeddb') return 'local';
+  return 'inline';
+}
+
+function normalizeExplicitStorageMode(mode?: ProjectStorageMode): ProjectStorageMode | undefined {
+  if (mode === 'provider') return 'cloud';
+  if (mode === 'indexeddb') return 'local';
+  return mode;
+}
+
+function defaultProjectStorageMode(): ProjectStorageMode {
+  const provider = useStorageStore.getState().provider;
+  return provider ? projectModeFromStorageMode(provider.mode) : 'local';
+}
+
+function getProviderForProjectStorageMode(mode?: ProjectStorageMode): StorageProvider | null {
+  const provider = useStorageStore.getState().provider;
+  if (!provider) return null;
+
+  const canonical = canonicalProjectStorageMode(mode);
+  if (canonical === 'cloud') {
+    return provider.mode === 'local' ? null : provider;
+  }
+  if (canonical === 'local') {
+    return provider.mode === 'local' ? provider : null;
+  }
+  return null;
+}
+
+async function createCloudProviderForExplicitSync(): Promise<{
+  provider: StorageProvider;
+  shouldDispose: boolean;
+}> {
+  const storageState = useStorageStore.getState();
+  if (storageState.provider && storageState.provider.mode !== 'local') {
+    return { provider: storageState.provider, shouldDispose: false };
+  }
+
+  const userId = storageState.providerUserId;
+  if (!userId || userId === 'guest') {
+    throw new Error('Cloud sync requires a signed-in user.');
+  }
+
+  const provider = new OnlineStorageProvider(userId);
+  await provider.init();
+  return { provider, shouldDispose: true };
+}
+
+async function createLocalProviderForExplicitCopy(): Promise<{
+  provider: StorageProvider | null;
+  shouldDispose: boolean;
+}> {
+  const storageState = useStorageStore.getState();
+  if (storageState.provider?.mode === 'local') {
+    return { provider: storageState.provider, shouldDispose: false };
+  }
+
+  if (!isTauriEnvironment()) {
+    return { provider: null, shouldDispose: false };
+  }
+
+  const provider = new GitStorageProvider();
+  await provider.init();
+  return { provider, shouldDispose: true };
+}
 
 function sanitizePersistedChapter(chapter: Chapter): Chapter {
   const guarded = guardChapterContent(chapter.content);
@@ -152,10 +231,77 @@ const normalizeProject = (project: Project): Project => ({
   chapters: normalizeChapterCollection(project.chapters || []),
   foreshadowings: project.foreshadowings || [],
   canonVersion: project.canonVersion ?? 1,
-  storageMode: project.storageMode ?? ((project.chapters || []).length > 0 ? 'indexeddb' : 'inline'),
+  storageMode: normalizeExplicitStorageMode(project.storageMode)
+    ?? ((project.chapters || []).length > 0 ? defaultProjectStorageMode() : 'inline'),
+  syncStatus: project.syncStatus ?? 'idle',
   arcCount: project.arcCount ?? 0,
   hasGlobalIndex: project.hasGlobalIndex ?? false,
 });
+
+// [Wave 2 §3] Public canonical factory. Wraps a partial input with required
+// defaults then normalizes. Use for: new project creation, duplication, cloud
+// adaptation — anywhere a Project must be guaranteed canonical before entering
+// store state. Stay using `normalizeProject` for in-place renormalization of
+// already-shaped Project values (faster path: no spread of defaults).
+export function makeCanonicalProject(input: Partial<Project> & Pick<Project, 'id' | 'title'>): Project {
+  const nowIso = now();
+  return normalizeProject({
+    logline: '',
+    genre: '',
+    subGenre: [],
+    writingStyle: '',
+    tone: '',
+    styleId: '',
+    targetChapters: 60,
+    endgame: '',
+    mainCharacterCount: 2,
+    supportCharacterCount: 3,
+    characterSetup: '',
+    worldSetting: '',
+    mainPlot: '',
+    world: {
+      geography: '',
+      magicSystem: '',
+      techLevel: '',
+      currency: '',
+      factions: [],
+      rules: '',
+      facts: [],
+    },
+    characters: [],
+    outline: [],
+    chapters: [],
+    foreshadowings: [],
+    notes: '',
+    canonVersion: 1,
+    storageMode: 'inline',
+    syncStatus: 'idle',
+    arcCount: 0,
+    hasGlobalIndex: false,
+    createdAt: nowIso,
+    updatedAt: nowIso,
+    ...input,
+  } as Project);
+}
+
+// [Wave 2] Cheap structural check — true when a project already has all required
+// canonical fields. Used to skip normalizeProject on rehydrate, since normalizeProject
+// is idempotent but CPU-bound for projects with many chapters/characters.
+// Side note: this does NOT validate every field — it's a fast pre-filter, not a verifier.
+const isProjectNormalized = (project: Project | undefined | null): boolean => {
+  if (!project) return false;
+  return (
+    Array.isArray(project.world?.facts) &&
+    Array.isArray(project.characters) &&
+    Array.isArray(project.chapters) &&
+    Array.isArray(project.foreshadowings) &&
+    typeof project.canonVersion === 'number' &&
+    typeof project.storageMode === 'string' &&
+    typeof project.syncStatus === 'string' &&
+    typeof project.arcCount === 'number' &&
+    typeof project.hasGlobalIndex === 'boolean'
+  );
+};
 
 const createProjectTemplate = (title?: string): Project => ({
   id: createId(),
@@ -189,6 +335,7 @@ const createProjectTemplate = (title?: string): Project => ({
   notes: '',
   canonVersion: 1,
   storageMode: 'inline',
+  syncStatus: 'idle',
   arcCount: 0,
   hasGlobalIndex: false,
   createdAt: now(),
@@ -213,8 +360,12 @@ function isDefaultProjectShell(project: Project): boolean {
   return project.title === 'VietTruyen Project' && !hasMeaningfulProjectData(project);
 }
 
-const updateProjectArray = (projects: Project[], id: string, updater: (project: Project) => Project) =>
-  projects.map((project) => {
+const updateProjectArray = (projects: Project[], id: string, updater: (project: Project) => Project) => {
+  // [Wave 2] Return the same array reference when no entry changed.
+  // Zustand uses reference equality to gate downstream subscriptions; allocating
+  // a new array on every call would force selectors to re-run even on no-ops.
+  let changed = false;
+  const next = projects.map((project) => {
     if (project.id !== id) {
       return project;
     }
@@ -224,8 +375,12 @@ const updateProjectArray = (projects: Project[], id: string, updater: (project: 
       return project;
     }
 
+    changed = true;
     return normalizeProject(updated);
   });
+
+  return changed ? next : projects;
+};
 
 const toStoredChapter = (projectId: string, chapter: Chapter) => ({
   ...chapter,
@@ -254,7 +409,11 @@ const stripPersistedProject = (project: Project): Project => ({
   chapters: (project.chapters || []).map((chapter) => stripPersistedChapter(chapter)),
 });
 
-function mergeProviderProjects(localProjects: Project[], providerProjects: Project[]): Project[] {
+function mergeProviderProjects(
+  localProjects: Project[],
+  providerProjects: Project[],
+  providerMode?: StorageMode,
+): Project[] {
   if (providerProjects.length === 0) return localProjects;
 
   const localById = new Map(localProjects.map((project) => [project.id, project]));
@@ -262,10 +421,35 @@ function mergeProviderProjects(localProjects: Project[], providerProjects: Proje
 
   const mergedProviderProjects = providerProjects.map((providerProject) => {
     const localProject = localById.get(providerProject.id);
+    // [Domain:Storage] FIX — Use hasAnyChapterPayload instead of chapters.length.
+    // After reload, partialize strips content to '' so local chapters always have
+    // length > 0 but zero content. This caused provider chapters (with real content)
+    // to be discarded in favor of empty local shells.
+    const localHasContent = localProject?.chapters.length
+      ? localProject.chapters.some((ch) => ch.content?.trim())
+      : false;
+    const providerHasContent = providerProject.chapters?.length
+      ? providerProject.chapters.some((ch) => ch.content?.trim())
+      : false;
+
+    let mergedChapters: Chapter[];
+    if (localHasContent) {
+      // Local has real content — prefer it (user may have unsaved edits)
+      mergedChapters = localProject!.chapters;
+    } else if (providerHasContent) {
+      // Provider has content, local is stripped — use provider
+      mergedChapters = providerProject.chapters;
+    } else if (localProject?.chapters.length) {
+      // Both stripped — keep local structure (titles/metadata)
+      mergedChapters = localProject.chapters;
+    } else {
+      mergedChapters = providerProject.chapters || [];
+    }
+
     return normalizeProject({
       ...providerProject,
-      chapters: (localProject?.chapters.length ? localProject.chapters : providerProject.chapters) || [],
-      storageMode: 'provider',
+      chapters: mergedChapters,
+      storageMode: providerMode === 'local' ? 'local' : 'cloud',
     });
   });
 
@@ -525,8 +709,12 @@ async function repairMissingChapterPayloadsFromProvider(
     : repairedExisting;
 }
 
-async function syncProviderProjectChapters(projectId: string, chapters: Chapter[]): Promise<void> {
-  const provider = useStorageStore.getState().provider;
+async function syncProviderProjectChapters(
+  projectId: string,
+  chapters: Chapter[],
+  storageMode?: ProjectStorageMode,
+): Promise<void> {
+  const provider = getProviderForProjectStorageMode(storageMode);
   if (!provider) return;
 
   try {
@@ -539,8 +727,12 @@ async function syncProviderProjectChapters(projectId: string, chapters: Chapter[
   }
 }
 
-async function syncProviderDeleteChapter(projectId: string, chapterId: string): Promise<void> {
-  const provider = useStorageStore.getState().provider;
+async function syncProviderDeleteChapter(
+  projectId: string,
+  chapterId: string,
+  storageMode?: ProjectStorageMode,
+): Promise<void> {
+  const provider = getProviderForProjectStorageMode(storageMode);
   if (!provider) return;
 
   try {
@@ -554,7 +746,7 @@ async function syncProviderDeleteChapter(projectId: string, chapterId: string): 
 }
 
 async function syncProviderProjectSnapshot(project: Project, caller: string): Promise<void> {
-  const provider = useStorageStore.getState().provider;
+  const provider = getProviderForProjectStorageMode(project.storageMode);
   if (!provider) return;
 
   try {
@@ -567,7 +759,11 @@ async function syncProviderProjectSnapshot(project: Project, caller: string): Pr
   }
 }
 
-async function persistProjectChapters(projectId: string, chapters: Chapter[]): Promise<void> {
+async function persistProjectChapters(
+  projectId: string,
+  chapters: Chapter[],
+  options: { storageMode?: ProjectStorageMode } = {},
+): Promise<void> {
   const normalized = normalizeChapterCollection(chapters);
   traceStoryDebugEvent({
     domain: 'storage',
@@ -577,7 +773,8 @@ async function persistProjectChapters(projectId: string, chapters: Chapter[]): P
     details: {
       projectId,
       chapters: summarizeDebugChapters(normalized),
-      providerMode: useStorageStore.getState().provider?.mode ?? null,
+      providerMode: getProviderForProjectStorageMode(options.storageMode)?.mode ?? null,
+      projectStorageMode: options.storageMode ?? null,
     },
   });
 
@@ -589,7 +786,7 @@ async function persistProjectChapters(projectId: string, chapters: Chapter[]): P
     normalized.map((chapter) => toStoredChapter(projectId, chapter)),
   );
 
-  const provider = useStorageStore.getState().provider;
+  const provider = getProviderForProjectStorageMode(options.storageMode);
   const providerPromise = provider
     ? provider.replaceProjectChapters(projectId, normalized).catch((providerError) => {
       console.warn(
@@ -660,8 +857,11 @@ async function loadProjectWithFullChapters(project: Project): Promise<Project> {
     hasCompleteChapterContentCoverage(indexedDbChapters, expectedChapterCount) ||
     hasCompleteChapterContentCoverage(inMemoryChapters, expectedChapterCount);
 
-  // [Domain:Storage] STEP 1 — Thử dùng provider trước (Supabase online)
-  const provider = useStorageStore.getState().provider;
+  // [Domain:Storage] STEP 1 — Thử dùng provider đúng với project mode.
+  // Cloud projects read Supabase; local projects read Git local when available.
+  // IndexedDB remains a cache/recovery layer and must not change ownership.
+  const ownerStorageMode = normalizeExplicitStorageMode(normalized.storageMode);
+  const provider = getProviderForProjectStorageMode(ownerStorageMode);
   let providerChapters: Chapter[] = [];
 
   if (provider && !localHasCompleteContent) {
@@ -700,7 +900,12 @@ async function loadProjectWithFullChapters(project: Project): Promise<Project> {
   const providerHasPayload = hasAnyChapterPayload(providerChapters);
 
   let fullChapters = providerChapters;
-  let chapterStorageMode: ProjectStorageMode = provider ? 'provider' : 'indexeddb';
+  let chapterStorageMode: ProjectStorageMode =
+    ownerStorageMode && ownerStorageMode !== 'inline'
+      ? ownerStorageMode
+      : provider
+        ? projectModeFromStorageMode(provider.mode)
+        : 'local';
 
   if (providerChapters.length > 0) {
     // [Domain:Storage] STEP 2a — Merge provider ← IndexedDB ← in-memory
@@ -713,22 +918,26 @@ async function loadProjectWithFullChapters(project: Project): Promise<Project> {
     if (!providerHasPayload && (indexedDbHasPayload || inMemoryHasPayload)) {
       // Provider chỉ có metadata → dùng source có content
       fullChapters = indexedDbHasPayload ? indexedDbChapters : inMemoryChapters;
-      chapterStorageMode = 'indexeddb';
+      chapterStorageMode = ownerStorageMode && ownerStorageMode !== 'inline' ? ownerStorageMode : 'local';
     } else {
       fullChapters = repairedChapters;
-      chapterStorageMode = repairedHasPayload === providerHasPayload ? 'provider' : 'indexeddb';
+      chapterStorageMode = ownerStorageMode && ownerStorageMode !== 'inline'
+        ? ownerStorageMode
+        : repairedHasPayload === providerHasPayload && provider
+          ? projectModeFromStorageMode(provider.mode)
+          : 'local';
     }
   } else if (indexedDbChapters.length > 0) {
     // [Domain:Storage] STEP 2b — Không có provider data → dùng IndexedDB, merge in-memory fallback
     fullChapters = inMemoryHasPayload
       ? mergeChapterPayloadFallback(indexedDbChapters, inMemoryChapters)
       : indexedDbChapters;
-    chapterStorageMode = 'indexeddb';
+    chapterStorageMode = ownerStorageMode && ownerStorageMode !== 'inline' ? ownerStorageMode : 'local';
   } else if (inMemoryHasPayload) {
     // [Domain:Storage] STEP 2c — Cả provider và IndexedDB đều rỗng nhưng state có data
     // Trường hợp này xảy ra khi vừa upload/adapt xong, IndexedDB persist chưa kịp flush
     fullChapters = inMemoryChapters;
-    chapterStorageMode = 'indexeddb';
+    chapterStorageMode = ownerStorageMode && ownerStorageMode !== 'inline' ? ownerStorageMode : 'local';
   }
 
   if (
@@ -762,8 +971,8 @@ async function loadProjectWithFullChapters(project: Project): Promise<Project> {
       fullChapters.filter((chapter) => chapter.content?.trim()).length
     ) {
       fullChapters = recoveredChapters;
-      chapterStorageMode = 'indexeddb';
-      await persistProjectChapters(normalized.id, fullChapters);
+      chapterStorageMode = ownerStorageMode && ownerStorageMode !== 'inline' ? ownerStorageMode : 'local';
+      await persistProjectChapters(normalized.id, fullChapters, { storageMode: 'local' });
     }
   }
 
@@ -821,7 +1030,9 @@ async function loadProjectWithFullChapters(project: Project): Promise<Project> {
             },
           });
           fullChapters = mergeChapterPayloadFallback(retried, inMemoryChapters);
-          chapterStorageMode = 'provider';
+          chapterStorageMode = ownerStorageMode && ownerStorageMode !== 'inline'
+            ? ownerStorageMode
+            : projectModeFromStorageMode(retryProvider.mode);
 
           if (hasAnyChapterPayload(fullChapters)) {
             return normalizeProject({
@@ -891,11 +1102,15 @@ async function loadProjectWithFullChapters(project: Project): Promise<Project> {
     });
     return normalizeProject({
       ...normalized,
-      storageMode: inlineChapters.length > 0 ? 'indexeddb' : normalized.storageMode,
+      storageMode: inlineChapters.length > 0
+        ? (ownerStorageMode && ownerStorageMode !== 'inline' ? ownerStorageMode : 'local')
+        : normalized.storageMode,
     });
   }
 
-  await persistProjectChapters(normalized.id, inlineChapters);
+  await persistProjectChapters(normalized.id, inlineChapters, {
+    storageMode: ownerStorageMode && ownerStorageMode !== 'inline' ? ownerStorageMode : 'local',
+  });
   traceStoryDebugEvent({
     domain: 'storage',
     action: 'project.load_full_chapters.inline_fallback',
@@ -909,7 +1124,7 @@ async function loadProjectWithFullChapters(project: Project): Promise<Project> {
   return normalizeProject({
     ...normalized,
     chapters: inlineChapters,
-    storageMode: 'provider',
+    storageMode: ownerStorageMode && ownerStorageMode !== 'inline' ? ownerStorageMode : 'local',
   });
 }
 
@@ -1000,7 +1215,10 @@ export const useProjectStore = create<ProjectState>()(
 
         createProject: (title) => {
           const project = normalizeProject(
-            createProjectTemplate(createUniqueProjectTitle(get().projects, title))
+            {
+              ...createProjectTemplate(createUniqueProjectTitle(get().projects, title)),
+              storageMode: defaultProjectStorageMode(),
+            }
           );
 
           set((state) => ({
@@ -1027,7 +1245,9 @@ export const useProjectStore = create<ProjectState>()(
           await syncProviderProjectSnapshot(promoted, 'promotePreviewProject');
 
           if (promoted.chapters.length > 0) {
-            await persistProjectChapters(promoted.id, promoted.chapters);
+            await persistProjectChapters(promoted.id, promoted.chapters, {
+              storageMode: promoted.storageMode,
+            });
           }
 
           return promoted;
@@ -1051,7 +1271,8 @@ export const useProjectStore = create<ProjectState>()(
               title: `${source.title} (Copy)`,
               chapters: duplicatedChapters,
               canonVersion: source.canonVersion ?? 1,
-              storageMode: duplicatedChapters.length > 0 ? 'indexeddb' : source.storageMode,
+              storageMode: normalizeExplicitStorageMode(source.storageMode)
+                ?? (duplicatedChapters.length > 0 ? defaultProjectStorageMode() : source.storageMode),
               createdAt: now(),
               updatedAt: now(),
             });
@@ -1062,7 +1283,9 @@ export const useProjectStore = create<ProjectState>()(
             }));
 
             if (duplicatedChapters.length > 0) {
-              await persistProjectChapters(copy.id, duplicatedChapters);
+              await persistProjectChapters(copy.id, duplicatedChapters, {
+                storageMode: copy.storageMode,
+              });
             }
           })();
         },
@@ -1197,16 +1420,19 @@ export const useProjectStore = create<ProjectState>()(
         addChapter: async (id, chapter) => {
           let persistedChapter: Chapter | null = null;
           let allChapters: Chapter[] = [];
+          let nextStorageMode: ProjectStorageMode = defaultProjectStorageMode();
 
           set((state) => {
             const projects = updateProjectArray(state.projects, id, (project) => {
               const normalizedChapter = normalizeChapter(chapter, project.chapters);
               persistedChapter = normalizedChapter;
               allChapters = [normalizedChapter, ...project.chapters];
+              nextStorageMode = normalizeExplicitStorageMode(project.storageMode)
+                ?? defaultProjectStorageMode();
               return {
                 ...project,
                 chapters: allChapters,
-                storageMode: useStorageStore.getState().provider ? 'provider' : 'indexeddb',
+                storageMode: nextStorageMode,
                 updatedAt: now(),
               };
             });
@@ -1217,15 +1443,18 @@ export const useProjectStore = create<ProjectState>()(
           if (persistedChapter) {
             await storeChapter(toStoredChapter(id, persistedChapter));
           }
-          await syncProviderProjectChapters(id, allChapters);
+          await syncProviderProjectChapters(id, allChapters, nextStorageMode);
           await syncProjectMetadataToProvider(id);
         },
 
         insertChapter: async (id, chapter, insertAtSequence) => {
           let allChapters: Chapter[] = [];
+          let nextStorageMode: ProjectStorageMode = defaultProjectStorageMode();
 
           set((state) => {
             const projects = updateProjectArray(state.projects, id, (project) => {
+              nextStorageMode = normalizeExplicitStorageMode(project.storageMode)
+                ?? defaultProjectStorageMode();
               const updatedExisting = project.chapters.map((ch) => {
                 const seq = ch.sequenceNumber ?? 0;
                 if (seq >= insertAtSequence) {
@@ -1239,7 +1468,7 @@ export const useProjectStore = create<ProjectState>()(
               return {
                 ...project,
                 chapters: allChapters,
-                storageMode: useStorageStore.getState().provider ? 'provider' : 'indexeddb',
+                storageMode: nextStorageMode,
                 updatedAt: now(),
               };
             });
@@ -1251,16 +1480,19 @@ export const useProjectStore = create<ProjectState>()(
             id,
             allChapters.map((ch) => toStoredChapter(id, ch))
           );
-          await syncProviderProjectChapters(id, allChapters);
+          await syncProviderProjectChapters(id, allChapters, nextStorageMode);
           await syncProjectMetadataToProvider(id);
         },
 
         updateChapter: async (id, chapterId, patch) => {
           let persistedChapter: Chapter | null = null;
           let allChapters: Chapter[] = [];
+          let nextStorageMode: ProjectStorageMode = defaultProjectStorageMode();
 
           set((state) => {
             const projects = updateProjectArray(state.projects, id, (project) => {
+              nextStorageMode = normalizeExplicitStorageMode(project.storageMode)
+                ?? defaultProjectStorageMode();
               allChapters = project.chapters.map((chapter) => {
                 if (chapter.id !== chapterId) return chapter;
                 const nextChapter = normalizeChapter({ ...chapter, ...patch, updatedAt: now() }, project.chapters);
@@ -1269,7 +1501,7 @@ export const useProjectStore = create<ProjectState>()(
               });
               return {
                 ...project,
-                storageMode: useStorageStore.getState().provider ? 'provider' : 'indexeddb',
+                storageMode: nextStorageMode,
                 chapters: allChapters,
                 updatedAt: now(),
               };
@@ -1281,20 +1513,30 @@ export const useProjectStore = create<ProjectState>()(
           if (!persistedChapter) return;
 
           await storeChapter(toStoredChapter(id, persistedChapter));
-          await syncProviderProjectChapters(id, allChapters);
+          await syncProviderProjectChapters(id, allChapters, nextStorageMode);
           await syncProjectMetadataToProvider(id);
         },
 
         removeChapter: async (id, chapterId) => {
           let allChapters: Chapter[] = [];
+          let nextStorageMode: ProjectStorageMode = defaultProjectStorageMode();
+
+          // Soft-delete: save to trash before hard-deleting
+          const project = get().projects.find((p) => p.id === id);
+          const chapterToTrash = project?.chapters.find((c) => c.id === chapterId);
+          if (chapterToTrash) {
+            try { trashChapter(id, chapterToTrash); } catch { /* non-blocking */ }
+          }
 
           set((state) => {
             const projects = updateProjectArray(state.projects, id, (project) => {
+              nextStorageMode = normalizeExplicitStorageMode(project.storageMode)
+                ?? defaultProjectStorageMode();
               allChapters = project.chapters.filter((chapter) => chapter.id !== chapterId);
               return {
                 ...project,
                 chapters: allChapters,
-                storageMode: useStorageStore.getState().provider ? 'provider' : 'indexeddb',
+                storageMode: nextStorageMode,
                 updatedAt: now(),
               };
             });
@@ -1303,7 +1545,7 @@ export const useProjectStore = create<ProjectState>()(
           });
 
           await deleteStoredChapter(chapterId);
-          await syncProviderDeleteChapter(id, chapterId);
+          await syncProviderDeleteChapter(id, chapterId, nextStorageMode);
           await syncProjectMetadataToProvider(id);
         },
 
@@ -1372,12 +1614,14 @@ export const useProjectStore = create<ProjectState>()(
             normalizedChapters = mergeChapterPayloadFallback(normalizedChapters, keepMatchingFallbacks(storedChapters));
           }
 
-          // [Domain:Storage] Auto-upgrade storageMode to 'provider' when provider is available.
-          // Callers often pass 'indexeddb' but if we have a provider, data MUST be synced.
-          const provider = useStorageStore.getState().provider;
-          const nextStorageMode = provider
-            ? 'provider'
-            : (options?.storageMode ?? 'indexeddb');
+          // [Domain:Storage] Respect explicit project ownership. Provider presence
+          // alone must not promote a local project into cloud sync.
+          const requestedMode = normalizeExplicitStorageMode(options?.storageMode);
+          const existingMode = normalizeExplicitStorageMode(project?.storageMode);
+          const nextStorageMode = requestedMode
+            ?? existingMode
+            ?? defaultProjectStorageMode();
+          const provider = getProviderForProjectStorageMode(nextStorageMode);
           const nextUpdatedAt = now();
 
           // [Domain:Storage] STEP — Update Zustand state FIRST so subsequent operations
@@ -1404,7 +1648,9 @@ export const useProjectStore = create<ProjectState>()(
             : null;
 
           // Fire persistence and provider snapshot sync in parallel — don't await sequentially.
-          const persistPromise = persistProjectChapters(id, normalizedChapters);
+          const persistPromise = persistProjectChapters(id, normalizedChapters, {
+            storageMode: nextStorageMode,
+          });
           const snapshotPromise = nextProject
             ? syncProviderProjectSnapshot(nextProject, 'replaceProjectChapters')
             : Promise.resolve();
@@ -1553,36 +1799,29 @@ export const useProjectStore = create<ProjectState>()(
               },
             });
 
-            // [Domain:Storage] STEP — Sync restored content to cloud
-            // If hydration brought back content that wasn't in state before
-            // (e.g. content was only in IndexedDB because provider was null
-            // during initial AI generation), push it to cloud now.
+            // [Domain:Storage] STEP — Cache restored content locally only.
+            // Hydration may recover content from either owner backend or IndexedDB,
+            // but it must not reconcile local/cloud ownership implicitly.
             const restoredWithContent = mergedChapters.filter((c) => c.content?.trim()).length;
-            const provider = useStorageStore.getState().provider;
             if (
               restoredWithContent > 0 &&
-              restoredWithContent > currentWithContent &&
-              fullProject.storageMode !== 'provider' &&
-              provider &&
-              restoredWithContent <= MAX_AUTO_RESTORED_CONTENT_SYNC_CHAPTERS
+              restoredWithContent > currentWithContent
             ) {
-              console.log('[hydrateProjectChapters] Content restored — syncing to cloud', {
-                projectId: id,
-                before: currentWithContent,
-                after: restoredWithContent,
-              });
               traceStoryDebugEvent({
                 domain: 'storage',
-                action: 'project.hydrate.restored_content_sync',
+                action: 'project.hydrate.restored_content_cached',
                 level: 'info',
-                summary: 'Hydration restored chapter content and queued cloud sync.',
+                summary: 'Hydration restored chapter content and queued local cache update.',
                 details: {
                   projectId: id,
                   before: currentWithContent,
                   after: restoredWithContent,
                 },
               });
-              void persistProjectChapters(id, mergedChapters);
+              void replaceStoredProjectChapters(
+                id,
+                mergedChapters.map((chapter) => toStoredChapter(id, chapter)),
+              );
             }
           })();
 
@@ -1654,7 +1893,7 @@ export const useProjectStore = create<ProjectState>()(
             }
 
             set((state) => {
-              const projects = mergeProviderProjects(state.projects, providerProjects);
+              const projects = mergeProviderProjects(state.projects, providerProjects, provider.mode);
               const activeProjectId = projects.some((project) => project.id === state.activeProjectId)
                 ? state.activeProjectId
                 : providerProjects[0]?.id ?? projects[0]?.id ?? null;
@@ -1684,6 +1923,240 @@ export const useProjectStore = create<ProjectState>()(
             await run;
           } finally {
             providerProjectSyncInFlight = null;
+          }
+        },
+
+        syncProjectToCloud: async (id) => {
+          const project = get().projects.find((item) => item.id === id);
+          if (!project) return;
+
+          set((state) => ({
+            projects: updateProjectArray(state.projects, id, (item) => ({
+              ...item,
+              syncStatus: 'syncing',
+              syncError: undefined,
+            })),
+          }));
+
+          let cloudProvider: StorageProvider | null = null;
+          let shouldDispose = false;
+          try {
+            const fullProject = await loadProjectWithFullChapters(project);
+
+            // [Domain:Storage] FIX P0-4 — Guard: prevent uploading empty chapters to cloud.
+            // If loadProjectWithFullChapters returned chapters without content,
+            // do NOT push them to Supabase — it would destroy existing cloud data.
+            const syncHasContent = fullProject.chapters.some((ch) => ch.content?.trim());
+            if (fullProject.chapters.length > 0 && !syncHasContent) {
+              throw new Error(
+                'Cannot sync to cloud: chapters loaded without content. ' +
+                'This likely means hydration has not completed. Try again after content loads.'
+              );
+            }
+
+            const result = await createCloudProviderForExplicitSync();
+            cloudProvider = result.provider;
+            shouldDispose = result.shouldDispose;
+            const syncedAt = now();
+            const cloudProject = normalizeProject({
+              ...fullProject,
+              storageMode: 'cloud',
+              syncStatus: 'synced',
+              syncError: undefined,
+              lastSyncedAt: syncedAt,
+              updatedAt: fullProject.updatedAt,
+            });
+
+            await cloudProvider.saveProject(cloudProject);
+            if (cloudProject.chapters.length > 0) {
+              await cloudProvider.replaceProjectChapters(id, cloudProject.chapters);
+            }
+            await replaceStoredProjectChapters(
+              id,
+              cloudProject.chapters.map((chapter) => toStoredChapter(id, chapter)),
+            );
+
+            set((state) => ({
+              projects: state.projects.map((item) => (item.id === id ? cloudProject : item)),
+            }));
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            set((state) => ({
+              projects: updateProjectArray(state.projects, id, (item) => ({
+                ...item,
+                syncStatus: 'error',
+                syncError: message,
+              })),
+            }));
+            throw error;
+          } finally {
+            if (cloudProvider && shouldDispose) {
+              await cloudProvider.dispose();
+            }
+          }
+        },
+
+        autoSyncLocalProjectsToCloud: async () => {
+          const provider = useStorageStore.getState().provider;
+          if (!provider || provider.mode === 'local') return;
+
+          const userId = useStorageStore.getState().providerUserId;
+          if (!userId || userId === 'guest') return;
+
+          // [Domain:Storage] STEP 1 — Identify local-only projects that need cloud backup
+          const localOnlyProjects = get().projects.filter((project) => {
+            const canonical = canonicalProjectStorageMode(project.storageMode);
+            return canonical !== 'cloud' && !isDefaultProjectShell(project);
+          });
+
+          if (localOnlyProjects.length === 0) return;
+
+          traceStoryDebugEvent({
+            domain: 'storage',
+            action: 'auto_sync_local_to_cloud.start',
+            level: 'info',
+            summary: `Auto-syncing ${localOnlyProjects.length} local project(s) to cloud.`,
+            details: {
+              projectIds: localOnlyProjects.map((p) => p.id),
+              titles: localOnlyProjects.map((p) => p.title),
+            },
+          });
+
+          // [Domain:Storage] STEP 2 — Upload each local project to cloud
+          for (const project of localOnlyProjects) {
+            try {
+              const fullProject = await loadProjectWithFullChapters(project);
+
+              // [Domain:Storage] FIX P0-3 — Guard: NEVER upload empty chapters to cloud.
+              // After reload, loadProjectWithFullChapters may return stripped chapters
+              // (content='') if IndexedDB is empty and provider wasn't ready.
+              // Uploading these would permanently destroy real content on Supabase.
+              const loadedHasContent = fullProject.chapters.some((ch) => ch.content?.trim());
+              if (fullProject.chapters.length > 0 && !loadedHasContent) {
+                console.warn(
+                  `[autoSyncLocalProjectsToCloud] GUARD: Skipping "${project.title}" — loaded chapters have no content. Would destroy cloud data.`,
+                );
+                traceStoryDebugEvent({
+                  domain: 'storage',
+                  action: 'auto_sync_local_to_cloud.guard_skip_empty',
+                  level: 'warn',
+                  summary: `Skipped auto-sync for "${project.title}" — chapters loaded without content.`,
+                  details: {
+                    projectId: project.id,
+                    chapterCount: fullProject.chapters.length,
+                    chaptersWithContent: 0,
+                  },
+                });
+                continue;
+              }
+
+              const syncedAt = now();
+              const cloudProject = normalizeProject({
+                ...fullProject,
+                storageMode: 'cloud',
+                syncStatus: 'synced',
+                syncError: undefined,
+                lastSyncedAt: syncedAt,
+              });
+
+              await provider.saveProject(cloudProject);
+              if (cloudProject.chapters.length > 0) {
+                await provider.replaceProjectChapters(project.id, cloudProject.chapters);
+              }
+
+              set((state) => ({
+                projects: state.projects.map((item) =>
+                  item.id === project.id ? cloudProject : item,
+                ),
+              }));
+
+              traceStoryDebugEvent({
+                domain: 'storage',
+                action: 'auto_sync_local_to_cloud.project_synced',
+                level: 'info',
+                summary: `Project "${project.title}" auto-synced to cloud.`,
+                details: { projectId: project.id, title: project.title },
+              });
+            } catch (error) {
+              const message = error instanceof Error ? error.message : String(error);
+              console.warn(`[autoSyncLocalProjectsToCloud] Failed for "${project.title}":`, message);
+              traceStoryDebugEvent({
+                domain: 'storage',
+                action: 'auto_sync_local_to_cloud.project_failed',
+                level: 'warn',
+                summary: `Auto-sync failed for "${project.title}": ${message}`,
+                details: { projectId: project.id, error: message },
+              });
+              // Continue with next project — don't block on individual failures
+            }
+          }
+
+          traceStoryDebugEvent({
+            domain: 'storage',
+            action: 'auto_sync_local_to_cloud.complete',
+            level: 'info',
+            summary: 'Auto-sync local → cloud completed.',
+            details: { attempted: localOnlyProjects.length },
+          });
+        },
+
+        makeLocalCopy: async (id) => {
+          const project = get().projects.find((item) => item.id === id);
+          if (!project) return;
+
+          set((state) => ({
+            projects: updateProjectArray(state.projects, id, (item) => ({
+              ...item,
+              syncStatus: 'syncing',
+              syncError: undefined,
+            })),
+          }));
+
+          let localProvider: StorageProvider | null = null;
+          let shouldDispose = false;
+          try {
+            const fullProject = await loadProjectWithFullChapters(project);
+            const result = await createLocalProviderForExplicitCopy();
+            localProvider = result.provider;
+            shouldDispose = result.shouldDispose;
+            const copiedAt = now();
+            const localProject = normalizeProject({
+              ...fullProject,
+              storageMode: 'local',
+              syncStatus: 'synced',
+              syncError: undefined,
+              lastSyncedAt: copiedAt,
+              updatedAt: fullProject.updatedAt,
+            });
+
+            await replaceStoredProjectChapters(
+              id,
+              localProject.chapters.map((chapter) => toStoredChapter(id, chapter)),
+            );
+            if (localProvider) {
+              await localProvider.saveProject(localProject);
+              if (localProject.chapters.length > 0) {
+                await localProvider.replaceProjectChapters(id, localProject.chapters);
+              }
+            }
+
+            set((state) => ({
+              projects: state.projects.map((item) => (item.id === id ? localProject : item)),
+            }));
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            set((state) => ({
+              projects: updateProjectArray(state.projects, id, (item) => ({
+                ...item,
+                syncStatus: 'error',
+                syncError: message,
+              })),
+            }));
+            throw error;
+          } finally {
+            if (localProvider && shouldDispose) {
+              await localProvider.dispose();
+            }
           }
         },
 
@@ -1847,7 +2320,9 @@ export const useProjectStore = create<ProjectState>()(
           await syncProviderProjectSnapshot(adapted, 'adaptProject');
 
           if (adapted.chapters.length > 0) {
-            await persistProjectChapters(adapted.id, adapted.chapters);
+            await persistProjectChapters(adapted.id, adapted.chapters, {
+              storageMode: adapted.storageMode,
+            });
           }
 
           return adapted;
@@ -1895,7 +2370,23 @@ export const useProjectStore = create<ProjectState>()(
       })(),
       onRehydrateStorage: () => (state) => {
         if (!state) return;
-        state.projects = state.projects.map((project) => normalizeProject(project));
+        // [Wave 2] Skip normalize when the project already has all canonical fields.
+        // normalizeProject is idempotent but iterates every chapter/character — for
+        // large projects this is the main CPU cost on rehydrate. We still normalize
+        // any entry that looks legacy or partial.
+        let normalizedCount = 0;
+        state.projects = state.projects.map((project) => {
+          if (isProjectNormalized(project)) {
+            return project;
+          }
+          normalizedCount += 1;
+          return normalizeProject(project);
+        });
+        if (normalizedCount > 0) {
+          console.debug(
+            `[ProjectStore] Rehydrate normalized ${normalizedCount}/${state.projects.length} projects`,
+          );
+        }
 
         // [Domain:Storage] FIX — Clear stale generationStatus: 'generating' on rehydrate.
         // After page reload, no generation process is active, so any chapter still

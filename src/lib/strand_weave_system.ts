@@ -44,7 +44,7 @@ export const DEFAULT_STRAND_WEAVE_CONFIG: StrandWeaveConfig = {
  */
 export function classifyChapterStrand(
   chapter: Chapter,
-  projectContext?: {
+  _projectContext?: {
     hasRomance: boolean;
     hasWorldBuilding: boolean;
   }

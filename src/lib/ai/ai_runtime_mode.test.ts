@@ -5,36 +5,39 @@ describe('ai_runtime_mode', () => {
   it('returns local_proxy when local proxy is enabled', () => {
     const mode = resolveAiRuntimeMode({
       isAuthenticated: false,
-      isGuest: true,
       localProxyEnabled: true,
-      hasDirectApiKey: false,
     });
 
     expect(mode).toBe('local_proxy');
     expect(isAiRuntimeReady(mode)).toBe(true);
   });
 
-  it('returns disabled for guest users when local proxy is disabled and no direct key exists', () => {
+  it('returns edge_proxy when authenticated and local proxy is disabled', () => {
+    const mode = resolveAiRuntimeMode({
+      isAuthenticated: true,
+      localProxyEnabled: false,
+    });
+
+    expect(mode).toBe('edge_proxy');
+    expect(isAiRuntimeReady(mode)).toBe(true);
+  });
+
+  it('returns disabled for unauthenticated users without local proxy', () => {
     const mode = resolveAiRuntimeMode({
       isAuthenticated: false,
-      isGuest: true,
       localProxyEnabled: false,
-      hasDirectApiKey: false,
     });
 
     expect(mode).toBe('disabled');
     expect(isAiRuntimeReady(mode)).toBe(false);
   });
 
-  it('returns direct_provider for guest users when a direct key exists', () => {
+  it('prefers local_proxy over edge_proxy when both signals are positive', () => {
     const mode = resolveAiRuntimeMode({
-      isAuthenticated: false,
-      isGuest: true,
-      localProxyEnabled: false,
-      hasDirectApiKey: true,
+      isAuthenticated: true,
+      localProxyEnabled: true,
     });
 
-    expect(mode).toBe('direct_provider');
-    expect(isAiRuntimeReady(mode)).toBe(true);
+    expect(mode).toBe('local_proxy');
   });
 });

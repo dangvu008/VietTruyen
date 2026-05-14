@@ -14,15 +14,10 @@
  * - storyTimeline: chronological event log per chapter
  */
 
-import type { Project, Arc, Foreshadowing, Character } from '../../types/story';
+import type { Project, Arc } from '../../types/story';
 import type { EntityDefinition, EntitySnapshot } from '../../types/narrative_memory';
-import type { NarrativeNode, NarrativeEdge, NarrativeCommunity } from '../../types/narrative_graph';
 import { getEntityDefinitions, getProjectArcs } from '../../db/narrative_db';
-import {
-  getEntityTimelineSnapshots,
-  getEntitySnapshotAt,
-} from './memory_query';
-import { retrieveHscContext } from './hierarchical_summary_cache';
+import { getEntityTimelineSnapshots } from './memory_query';
 import { getChaptersChronological } from '../ai/surprise_engine';
 
 // ─── Public Interface ────────────────────────────────────

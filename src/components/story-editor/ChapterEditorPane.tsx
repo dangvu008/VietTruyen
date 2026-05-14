@@ -109,7 +109,7 @@ export const ChapterEditorPane: React.FC<Props> = ({
   onTitleChange,
   onContentChange,
   onAcceptProposal,
-  onRejectProposal,
+  onRejectProposal: _onRejectProposal,
   onSelectionChange,
   onSelectionAction,
   onGenerateFromScratch,

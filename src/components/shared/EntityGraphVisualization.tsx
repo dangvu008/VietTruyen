@@ -6,7 +6,7 @@
  * Visualizes narrative nodes and edges from the narrative graph system
  */
 
-import React, { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { NarrativeNode, NarrativeEdge } from '../../types/narrative_graph';
 
 interface EntityGraphVisualizationProps {
@@ -48,7 +48,7 @@ export function EntityGraphVisualization({
     if (nodes.length === 0) return;
 
     // Initialize positions randomly
-    const positions: NodePosition[] = nodes.map((node, index) => ({
+    const positions: NodePosition[] = nodes.map((node) => ({
       id: node.id,
       x: Math.random() * (width - 100) + 50,
       y: Math.random() * (height - 100) + 50,

@@ -5,9 +5,9 @@
  * Domain: CreationChat → [chapter overview, inline editing, manual chapter]
  * Deps: use_creation_chat_store
  */
-import React, { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import {
-  X, ChevronLeft, Plus, FileText, PenTool, Trash2,
+  X, ChevronLeft, Plus, FileText, Trash2,
   Save, Hash, Clock, BookOpen,
 } from 'lucide-react';
 import { useCreationChatStore } from '../../store/use_creation_chat_store';

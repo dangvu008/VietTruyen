@@ -191,11 +191,41 @@ export const useStorageStore = create<StorageState>()(
           });
 
           // [Domain:Storage] STEP 4 — Rehydrate the active project once the provider is ready.
-          // Project metadata in localStorage intentionally strips chapter content, so the
-          // first hydration may happen before the provider exists and yield empty chapters.
+          // Keep post-init sync tasks isolated: project-list sync, local→cloud backup,
+          // and active-project hydration are all useful independently. A failure in one
+          // must not prevent the next step from restoring visible chapter content.
           try {
             const { useProjectStore } = await import('./use_project_store');
-            await useProjectStore.getState().syncProjectsFromProvider();
+
+            await useProjectStore.getState().syncProjectsFromProvider().catch((syncError) => {
+              console.warn('[StorageStore] Provider project sync failed after init:', syncError);
+              traceStoryDebugEvent({
+                domain: 'storage',
+                action: 'provider.project_sync.failed',
+                level: 'warn',
+                summary: 'Provider project sync failed after provider init; hydration will still run.',
+                details: { error: syncError },
+              });
+            });
+
+            // [Domain:Storage] STEP 4b — Auto-sync local-only projects to cloud after login.
+            // Prevents data loss when user creates projects offline/guest then logs in.
+            if (resolvedUserId !== 'guest') {
+              const autoSyncLocalProjectsToCloud = useProjectStore.getState().autoSyncLocalProjectsToCloud;
+              if (typeof autoSyncLocalProjectsToCloud === 'function') {
+                void autoSyncLocalProjectsToCloud().catch((syncError) => {
+                  console.warn('[StorageStore] Auto-sync local→cloud failed:', syncError);
+                  traceStoryDebugEvent({
+                    domain: 'storage',
+                    action: 'provider.auto_sync_local_to_cloud.failed',
+                    level: 'warn',
+                    summary: 'Auto-sync local projects to cloud failed after provider init.',
+                    details: { error: syncError },
+                  });
+                });
+              }
+            }
+
             const { activeProjectId, hydrateProjectChapters } = useProjectStore.getState();
             if (activeProjectId) {
               traceStoryDebugEvent({

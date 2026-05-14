@@ -10,7 +10,6 @@ import type { StrandTracker } from '../../types/strand_weave';
 import type { Chapter } from '../../types/story';
 import type { StrandWeaveMetrics } from '../../types/story_system';
 import {
-  calculateStrandWeaveMetrics,
   generateStrandWeaveReport,
   classifyChapterStrand,
   DEFAULT_STRAND_WEAVE_CONFIG,

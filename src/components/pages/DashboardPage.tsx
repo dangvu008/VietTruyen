@@ -77,6 +77,7 @@ interface DashboardPageProps {
   onEnterProject: (projectId?: string, preferredTab?: import('../../types/navigation').ProjectTabId) => void;
   onCreateProject?: (title: string) => void;
   activeProject?: Project;
+  /** @deprecated Wave 1: page subscribes internally — prop ignored. Kept for legacy render_active_page.tsx. */
   projects?: Project[];
 }
 
@@ -84,8 +85,9 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
   onNavigate,
   onEnterProject,
   onCreateProject,
-  projects = [],
 }) => {
+  // [Wave 1] Subscribe to projects internally so App.tsx does not re-render on chapter edits.
+  const projects = useProjectStore((state) => state.projects);
   const [openMenuId, setOpenMenuId] = React.useState<string | null>(null);
   const menuRef = React.useRef<HTMLDivElement>(null);
 
@@ -286,9 +288,6 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                 recentProjects.map((project, index) => {
                   const stats = projectStats[project.id];
                   const coverUrl = getProjectCover(project, index);
-                  const target = project.targetChapters || 50;
-                  const chapters = stats?.chapterCount ?? project.chapters.length;
-                  const progress = Math.min(100, Math.floor((chapters / target) * 100));
 
                   return (
                     <div key={project.id} className="flex min-h-[176px] overflow-hidden rounded-2xl border border-white/5 bg-[#1c140f] transition-all hover:border-white/10">

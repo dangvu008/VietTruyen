@@ -59,7 +59,6 @@ describe('use_auth_store', () => {
     expect(useAuthStore.getState()).toMatchObject({
       user: expect.objectContaining({ id: 'user-1' }),
       isAuthenticated: true,
-      isGuest: false,
       isLoading: false,
     });
   });
@@ -76,7 +75,6 @@ describe('use_auth_store', () => {
     expect(useAuthStore.getState()).toMatchObject({
       user: expect.objectContaining({ id: 'email-user' }),
       isAuthenticated: true,
-      isGuest: false,
       isLoading: false,
     });
   });
@@ -87,7 +85,6 @@ describe('use_auth_store', () => {
     useAuthStore.setState({
       user: createSession('stale-user').user as never,
       isAuthenticated: true,
-      isGuest: false,
       isLoading: true,
     });
 
@@ -97,7 +94,6 @@ describe('use_auth_store', () => {
     expect(useAuthStore.getState()).toMatchObject({
       user: null,
       isAuthenticated: false,
-      isGuest: false,
       isLoading: false,
     });
   });

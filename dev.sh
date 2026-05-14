@@ -24,11 +24,13 @@ trap cleanup SIGINT SIGTERM
 
 free_port() {
   local port=$1
-  local pid
-  pid=$(lsof -ti:"$port" 2>/dev/null || true)
-  if [ -n "$pid" ]; then
-    echo -e "${YELLOW}⚠  Port $port đang dùng (PID $pid) — đang kill...${NC}"
-    kill -9 "$pid" 2>/dev/null || true
+  local pids
+  pids=$(lsof -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null || true)
+  if [ -n "$pids" ]; then
+    echo -e "${YELLOW}⚠  Port $port đang dùng (PID $(echo "$pids" | tr '\n' ' ')) — đang kill...${NC}"
+    while IFS= read -r pid; do
+      [ -n "$pid" ] && kill -9 "$pid" 2>/dev/null || true
+    done <<< "$pids"
     sleep 0.5
   fi
 }
@@ -60,11 +62,11 @@ echo ""
 # --- Server 1: VietTruyen main app (Vite) ---
 start_server "VietTruyen" "1420" "$ROOT_DIR" "npm run dev:ui" "$GREEN"
 
-# --- Server 2: 9router AI Gateway (Next.js) ---
-if [ -f "$ROOT_DIR/9router/package.json" ]; then
-  start_server "9router" "20128" "$ROOT_DIR/9router" "npm run dev" "$BLUE"
+# --- Server 2: 9router AI Gateway ---
+if [ -f "$ROOT_DIR/9router/package.json" ] || command -v 9router >/dev/null 2>&1; then
+  start_server "9router" "20128" "$ROOT_DIR" "bash scripts/run_9router_dev.sh" "$BLUE"
 else
-  echo -e "${YELLOW}⚠ [9router] Bỏ qua vì không tìm thấy package.json${NC}"
+  echo -e "${YELLOW}⚠ [9router] Bỏ qua vì không tìm thấy 9router/package.json hoặc 9router CLI${NC}"
 fi
 
 echo ""

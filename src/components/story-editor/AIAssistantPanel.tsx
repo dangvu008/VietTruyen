@@ -44,7 +44,6 @@ import {
   Book,
   Copy,
   FileText,
-  Filter,
   Loader2,
   MoreVertical,
   Send,
@@ -57,7 +56,6 @@ import {
   Square,
   Star,
   Play,
-  X,
   RotateCcw,
   Wand2,
   RefreshCcw,
@@ -364,7 +362,6 @@ export function AIAssistantPanel(props: Props) {
     onApplyRewrite,
     onRenameChapter,
     onApplyStoryRewrite,
-    sessionTokens,
     project,
     fullProject,
     chapters,
@@ -373,7 +370,6 @@ export function AIAssistantPanel(props: Props) {
     statusMap,
     onSelectChapter,
     onNewChapter,
-    onInsertChapter,
     onDeleteChapter,
     onDuplicateChapter,
     onToggleChapterFavorite,
@@ -422,16 +418,13 @@ export function AIAssistantPanel(props: Props) {
   // [Domain:StoryEditor] STEP — Streaming generation state
   const {
     isStreaming,
-    streamedText,
     canResume,
-    streamingMessageId,
     startStream,
     appendChunk,
     stopStream,
     getResumePayload,
     consumeResume,
     finishStream,
-    reset: resetGeneration,
   } = useGenerationStore();
   const [chapterQuery, setChapterQuery] = useState('');
 
@@ -682,7 +675,6 @@ export function AIAssistantPanel(props: Props) {
           project: fullProject,
           question: instruction,
           model: plotModel,
-          apiKey: '__proxy__',
         });
 
         const answerMessage: ChatMessage = {

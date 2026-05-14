@@ -181,7 +181,9 @@ function flushPendingEntries(): void {
   if (!hasLocalStorage() || pendingEntries.length === 0) return;
 
   try {
-    const entries = readTraceEntries();
+    // Use the persisted-only reader to avoid double-counting pendingEntries —
+    // readTraceEntries() now merges in-flight entries for external callers.
+    const entries = readPersistedTraceEntries();
     entries.push(...pendingEntries);
     pendingEntries = [];
     const trimmed = entries.slice(-MAX_TRACE_EVENTS);
@@ -203,6 +205,17 @@ function persistDebugEvent(entry: StoryDebugEvent): void {
 }
 
 function readTraceEntries(): StoryDebugEvent[] {
+  // [Fix] Merge persisted entries with the in-flight batch so callers don't
+  // observe a stale snapshot between trace() and the debounced flush. This
+  // also keeps unit tests deterministic without forcing them to advance the
+  // fake clock for the FLUSH_DELAY_MS timer.
+  const persisted = readPersistedTraceEntries();
+  if (pendingEntries.length === 0) return persisted;
+  const combined = persisted.concat(pendingEntries);
+  return combined.slice(-MAX_TRACE_EVENTS);
+}
+
+function readPersistedTraceEntries(): StoryDebugEvent[] {
   if (!hasLocalStorage()) return [];
 
   try {

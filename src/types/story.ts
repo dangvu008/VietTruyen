@@ -185,7 +185,8 @@ export interface MasterOutline {
   updatedAt: string;
 }
 
-export type ProjectStorageMode = 'inline' | 'indexeddb' | 'provider';
+export type ProjectStorageMode = 'inline' | 'indexeddb' | 'provider' | 'local' | 'cloud';
+export type ProjectSyncStatus = 'idle' | 'syncing' | 'synced' | 'error';
 
 export type ProjectStatus = 'draft' | 'ongoing' | 'paused' | 'completed';
 
@@ -214,6 +215,9 @@ export interface Project {
   notes: string;
   canonVersion: number;
   storageMode: ProjectStorageMode;
+  lastSyncedAt?: string;
+  syncStatus?: ProjectSyncStatus;
+  syncError?: string;
   arcCount: number;
   hasGlobalIndex: boolean;
   activeSurgerySpecId?: string;

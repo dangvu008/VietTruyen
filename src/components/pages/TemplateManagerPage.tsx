@@ -9,7 +9,6 @@ import React, { useMemo, useState } from 'react';
 import {
   BookTemplate,
   Copy,
-  Edit3,
   Grid3X3,
   List,
   Plus,

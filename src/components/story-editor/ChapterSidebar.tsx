@@ -193,11 +193,6 @@ export const ChapterSidebar: React.FC<Props> = ({
     [contextMenu, chapters],
   );
 
-  const contextIndex = useMemo(
-    () => contextMenu ? chapters.findIndex((c) => c.id === contextMenu.chapterId) : -1,
-    [contextMenu, chapters],
-  );
-
   return (
     <aside className="relative flex h-full min-h-0 shrink-0 flex-col border-r border-[#241c17] bg-[#110e0c] font-sans text-[#f5e6d0]">
       {/* Header */}
@@ -363,12 +358,9 @@ export const ChapterSidebar: React.FC<Props> = ({
               </div>
             ) : (
               <div className="space-y-2">
-                {chapterEntries.map(({ chapter, sequence, status }, listIndex) => {
+                {chapterEntries.map(({ chapter, sequence, status }) => {
                   const isSelected = chapter.id === selectedId;
                   const statusMeta = STATUS_META[status];
-                  const globalIndex = chapters.findIndex((c) => c.id === chapter.id);
-                  const isFirst = globalIndex === 0;
-                  const isLast = globalIndex === chapters.length - 1;
 
                   return (
                     <div

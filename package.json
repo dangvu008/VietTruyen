@@ -7,7 +7,7 @@
     "dev": "bash dev.sh",
     "dev:ui": "vite",
     "dev:all": "bash dev.sh",
-    "dev:9router": "cd 9router && npm run dev",
+    "dev:9router": "bash scripts/run_9router_dev.sh",
     "build": "tsc && vite build",
     "test": "vitest",
     "test:run": "vitest run",

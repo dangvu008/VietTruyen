@@ -249,7 +249,7 @@ export const useCreationChatStore = create<
   CreationChatState & CreationChatActions
 >()(
   persist(
-    (set, get) => ({
+    (set) => ({
       ...createInitialState(),
 
       addMessage: (msg) =>

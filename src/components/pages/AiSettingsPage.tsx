@@ -6,14 +6,14 @@
  */
 import React, { useState } from 'react';
 import {
-  Key, Plus, Trash2, Cpu, Check, Eye, EyeOff, Sparkles, Download, Upload, RefreshCw, Server, Activity
+  Plus, Trash2, Cpu, Check, Eye, EyeOff, Sparkles, Download, Upload, RefreshCw, Server, Activity
 } from 'lucide-react';
 import { useAiStore } from '../../store/use_ai_store';
 import { DEFAULT_LOCAL_AI_PROXY_URL } from '../../lib/ai/local_proxy_runtime';
 import { AI_TASK_LABELS, type AiTaskType } from '../../lib/ai/model_router';
 import { NINE_ROUTER_PROVIDER_ID } from '../../lib/ai/nine_router_catalog';
 import { resolveModelCostRates } from '../../lib/ai/token_estimator';
-import type { AiModel, AiProvider, WorkflowEngineType } from '../../types/story';
+import type { AiModel, WorkflowEngineType } from '../../types/story';
 import TokenDashboard from '../shared/TokenDashboard';
 import {
   useAppearanceStore,

@@ -1,4 +1,3 @@
-import React from 'react';
 import type { CombinedReviewReport, CheckerReport } from '../../../core/checkers/checker_types';
 
 interface AnalysisResultsPanelProps {

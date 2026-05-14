@@ -6,7 +6,7 @@
  * Deps: editor_types, lucide-react
  */
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { Zap, ChevronDown, FileText, CheckCircle2, Pencil, CircleDot, Circle, Globe, MessageSquareQuote, FileClock, ChevronLeft, ChevronRight, AlertTriangle, Loader2 } from 'lucide-react';
+import { Zap, ChevronDown, FileText, CheckCircle2, Pencil, CircleDot, Circle, Globe, MessageSquareQuote, ChevronLeft, ChevronRight, AlertTriangle, Loader2, Undo2, Redo2 } from 'lucide-react';
 import type { Chapter } from '../../types/story';
 import type { ProjectInfo, ChapterUIStatus } from './editor_types';
 import { getChapterCompletionAction, isProbablyInterruptedChapter } from './editor_types';
@@ -45,6 +45,10 @@ interface Props {
   isSavingTemplate?: boolean;
   templateSaveLabel?: string;
   onCompleteChapter?: (chapterId: string) => void;
+  canUndo?: boolean;
+  canRedo?: boolean;
+  onUndo?: () => void;
+  onRedo?: () => void;
 }
 
 /** [Domain:StoryEditor] STEP 1 — Format token count for display */
@@ -182,6 +186,10 @@ export const EditorTopbar: React.FC<Props> = ({
   isSavingTemplate = false,
   templateSaveLabel,
   onCompleteChapter,
+  canUndo = false,
+  canRedo = false,
+  onUndo,
+  onRedo,
 }) => {
   const status = getStatusLabel(chapter);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -473,6 +481,27 @@ export const EditorTopbar: React.FC<Props> = ({
           <div className="hidden h-9 items-center gap-1.5 rounded-full border border-white/[0.06] px-3 text-[12px] font-medium text-accent-amber/80 xl:flex">
             <Zap className="h-3 w-3" />
             <span>{formatTokenCount(sessionTokens)} token</span>
+          </div>
+        )}
+
+        {(onUndo || onRedo) && (
+          <div className="flex items-center gap-1">
+            <button
+              onClick={onUndo}
+              disabled={!canUndo}
+              className="flex h-9 w-9 items-center justify-center rounded-full border border-white/[0.06] bg-white/[0.025] text-[#8f7f73] transition-colors hover:bg-white/[0.05] hover:text-[#dcd1c6] disabled:opacity-30"
+              title="Hoàn tác (Ctrl+Z)"
+            >
+              <Undo2 className="h-3.5 w-3.5" />
+            </button>
+            <button
+              onClick={onRedo}
+              disabled={!canRedo}
+              className="flex h-9 w-9 items-center justify-center rounded-full border border-white/[0.06] bg-white/[0.025] text-[#8f7f73] transition-colors hover:bg-white/[0.05] hover:text-[#dcd1c6] disabled:opacity-30"
+              title="Làm lại (Ctrl+Shift+Z)"
+            >
+              <Redo2 className="h-3.5 w-3.5" />
+            </button>
           </div>
         )}
 

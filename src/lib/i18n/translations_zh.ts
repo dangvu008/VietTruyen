@@ -357,4 +357,20 @@ export const zh: TranslationMap = {
     tacticTasks: '写作任务',
     tacticTasksSub: '写作时的快速操作',
   },
+
+  safety: {
+    undoAction: '撤销',
+    redoAction: '重做',
+    chapterDeleted: '章节已删除',
+    chapterDeletedMessage: '章节已移至回收站（30天）。',
+    chapterRestored: '章节已恢复',
+    trashLabel: '回收站',
+    trashEmpty: '回收站为空。',
+    trashRestore: '恢复',
+    trashDeletePermanent: '永久删除',
+    offlineBanner: '您已离线 — 可以正常写作，但AI和同步已暂停。',
+    quotaWarning: '本地存储即将满。请清理旧数据。',
+    quotaCritical: '本地存储已满。无法保存更多数据。',
+    networkReconnected: '网络已重新连接。',
+  },
 };

@@ -15,9 +15,6 @@ import { getGenreDescription } from '../../data/genre_descriptions';
 
 // ─── Constants ───────────────────────────────────────────
 
-/** Max token budget for L0 identity block */
-const IDENTITY_TOKEN_BUDGET = 250;
-
 /** Max chars ≈ 250 tokens × 3.5 chars/token for Vietnamese */
 const IDENTITY_MAX_CHARS = 875;
 

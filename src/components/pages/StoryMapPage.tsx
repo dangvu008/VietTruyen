@@ -27,7 +27,6 @@ import {
   useStoryTimelineData,
   MUTATION_LABELS,
   MUTATION_ICONS,
-  type TimelineMutation,
 } from '../../hooks/use_story_timeline_data';
 import { backfillProjectMemory } from '../../lib/memory/memory_indexer';
 
@@ -86,7 +85,6 @@ const TimelineView: React.FC<{ project: Project; onNavigate: (tab: ProjectTabId)
   const [extractProgress, setExtractProgress] = useState<string | null>(null);
   const chapters = project.chapters;
   const master = project.masterOutline;
-  const foreshadowings = project.foreshadowings || [];
 
   // [Domain:StoryMap] STEP 1 — Load real data from IndexedDB
   const timeline = useStoryTimelineData(project.id);

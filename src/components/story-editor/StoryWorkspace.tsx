@@ -5,7 +5,9 @@
  * Domain: StoryEditor
  * Deps: ChapterSidebar, ChapterEditorPane, AIAssistantPanel, EditorStatusBar, EditorTopbar
  */
-import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
+import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
+import { useUndoRedo } from '../../hooks/use_undo_redo';
+import { restoreFromTrash } from '../../lib/storage/trash_manager';
 import { EditorTopbar } from './EditorTopbar';
 
 import { ChapterEditorPane } from './ChapterEditorPane';
@@ -129,11 +131,13 @@ export default function StoryWorkspace({
   const [chapterContinuityTasks, setChapterContinuityTasks] = useState<PropagationTask[]>([]);
   const [openHooks, setOpenHooks] = useState<PendingHook[]>([]);
 
+  // ── Undo/Redo ──
+  const { pushSnapshot, undo: undoSnapshot, redo: redoSnapshot, canUndo, canRedo, clear: clearUndoHistory } = useUndoRedo();
+
   // ── Store actions ──
   const insertChapter = useProjectStore((state) => state.insertChapter);
   const removeChapter = useProjectStore((state) => state.removeChapter);
   const updateChapter = useProjectStore((state) => state.updateChapter);
-  const replaceChapters = useProjectStore((state) => state.replaceProjectChapters);
 
   // ── Token Tracking (real data from store) ──
   const sessionTokens = useTokenStore((state) => {
@@ -578,13 +582,46 @@ export default function StoryWorkspace({
   const handleContentChange = useCallback(
     (content: string) => {
       if (!activeChapterId) return;
+      pushSnapshot(content);
       setLocalContents((prev) => {
         if (prev[activeChapterId] === content) return prev;
         return { ...prev, [activeChapterId]: content };
       });
     },
-    [activeChapterId],
+    [activeChapterId, pushSnapshot],
   );
+
+  const handleUndo = useCallback(() => {
+    if (!activeChapterId) return;
+    const previous = undoSnapshot();
+    if (previous != null) {
+      setLocalContents((prev) => ({ ...prev, [activeChapterId]: previous }));
+    }
+  }, [activeChapterId, undoSnapshot]);
+
+  const handleRedo = useCallback(() => {
+    if (!activeChapterId) return;
+    const next = redoSnapshot();
+    if (next != null) {
+      setLocalContents((prev) => ({ ...prev, [activeChapterId]: next }));
+    }
+  }, [activeChapterId, redoSnapshot]);
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'z') {
+        if (e.shiftKey) {
+          e.preventDefault();
+          handleRedo();
+        } else {
+          e.preventDefault();
+          handleUndo();
+        }
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [handleUndo, handleRedo]);
 
   const handleTitleChange = useCallback(
     (title: string) => {
@@ -838,13 +875,15 @@ export default function StoryWorkspace({
   const handleAcceptProposal = useCallback(() => {
     if (!activeChapterId || !activeProposal) return;
 
+    const currentContent = localContents[activeChapterId] ?? activeChapter?.content ?? '';
+    pushSnapshot(currentContent);
     applyProposalToDraft(activeProposal);
 
     setProposalMap((prev) => ({
       ...prev,
       [activeChapterId]: null,
     }));
-  }, [activeChapterId, activeProposal, applyProposalToDraft]);
+  }, [activeChapter, activeChapterId, activeProposal, applyProposalToDraft, localContents, pushSnapshot]);
 
   const handleApplyRewrite = useCallback(
     ({
@@ -1631,8 +1670,9 @@ export default function StoryWorkspace({
   }, [onNavigate]);
 
   const handleSelectChapter = useCallback((id: string) => {
+    clearUndoHistory();
     setActiveChapterId(id);
-  }, []);
+  }, [clearUndoHistory]);
 
   const handleSelectionAction = useCallback((action: EditorSelectionIntent) => {
     if (!activeSelection?.text.trim()) return;
@@ -1667,15 +1707,31 @@ export default function StoryWorkspace({
     setRecoveryDrafts([]);
   }, [project.id]);
 
-  // [Domain:StoryEditor] STEP — Delete chapter
+  // [Domain:StoryEditor] STEP — Delete chapter (soft-delete to trash with undo)
   const handleDeleteChapter = useCallback(async (chapterId: string) => {
     await removeChapter(project.id, chapterId);
     if (activeChapterId === chapterId) {
       const next = chapters.find((c) => c.id !== chapterId);
       setActiveChapterId(next?.id ?? null);
     }
-    pushNotification({ type: 'success', title: 'Đã xóa chương', message: 'Chương đã được xóa khỏi dự án.' });
-  }, [activeChapterId, chapters, project.id, pushNotification, removeChapter]);
+    pushNotification({
+      type: 'success',
+      title: 'Đã xóa chương',
+      message: 'Chương đã chuyển vào thùng rác (30 ngày).',
+      duration: 8000,
+      action: {
+        label: 'Hoàn tác',
+        onClick: () => {
+          const restored = restoreFromTrash(chapterId);
+          if (restored) {
+            void onAddChapter(project.id, restored.chapter);
+            setActiveChapterId(restored.chapter.id);
+            pushNotification({ type: 'success', title: 'Đã khôi phục chương' });
+          }
+        },
+      },
+    });
+  }, [activeChapterId, chapters, onAddChapter, project.id, pushNotification, removeChapter]);
 
   // [Domain:StoryEditor] STEP — Duplicate chapter
   const handleDuplicateChapter = useCallback(async (chapter: Chapter) => {
@@ -1834,6 +1890,10 @@ export default function StoryWorkspace({
           isSavingTemplate={isSavingTemplate}
           templateSaveLabel={templateSaveLabel}
           onCompleteChapter={handleCompleteChapter}
+          canUndo={canUndo}
+          canRedo={canRedo}
+          onUndo={handleUndo}
+          onRedo={handleRedo}
         />
       )}
 
@@ -1942,6 +2002,8 @@ export default function StoryWorkspace({
           sessionStartTime={sessionStartTime}
           autosaveStatus={autosaveStatus}
           lastAutosaveAt={lastAutosaveAt}
+          storageMode={project.storageMode}
+          syncStatus={project.syncStatus}
         />
       )}
 

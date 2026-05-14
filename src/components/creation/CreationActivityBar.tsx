@@ -4,7 +4,6 @@
  * Layer: UI (Creation Component)
  * Domain: CreationChat -> [workflow progress, batch compose visibility]
  */
-import React from 'react';
 import { AlertTriangle, CheckCircle2, FileClock, Loader2, PauseCircle, PlayCircle } from 'lucide-react';
 import type { CreationWorkflowProgress } from '../../types/creation_chat';
 

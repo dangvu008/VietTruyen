@@ -14,7 +14,7 @@
  */
 
 import { supabase } from '../supabase/supabase_client';
-import { uploadProject, downloadProjects } from '../supabase/sync_service';
+import { uploadProject } from '../supabase/sync_service';
 import {
   saveVersion,
   listVersions as listChapterVersions,
@@ -130,14 +130,14 @@ export class OnlineStorageProvider implements StorageProvider {
 
     const world: WorldRules = worldRow
       ? {
-          geography: worldRow.geography || '',
-          magicSystem: worldRow.magic_system || '',
-          techLevel: worldRow.tech_level || '',
-          currency: worldRow.currency || '',
-          factions: worldRow.factions || [],
-          rules: worldRow.rules || '',
-          facts: worldRow.facts || [],
-        }
+        geography: worldRow.geography || '',
+        magicSystem: worldRow.magic_system || '',
+        techLevel: worldRow.tech_level || '',
+        currency: worldRow.currency || '',
+        factions: worldRow.factions || [],
+        rules: worldRow.rules || '',
+        facts: worldRow.facts || [],
+      }
       : { geography: '', magicSystem: '', techLevel: '', currency: '', factions: [], rules: '', facts: [] };
 
     const characters: Character[] = (charsRes.data || []).map((c) => ({
@@ -194,7 +194,7 @@ export class OnlineStorageProvider implements StorageProvider {
       foreshadowings,
       notes: row.notes || '',
       canonVersion: 1,
-      storageMode: 'inline',
+      storageMode: 'cloud',
       arcCount: 0,
       hasGlobalIndex: false,
       sourceProjectId: row.source_project_id || undefined,
@@ -323,6 +323,31 @@ export class OnlineStorageProvider implements StorageProvider {
       return;
     }
 
+    // [Domain:Storage] FIX P0-5 — Global write guard: NEVER overwrite cloud content with empty.
+    // If ALL incoming chapters have empty content, this is almost certainly a stripped
+    // snapshot from partialize or a failed hydration. Pushing it would destroy real data.
+    const hasAnyContent = chapters.some((ch) => ch.content?.trim());
+    if (!hasAnyContent) {
+      // Check if cloud already has content for this project
+      const { data: existingChapters } = await supabase
+        .from('chapters')
+        .select('id, content')
+        .eq('project_id', projectId)
+        .limit(5);
+
+      const cloudHasContent = (existingChapters || []).some(
+        (row) => (row.content as string)?.trim()
+      );
+
+      if (cloudHasContent) {
+        console.warn(
+          `[OnlineStorage] GUARD: Blocked replaceProjectChapters for ${projectId} — ` +
+          `all ${chapters.length} incoming chapters have empty content but cloud has real data.`
+        );
+        return;
+      }
+    }
+
     // [Domain:Storage] STEP 1 — Upsert all chapters (consistent with saveChapter)
     const rows = chapters.map((chapter, index) => ({
       id: chapter.id,
@@ -390,7 +415,7 @@ export class OnlineStorageProvider implements StorageProvider {
     }));
   }
 
-  async getVersion(projectId: string, versionId: string): Promise<VersionSnapshot | null> {
+  async getVersion(_projectId: string, versionId: string): Promise<VersionSnapshot | null> {
     const version = await getChapterVersion(versionId);
     if (!version) return null;
 

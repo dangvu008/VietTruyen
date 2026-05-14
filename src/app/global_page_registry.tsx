@@ -25,7 +25,6 @@ export interface GlobalPageRenderProps {
   settingsTab: SettingsTabId;
   onNavigate: (tab: GlobalTabId) => void;
   onEnterProject: (projectId?: string, preferredTab?: ProjectTabId) => void;
-  projects: Project[];
   activeProject?: Project;
   projectActions: ProjectActions;
 }
@@ -35,7 +34,6 @@ export function renderGlobalPage({
   settingsTab,
   onNavigate,
   onEnterProject,
-  projects,
   activeProject,
   projectActions,
 }: GlobalPageRenderProps): React.ReactNode {
@@ -67,20 +65,20 @@ export function renderGlobalPage({
           onEnterProject={onEnterProject}
           onCreateProject={handleStartCreationChat}
           activeProject={activeProject}
-          projects={projects}
         />
       );
 
     case 'projects':
       return (
         <LazyProjectsPage
-          projects={projects}
           activeProject={activeProject}
           onCreateProject={handleStartCreationChat}
           onDuplicateProject={projectActions.duplicateProject}
           onDeleteProject={projectActions.deleteProject}
           onSetActiveProject={handleOpenProjectFromLibrary}
           onUpdateProject={projectActions.updateProject}
+          onSyncProjectToCloud={projectActions.syncProjectToCloud}
+          onMakeLocalCopy={projectActions.makeLocalCopy}
         />
       );
 
@@ -107,7 +105,6 @@ export function renderGlobalPage({
           onEnterProject={onEnterProject}
           onCreateProject={handleStartCreationChat}
           activeProject={activeProject}
-          projects={projects}
         />
       );
   }

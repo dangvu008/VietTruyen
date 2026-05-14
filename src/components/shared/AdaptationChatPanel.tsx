@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Bot, User, Sparkles, AlertCircle, Copy, BookOpen, GitBranch, ArrowLeft, MoreHorizontal, Maximize2, RotateCcw } from 'lucide-react';
+import { Send, Bot, User, Sparkles, Copy, GitBranch, ArrowLeft, MoreHorizontal, Maximize2, RotateCcw } from 'lucide-react';
 import VoiceMicButton from './VoiceMicButton';
 
 interface Message {

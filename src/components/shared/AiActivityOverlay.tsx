@@ -5,7 +5,7 @@
  * Domain: AI → [activity monitoring, user feedback, transparency]
  * Deps: use_ai_activity_store, lucide-react, React
  */
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Cpu, Zap, Clock, ChevronDown, ChevronUp, Coins, X } from 'lucide-react';
 import { useAiActivityStore } from '../../store/use_ai_activity_store';
 import type { ActiveAiCall, CompletedAiCall } from '../../store/use_ai_activity_store';

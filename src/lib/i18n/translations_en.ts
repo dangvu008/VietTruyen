@@ -352,4 +352,20 @@ export const en: TranslationMap = {
     tacticTasks: 'Writing Tasks',
     tacticTasksSub: 'Quick actions while writing',
   },
+
+  safety: {
+    undoAction: 'Undo',
+    redoAction: 'Redo',
+    chapterDeleted: 'Chapter deleted',
+    chapterDeletedMessage: 'Chapter moved to trash (30 days).',
+    chapterRestored: 'Chapter restored',
+    trashLabel: 'Trash',
+    trashEmpty: 'Trash is empty.',
+    trashRestore: 'Restore',
+    trashDeletePermanent: 'Delete permanently',
+    offlineBanner: 'You are offline — writing works normally, but AI and sync are paused.',
+    quotaWarning: 'Local storage is nearly full. Please clean up old data.',
+    quotaCritical: 'Local storage is full. Cannot save more data.',
+    networkReconnected: 'Network reconnected.',
+  },
 };

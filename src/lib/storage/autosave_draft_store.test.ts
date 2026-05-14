@@ -22,6 +22,9 @@ function createStorageMock(): Storage {
 describe('autosave_draft_store', () => {
   beforeEach(() => {
     vi.stubGlobal('localStorage', createStorageMock());
+    // The store keeps an in-module cache (cachedDraftMap); resetting the
+    // module evicts it so each test starts with the stubbed empty storage.
+    vi.resetModules();
   });
 
   it('does not keep interrupted AI drafts that sanitize down to empty content', async () => {

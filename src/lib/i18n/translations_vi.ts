@@ -351,4 +351,20 @@ export const vi: TranslationMap = {
     tacticTasks: 'Tác vụ sáng tác',
     tacticTasksSub: 'Action tức thời trong lúc viết',
   },
+
+  safety: {
+    undoAction: 'Hoàn tác',
+    redoAction: 'Làm lại',
+    chapterDeleted: 'Đã xóa chương',
+    chapterDeletedMessage: 'Chương đã chuyển vào thùng rác (30 ngày).',
+    chapterRestored: 'Đã khôi phục chương',
+    trashLabel: 'Thùng rác',
+    trashEmpty: 'Thùng rác trống.',
+    trashRestore: 'Khôi phục',
+    trashDeletePermanent: 'Xóa vĩnh viễn',
+    offlineBanner: 'Bạn đang ngoại tuyến — viết bình thường, nhưng AI và đồng bộ tạm ngừng.',
+    quotaWarning: 'Bộ nhớ cục bộ gần đầy. Hãy xóa bớt dữ liệu cũ.',
+    quotaCritical: 'Bộ nhớ cục bộ đã đầy. Không thể lưu thêm dữ liệu.',
+    networkReconnected: 'Đã kết nối lại mạng.',
+  },
 };

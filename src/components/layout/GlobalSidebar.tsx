@@ -12,7 +12,6 @@ import {
   LayoutDashboard,
   Scissors,
   Settings,
-  Sparkles,
   Bell,
   Cpu,
   Monitor,
@@ -21,7 +20,6 @@ import {
 } from 'lucide-react';
 import type { GlobalTabId } from '../../types/navigation';
 import { useAuthStore } from '../../store/use_auth_store';
-import LanguageSwitcher from '../shared/LanguageSwitcher';
 
 interface GlobalNavItem {
   id: GlobalTabId;
@@ -40,10 +38,10 @@ const GLOBAL_NAV_ITEMS: GlobalNavItem[] = [
 export type SettingsTabId = 'ai' | 'appearance' | 'data' | 'notifications';
 
 const SETTINGS_SUB_ITEMS: { id: SettingsTabId; label: string; icon: React.ReactNode }[] = [
-  { id: 'ai',            label: 'AI & Mô Hình',       icon: <Cpu size={15} /> },
-  { id: 'appearance',    label: 'Giao Diện',           icon: <Monitor size={15} /> },
-  { id: 'data',          label: 'Dữ Liệu & Bộ Nhớ',   icon: <Database size={15} /> },
-  { id: 'notifications', label: 'Thông Báo',           icon: <Bell size={15} /> },
+  { id: 'ai', label: 'AI & Mô Hình', icon: <Cpu size={15} /> },
+  { id: 'appearance', label: 'Giao Diện', icon: <Monitor size={15} /> },
+  { id: 'data', label: 'Dữ Liệu & Bộ Nhớ', icon: <Database size={15} /> },
+  { id: 'notifications', label: 'Thông Báo', icon: <Bell size={15} /> },
 ];
 
 export interface GlobalSidebarProps {
@@ -64,18 +62,18 @@ const GlobalSidebar: React.FC<GlobalSidebarProps> = ({
   onNavigateSettings,
   settingsTab,
   onSettingsTabChange,
-  onOpenAi,
-  onOpenNotifications,
-  aiConfigured,
-  unreadCount = 0,
+  onOpenAi: _onOpenAi,
+  onOpenNotifications: _onOpenNotifications,
+  aiConfigured: _aiConfigured,
+  unreadCount: _unreadCount = 0,
 }) => {
   const isSettingsActive = activeTab === 'ai-settings';
-  const { user, isAuthenticated, isGuest, signOut } = useAuthStore();
+  const { signOut } = useAuthStore();
 
   return (
     <aside className="w-[260px] flex gap-4 flex-col border-r border-white/5 bg-[#120F0D] flex-shrink-0 z-20 shadow-[4px_0_24px_rgba(0,0,0,0.2)] pb-4 h-screen">
       {/* ── Logo ── */}
-      <div 
+      <div
         className="pt-6 pb-2 px-6 cursor-pointer"
         onClick={() => onNavigate('dashboard')}
       >
@@ -101,11 +99,10 @@ const GlobalSidebar: React.FC<GlobalSidebarProps> = ({
             <button
               key={item.id}
               onClick={() => onNavigate(item.id)}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 text-left ${
-                isActive
-                  ? 'bg-gradient-to-r from-[#f0c59a]/10 to-transparent text-[#F0C59A] border-l-2 border-[#F0C59A]'
-                  : 'text-[#A29081] hover:bg-white/[0.04] hover:text-[#E8E1DC] border-l-2 border-transparent'
-              }`}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 text-left ${isActive
+                ? 'bg-gradient-to-r from-[#f0c59a]/10 to-transparent text-[#F0C59A] border-l-2 border-[#F0C59A]'
+                : 'text-[#A29081] hover:bg-white/[0.04] hover:text-[#E8E1DC] border-l-2 border-transparent'
+                }`}
             >
               <span className={isActive ? 'text-[#f0c59a]' : 'text-[#A29081]'}>
                 {item.icon}
@@ -121,11 +118,10 @@ const GlobalSidebar: React.FC<GlobalSidebarProps> = ({
         {/* Cài đặt AI + Sub-items */}
         <button
           onClick={onNavigateSettings}
-          className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 text-left ${
-            isSettingsActive
-              ? 'bg-gradient-to-r from-[#f0c59a]/10 to-transparent text-[#F0C59A] border-l-2 border-[#F0C59A]'
-              : 'text-[#A29081] hover:bg-white/[0.04] hover:text-[#E8E1DC] border-l-2 border-transparent'
-          }`}
+          className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 text-left ${isSettingsActive
+            ? 'bg-gradient-to-r from-[#f0c59a]/10 to-transparent text-[#F0C59A] border-l-2 border-[#F0C59A]'
+            : 'text-[#A29081] hover:bg-white/[0.04] hover:text-[#E8E1DC] border-l-2 border-transparent'
+            }`}
         >
           <Settings size={18} />
           <span className="font-medium text-sm">AI & Runtime</span>
@@ -140,11 +136,10 @@ const GlobalSidebar: React.FC<GlobalSidebarProps> = ({
                 <button
                   key={sub.id}
                   onClick={() => onSettingsTabChange(sub.id)}
-                  className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg transition-all duration-150 text-left text-[13px] ${
-                    isSubActive
-                      ? 'bg-[#f0c59a]/8 text-[#F0C59A]'
-                      : 'text-[#8a7d73] hover:text-[#d4c4b7] hover:bg-white/[0.03]'
-                  }`}
+                  className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg transition-all duration-150 text-left text-[13px] ${isSubActive
+                    ? 'bg-[#f0c59a]/8 text-[#F0C59A]'
+                    : 'text-[#8a7d73] hover:text-[#d4c4b7] hover:bg-white/[0.03]'
+                    }`}
                 >
                   <span className={isSubActive ? 'text-[#f0c59a]' : 'text-[#6f6259]'}>{sub.icon}</span>
                   <span className="font-medium">{sub.label}</span>
@@ -161,11 +156,11 @@ const GlobalSidebar: React.FC<GlobalSidebarProps> = ({
         <button
           onClick={() => signOut()}
           className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-white/5 bg-white/[0.02] text-[#A29081] hover:text-[#E8E1DC] hover:bg-white/[0.06] hover:border-[#f0c59a]/30 transition-all duration-200 text-[13px] font-medium group"
-          title={isGuest ? 'Về trang chủ' : 'Đăng xuất'}
+          title="Đăng xuất"
         >
           <LogOut size={16} className="group-hover:text-[#f0c59a] transition-colors" />
           <span className="group-hover:text-[#f0c59a] transition-colors">
-            {isGuest ? 'Về trang chủ' : 'Đăng xuất'}
+            Đăng xuất
           </span>
         </button>
       </div>

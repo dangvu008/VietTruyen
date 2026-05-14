@@ -6,8 +6,9 @@
  * Deps: None (pure presentational)
  */
 import React, { useEffect, useMemo, useState } from 'react';
-import { Cloud, CloudOff, Clock, PenLine, FileText, Timer, Save } from 'lucide-react';
+import { Cloud, CloudOff, FileText, Save } from 'lucide-react';
 import type { AutosaveStatus } from '../../hooks/use_autosave';
+import type { ProjectStorageMode, ProjectSyncStatus } from '../../types/story';
 
 interface Props {
   wordCount: number;
@@ -18,6 +19,8 @@ interface Props {
   sessionStartTime: number;
   autosaveStatus?: AutosaveStatus;
   lastAutosaveAt?: string | null;
+  storageMode?: ProjectStorageMode;
+  syncStatus?: ProjectSyncStatus;
 }
 
 function formatElapsed(startMs: number, nowMs: number): string {
@@ -38,14 +41,16 @@ function formatTime(iso: string): string {
 }
 
 export const EditorStatusBar: React.FC<Props> = ({
-  wordCount,
+  wordCount: _wordCount,
   wordsAdded,
-  readingTimeMinutes,
-  lastSavedAt,
+  readingTimeMinutes: _readingTimeMinutes,
+  lastSavedAt: _lastSavedAt,
   isSyncing,
   sessionStartTime,
   autosaveStatus = 'idle',
   lastAutosaveAt,
+  storageMode = 'inline',
+  syncStatus = 'idle',
 }) => {
   // [Domain:StoryEditor] STEP 1 — Live session timer updates every 30s
   const [now, setNow] = useState(Date.now());
@@ -89,6 +94,30 @@ export const EditorStatusBar: React.FC<Props> = ({
     }
   }, [autosaveStatus, lastAutosaveAt]);
 
+  const storageIndicator = useMemo(() => {
+    if (storageMode === 'cloud' || storageMode === 'provider') {
+      return {
+        label: syncStatus === 'error' ? 'CLOUD ERROR' : 'CLOUD',
+        icon: Cloud,
+        className: syncStatus === 'error' ? 'text-red-400/80' : 'text-sky-300/80',
+      };
+    }
+    if (storageMode === 'local' || storageMode === 'indexeddb') {
+      return {
+        label: storageMode === 'indexeddb' ? 'LOCAL CACHE' : 'LOCAL',
+        icon: CloudOff,
+        className: 'text-emerald-300/80',
+      };
+    }
+    return {
+      label: 'LOCAL CACHE',
+      icon: FileText,
+      className: 'text-[#8f7f73]',
+    };
+  }, [storageMode, syncStatus]);
+
+  const StorageIcon = storageIndicator.icon;
+
   return (
     <div className="flex items-center justify-between border-t border-white/5 bg-[#0c0b0a] px-6 py-2 text-[11px] uppercase tracking-[0.15em]">
       <div className="flex items-center gap-6 text-[#8f7f73]">
@@ -103,6 +132,10 @@ export const EditorStatusBar: React.FC<Props> = ({
       {/* Right side: Autosave + Sync state */}
       <div className="flex items-center gap-4 text-[#8f7f73] font-medium">
         {autosaveIndicator}
+        <span className={`flex items-center gap-1.5 ${storageIndicator.className}`}>
+          <StorageIcon className="h-3 w-3" />
+          <span>{storageIndicator.label}</span>
+        </span>
         {isSyncing ? (
           <>
             <div className="h-1.5 w-1.5 rounded-full bg-accent-amber animate-pulse" />

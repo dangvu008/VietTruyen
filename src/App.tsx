@@ -5,8 +5,9 @@
  * Domain: App → [routing, layout, state orchestration]
  */
 import React, { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
-import { Bell, Sparkles } from 'lucide-react';
+import { Bell, Sparkles, WifiOff } from 'lucide-react';
 import { shallow } from 'zustand/shallow';
+import { useNetworkStatus } from './hooks/use_network_status';
 
 import GlobalShell from './components/layout/GlobalShell';
 import ProjectWorkspace from './components/layout/ProjectWorkspace';
@@ -36,7 +37,7 @@ import { useCreationChatStore } from './store/use_creation_chat_store';
 import { useProjectStore } from './store/use_project_store';
 import { getUnreadCount, useNotificationStore } from './store/use_notification_store';
 import { useStorageStore } from './store/use_storage_store';
-import { selectActiveProject, selectProjectActions, selectProjectMeta } from './store/selectors';
+import { selectActiveProject, selectProjectActions } from './store/selectors';
 
 import { isAiRuntimeReady, isLocalAiProxyEnabled, resolveAiRuntimeMode } from './lib/ai/ai_runtime_mode';
 import { traceStoryDebugEvent } from './lib/debug/story_debug_trace';
@@ -45,6 +46,7 @@ import { renderGlobalPage } from './app/global_page_registry';
 import { renderProjectPage } from './app/project_page_registry';
 import { StorageContext } from './lib/storage/storage_context';
 import { useModelHealthSync } from './hooks/use_model_health_sync';
+import { flushAllDebouncedStorages } from './lib/storage/debounced_local_storage';
 
 // ─── Loading fallback ───
 
@@ -56,16 +58,6 @@ const PageLoadingFallback: React.FC<{ fullHeight?: boolean }> = ({ fullHeight = 
     </div>
   </div>
 );
-
-function hasEnvDirectApiKey(): boolean {
-  return [
-    import.meta.env.VITE_GEMINI_API_KEY,
-    import.meta.env.VITE_OPENROUTER_API_KEY,
-    import.meta.env.VITE_OPENAI_API_KEY,
-    import.meta.env.VITE_CLAUDE_API_KEY,
-    import.meta.env.VITE_HOCAI_API_KEY,
-  ].some((key) => key?.trim().length);
-}
 
 // ─── App ───
 
@@ -99,6 +91,7 @@ const App: React.FC = () => {
   const [showNotifCenter, setShowNotifCenter] = useState(false);
 
   const { t } = useTranslation();
+  const { isOnline } = useNetworkStatus();
   const unreadCount = useNotificationStore(getUnreadCount);
   const { theme, editorFontSize } = useAppearanceStore(
     (state) => ({
@@ -110,33 +103,32 @@ const App: React.FC = () => {
 
   // ── Auth ──
   const initAuth = useAuthStore((state) => state.initAuth);
-  const { user, isLoading: authLoading, isAuthenticated, isGuest } = useAuthStore(
+  const { user, isLoading: authLoading, isAuthenticated } = useAuthStore(
     (state) => ({
       user: state.user,
       isLoading: state.isLoading,
       isAuthenticated: state.isAuthenticated,
-      isGuest: state.isGuest,
     }),
     shallow
   );
 
   // ── Project ──
+  // [Wave 1] App root no longer subscribes to the full projects array.
+  // Pages that need the list (Dashboard, Projects, Adaptation) subscribe themselves.
+  // This prevents App from re-rendering on every chapter edit.
   const activeProject = useProjectStore(selectActiveProject);
-  const { projects } = useProjectStore(selectProjectMeta, shallow);
   const projectActions = useProjectStore(selectProjectActions, shallow);
 
   // ── AI ──
-  const { models, activeModelId, apiKeys } = useAiStore(
+  // [Wave 3 / D-Wave3=C] apiKeys remains in the store for one release for
+  // back-compat data preservation but is intentionally NOT subscribed here:
+  // readiness now derives purely from auth + local-proxy toggle.
+  const { models, activeModelId } = useAiStore(
     (state) => ({
       models: state.models,
       activeModelId: state.activeModelId,
-      apiKeys: state.apiKeys,
     }),
     shallow
-  );
-  const hasDirectApiKey = useMemo(
-    () => hasEnvDirectApiKey() || Object.values(apiKeys).some((key) => key.trim().length > 0),
-    [apiKeys]
   );
   const activeModel = useMemo(
     () => models.find((model) => model.id === activeModelId),
@@ -145,11 +137,9 @@ const App: React.FC = () => {
   const aiRuntimeMode = useMemo(
     () => resolveAiRuntimeMode({
       isAuthenticated,
-      isGuest,
       localProxyEnabled: isLocalAiProxyEnabled(),
-      hasDirectApiKey,
     }),
-    [hasDirectApiKey, isAuthenticated, isGuest]
+    [isAuthenticated]
   );
   const aiConfigured = isAiRuntimeReady(aiRuntimeMode);
   const assistantActions: AssistantAction[] = [];
@@ -157,12 +147,18 @@ const App: React.FC = () => {
     ? 'loading'
     : isAuthenticated && user
       ? `user:${user.id}`
-      : isGuest
-        ? 'guest'
-        : 'anonymous';
+      : 'anonymous';
   const previousAuthSessionKey = useRef<string | null>(null);
 
   useEffect(() => initAuth(), [initAuth]);
+
+  // [Domain:Storage] Flush all debounced localStorage writes before page unload.
+  // Prevents data loss when browser navigates away (OAuth redirect, tab close, etc.)
+  useEffect(() => {
+    const handleBeforeUnload = () => flushAllDebouncedStorages();
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, []);
 
   // [Domain:AI] STEP — Proactive health check on boot + periodic polling
   useModelHealthSync();
@@ -198,10 +194,22 @@ const App: React.FC = () => {
 
   // ── Storage Provider Init ──
   const storageProvider = useStorageStore((state) => state.provider);
+  const storageMode = useStorageStore((state) => state.mode);
   const initStorageProvider = useStorageStore((state) => state.initProvider);
   const resetStorageProvider = useStorageStore((state) => state.resetProvider);
 
   useEffect(() => {
+    if (authLoading) return;
+
+    if (storageMode === 'local') {
+      if (isAuthenticated && user?.id) {
+        initStorageProvider(user.id).catch((error) => {
+          console.error('[App] Local StorageProvider init failed:', error);
+        });
+        return;
+      }
+    }
+
     if (!isAuthenticated || !user?.id) {
       resetStorageProvider().catch((error) => {
         console.error('[App] StorageProvider reset failed:', error);
@@ -212,7 +220,7 @@ const App: React.FC = () => {
     initStorageProvider(user.id).catch((error) => {
       console.error('[App] StorageProvider init failed:', error);
     });
-  }, [isAuthenticated, isGuest, user?.id, initStorageProvider, resetStorageProvider]);
+  }, [authLoading, isAuthenticated, storageMode, user?.id, initStorageProvider, resetStorageProvider]);
 
   // ─── Navigation Handlers ───
 
@@ -332,24 +340,18 @@ const App: React.FC = () => {
 
       <LanguageSwitcher />
 
-      {isGuest ? (
-        <span className="flex h-8 items-center rounded-full border border-white/10 bg-[#0f0d0b] px-3 text-xs text-[#6f6259]">
-          {t('common.guestMode')}
-        </span>
-      ) : (
-        isAuthenticated && user && (
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full border border-[#f0c59a]/20 bg-[#241c17] text-xs font-bold text-[#f0c59a]">
-            {user.user_metadata?.avatar_url ? (
-              <img
-                src={user.user_metadata.avatar_url}
-                alt="User"
-                className="h-full w-full object-cover"
-              />
-            ) : (
-              (user.user_metadata?.full_name || user.email || '?')[0].toUpperCase()
-            )}
-          </div>
-        )
+      {isAuthenticated && user && (
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full border border-[#f0c59a]/20 bg-[#241c17] text-xs font-bold text-[#f0c59a]">
+          {user.user_metadata?.avatar_url ? (
+            <img
+              src={user.user_metadata.avatar_url}
+              alt="User"
+              className="h-full w-full object-cover"
+            />
+          ) : (
+            (user.user_metadata?.full_name || user.email || '?')[0].toUpperCase()
+          )}
+        </div>
       )}
     </>
   );
@@ -367,7 +369,7 @@ const App: React.FC = () => {
     );
   }
 
-  if (!isAuthenticated && !isGuest) {
+  if (!isAuthenticated) {
     return <LoginPage />;
   }
 
@@ -383,7 +385,6 @@ const App: React.FC = () => {
         settingsTab,
         onNavigate: setGlobalTab,
         onEnterProject: handleEnterProject,
-        projects,
         activeProject,
         projectActions: globalProjectActions,
       })}
@@ -408,6 +409,13 @@ const App: React.FC = () => {
   return (
     <StorageContext.Provider value={storageProvider}>
       <>
+        {!isOnline && (
+          <div className="flex items-center justify-center gap-2 bg-amber-900/80 px-4 py-2 text-[13px] font-medium text-amber-200">
+            <WifiOff className="h-4 w-4 shrink-0" />
+            <span>Bạn đang ngoại tuyến — viết bình thường, nhưng AI và đồng bộ tạm ngừng.</span>
+          </div>
+        )}
+
         {activeProject && resolvedShell === 'project' && (
           <Suspense fallback={null}>
             <MemoryBootstrap project={activeProject} />

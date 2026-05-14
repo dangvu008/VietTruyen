@@ -9,13 +9,11 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
   ChevronDown,
-  ChevronRight,
   Copy,
   ExternalLink,
   RefreshCw,
   Server,
   Shield,
-  Wifi,
   WifiOff,
   X,
   Zap,
@@ -209,7 +207,6 @@ interface ConfigStatus {
   activeModelName: string;
   provider: string;
   isAuthenticated: boolean;
-  isGuest: boolean;
   localProxyEnabled: boolean;
   localProxyUrl: string;
   hasDirectKeys: string[];
@@ -243,7 +240,6 @@ function getConfigStatus(): ConfigStatus {
     activeModelName: activeModel?.name || activeModel?.modelId || '(chưa chọn)',
     provider: activeModel?.provider || '(none)',
     isAuthenticated: authState.isAuthenticated,
-    isGuest: authState.isGuest,
     localProxyEnabled,
     localProxyUrl,
     hasDirectKeys: directKeys,
@@ -537,7 +533,7 @@ export const AiConnectionDebugPanel: React.FC<AiConnectionDebugPanelProps> = ({
                 />
                 <StatusRow
                   label="Đăng nhập"
-                  value={configStatus.isAuthenticated ? 'Đã xác thực' : configStatus.isGuest ? 'Guest' : 'Chưa'}
+                  value={configStatus.isAuthenticated ? 'Đã xác thực' : 'Chưa'}
                   ok={configStatus.isAuthenticated}
                 />
                 <StatusRow

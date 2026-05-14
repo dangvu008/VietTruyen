@@ -21,12 +21,12 @@ import {
   onAuthStateChange,
 } from '../lib/supabase/auth_service';
 import { traceStoryDebugEvent } from '../lib/debug/story_debug_trace';
+import { flushAllDebouncedStorages } from '../lib/storage/debounced_local_storage';
 
 interface AuthState {
   user: User | null;
   isLoading: boolean;
   isAuthenticated: boolean;
-  isGuest: boolean; // Guest mode — uses app without login / no cloud sync
 
   // Actions
   initAuth: () => () => void;
@@ -34,7 +34,6 @@ interface AuthState {
   signInWithEmail: (email: string, password: string) => Promise<{ error: Error | null }>;
   signUpWithEmail: (email: string, password: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
-  continueAsGuest: () => void;
 }
 
 let activeAuthCleanup: (() => void) | null = null;
@@ -44,7 +43,6 @@ export const useAuthStore = create<AuthState>()((set) => ({
   user: null,
   isLoading: true,
   isAuthenticated: false,
-  isGuest: false,
 
   initAuth: () => {
     authInitVersion += 1;
@@ -76,7 +74,7 @@ export const useAuthStore = create<AuthState>()((set) => ({
             email: user?.email ?? null,
           },
         });
-        set((state) => {
+        set(() => {
           if (!user && didReceiveAuthEvent) {
             return { isLoading: false };
           }
@@ -84,7 +82,6 @@ export const useAuthStore = create<AuthState>()((set) => ({
           return {
             user,
             isAuthenticated: !!user,
-            isGuest: user ? false : state.isGuest,
             isLoading: false,
           };
         });
@@ -124,7 +121,6 @@ export const useAuthStore = create<AuthState>()((set) => ({
       set({
         user,
         isAuthenticated: !!user,
-        isGuest: false,
         isLoading: false,
       });
     });
@@ -147,6 +143,11 @@ export const useAuthStore = create<AuthState>()((set) => ({
       level: 'info',
       summary: 'Google sign-in started.',
     });
+    // [Domain:Auth] Flush all debounced localStorage writes BEFORE redirect.
+    // OAuth redirect navigates away immediately — if debounced writes haven't
+    // flushed yet, project data is lost and only the seed project remains after
+    // the redirect returns.
+    flushAllDebouncedStorages();
     const { error } = await googleSignIn();
     if (error) {
       console.error('[Auth] Google sign-in failed:', error.message);
@@ -202,7 +203,6 @@ export const useAuthStore = create<AuthState>()((set) => ({
       set({
         user,
         isAuthenticated: !!user,
-        isGuest: false,
         isLoading: false,
       });
     }
@@ -272,23 +272,7 @@ export const useAuthStore = create<AuthState>()((set) => ({
     set({
       user: null,
       isAuthenticated: false,
-      isGuest: false,
       isLoading: false,
-    });
-  },
-
-  continueAsGuest: () => {
-    traceStoryDebugEvent({
-      domain: 'auth',
-      action: 'guest.continue',
-      level: 'info',
-      summary: 'User continued as guest.',
-    });
-    set({
-      isGuest: true,
-      isLoading: false,
-      isAuthenticated: false,
-      user: null,
     });
   },
 }));

@@ -7,7 +7,6 @@ import {
   PenTool, 
   FileText,
   Type,
-  ArrowRight,
   ShieldAlert,
   CheckCircle2,
   Lock,
@@ -44,14 +43,11 @@ import {
 import { cacheImportedSourceSnapshot } from '../../lib/adaptation/imported_project_recovery';
 import { useProjectStore } from '../../store/use_project_store';
 import { useNotificationStore } from '../../store/use_notification_store';
-import { useAiStore } from '../../store/use_ai_store';
 import { useAuthStore } from '../../store/use_auth_store';
 import type { AdaptationConfig } from '../../types/adaptation';
 import type { ProjectTabId } from '../../types/navigation';
 import type { Project } from '../../types/story';
 import { createUniqueProjectTitleSuggestion, findProjectByTitle } from '../../lib/project/project_title';
-import { getModelForTask } from '../../lib/ai/model_router';
-import { callAiModelTracked } from '../../lib/ai/tracked_ai_client';
 import { resolveExtractedTemplateFromSource } from '../../lib/story_templates/shared_template_registry';
 
 interface AdaptationPageProps {
@@ -976,12 +972,5 @@ const AdaptationPage: React.FC<AdaptationPageProps> = ({ onComplete }) => {
     </div>
   );
 };
-
-// Simple loader
-const Loader = ({ className }: { className?: string }) => (
-  <svg className={className} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M21 12a9 9 0 1 1-6.219-8.56"></path>
-  </svg>
-)
 
 export default AdaptationPage;

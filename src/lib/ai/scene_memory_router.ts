@@ -278,7 +278,7 @@ function routeDialogue(
  * Lightweight: MC only, minimal context.
  */
 function routeTransition(
-  beat: OutlineBeat | undefined,
+  _beat: OutlineBeat | undefined,
   project: Project,
 ): Partial<MemoryRouteResult> {
   const entityIds = getProtagonistIds(project.characters || [], 2);
@@ -323,7 +323,7 @@ export function routeMemoryForScene(
   sceneType: SceneTypeResult,
   beat: OutlineBeat | undefined,
   project: Project,
-  targetChapterIndex: number,
+  _targetChapterIndex: number,
 ): MemoryRouteResult {
   const routeFunc = ROUTE_MAP[sceneType.primary];
   const partial = routeFunc(beat, project);

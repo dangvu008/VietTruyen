@@ -39,11 +39,11 @@ export function renderProjectPage({
   onOpenCreationChat,
   activeProject,
   projectActions,
-  aiConfigured,
-  aiModelLabel,
+  aiConfigured: _aiConfigured,
+  aiModelLabel: _aiModelLabel,
   showAi,
   assistantActions: _assistantActions,
-  onOpenSettings,
+  onOpenSettings: _onOpenSettings,
 }: ProjectPageRenderProps): React.ReactNode {
   switch (activeTab) {
     case 'bible':

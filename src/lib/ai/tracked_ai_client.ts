@@ -457,9 +457,9 @@ function _getDirectKeyMap(storeApiKeys: Record<string, string>): Record<string, 
 }
 
 function _shouldPreferDirectKeyProvider(): boolean {
-  const { isGuest, isAuthenticated } = useAuthStore.getState();
+  const { isAuthenticated } = useAuthStore.getState();
   const localProxyEnabled = import.meta.env.VITE_USE_LOCAL_AI_PROXY === 'true';
-  return isGuest && !isAuthenticated && !localProxyEnabled;
+  return !isAuthenticated && !localProxyEnabled;
 }
 
 function _pickDirectKeyFallbackModel(
@@ -471,8 +471,8 @@ function _pickDirectKeyFallbackModel(
   const aiState = useAiStore.getState();
   const filteredKeys = excludedProvider
     ? Object.fromEntries(
-        Object.entries(directKeyMap).filter(([provider]) => provider !== excludedProvider)
-      )
+      Object.entries(directKeyMap).filter(([provider]) => provider !== excludedProvider)
+    )
     : directKeyMap;
 
   if (Object.keys(filteredKeys).length === 0) {

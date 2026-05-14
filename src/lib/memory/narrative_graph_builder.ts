@@ -463,7 +463,7 @@ function addSceneEdges(
   const metadataByChapterId = new Map(metadata.map((item) => [item.chapterId, item]));
   const chapters = sortChapters(project.chapters || []);
 
-  chapters.forEach((chapter, chapterIndex) => {
+  chapters.forEach((chapter) => {
     const sceneTexts = splitSceneTexts(chapter);
     const chapterNodeId = buildNarrativeNodeId(project.id, 'chapter', chapter.id);
     const chapterMetadata = metadataByChapterId.get(chapter.id);

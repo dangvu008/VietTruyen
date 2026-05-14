@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { AlertTriangle, ChevronDown, ChevronUp, Coins, Gauge, Sparkles } from 'lucide-react';
 
 import type { CreationCostEstimate } from '../../lib/ai/creation_cost_estimator';

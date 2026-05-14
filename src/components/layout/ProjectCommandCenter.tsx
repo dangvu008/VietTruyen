@@ -1,12 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Book,
-  BookText,
   CheckSquare,
   FileOutput,
   Globe,
   LayoutList,
-  PenTool,
   Save,
   Users,
   X,

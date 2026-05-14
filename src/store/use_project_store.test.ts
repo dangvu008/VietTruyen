@@ -172,6 +172,66 @@ describe('use_project_store', () => {
     ]);
   });
 
+  it('keeps local project writes local even when an online provider exists', async () => {
+    const { useProjectStore } = await import('./use_project_store');
+    const projectId = useProjectStore.getState().createProject('Bản local');
+    const chapter = buildChapter();
+
+    await useProjectStore
+      .getState()
+      .replaceProjectChapters(projectId, [chapter], { storageMode: 'local' as Project['storageMode'] });
+
+    expect(mocks.replaceStoredProjectChapters).toHaveBeenCalledWith(projectId, [
+      expect.objectContaining({
+        id: chapter.id,
+        projectId,
+        content: chapter.content,
+      }),
+    ]);
+    expect(mocks.provider.replaceProjectChapters).not.toHaveBeenCalled();
+    expect(
+      useProjectStore.getState().projects.find((project) => project.id === projectId)?.storageMode
+    ).toBe('local');
+  });
+
+  it('keeps cloud ownership when hydration falls back to IndexedDB cache', async () => {
+    const { useProjectStore } = await import('./use_project_store');
+    const projectId = useProjectStore.getState().createProject('Cloud cache fallback');
+    const chapter = buildChapter();
+
+    useProjectStore.setState((state) => ({
+      projects: state.projects.map((project) =>
+        project.id === projectId
+          ? {
+              ...project,
+              chapters: [{ ...chapter, content: '', summary: undefined }],
+              storageMode: 'cloud' as Project['storageMode'],
+            }
+          : project
+      ),
+    }));
+    mocks.provider.getProjectChapters.mockResolvedValue([]);
+    mocks.getProjectChapters.mockResolvedValue([
+      {
+        ...chapter,
+        projectId,
+        index: 0,
+      },
+    ]);
+
+    await useProjectStore.getState().hydrateProjectChapters(projectId);
+
+    const hydrated = useProjectStore
+      .getState()
+      .projects.find((project) => project.id === projectId);
+
+    expect(hydrated?.storageMode).toBe('cloud');
+    expect(hydrated?.chapters[0]).toMatchObject({
+      id: chapter.id,
+      content: chapter.content,
+    });
+  });
+
   it('sanitizes leaked AI ledger metadata before persisting chapters', async () => {
     const { useProjectStore } = await import('./use_project_store');
     const projectId = useProjectStore.getState().createProject('Chuong bi ban payload');
@@ -608,5 +668,41 @@ Lục Phong chạm tay lên vách đá lạnh buốt, nghe từng mạch linh l�
 
     expect(hydrated?.content).toBe('');
     expect(hydrated?.generationStatus).toBe('failed');
+  });
+});
+
+describe('makeCanonicalProject', () => {
+  it('produces a Project with every required field present', async () => {
+    const { makeCanonicalProject } = await import('./use_project_store');
+
+    const project = makeCanonicalProject({ id: 'p1', title: 'Test' });
+
+    expect(project.id).toBe('p1');
+    expect(project.title).toBe('Test');
+    expect(Array.isArray(project.chapters)).toBe(true);
+    expect(Array.isArray(project.characters)).toBe(true);
+    expect(Array.isArray(project.foreshadowings)).toBe(true);
+    expect(Array.isArray(project.world.facts)).toBe(true);
+    expect(typeof project.canonVersion).toBe('number');
+    expect(typeof project.storageMode).toBe('string');
+    expect(typeof project.syncStatus).toBe('string');
+    expect(typeof project.arcCount).toBe('number');
+    expect(typeof project.hasGlobalIndex).toBe('boolean');
+    expect(typeof project.createdAt).toBe('string');
+    expect(typeof project.updatedAt).toBe('string');
+  });
+
+  it('respects caller-supplied overrides', async () => {
+    const { makeCanonicalProject } = await import('./use_project_store');
+
+    const project = makeCanonicalProject({
+      id: 'p2',
+      title: 'Overridden',
+      logline: 'Custom logline',
+      targetChapters: 120,
+    });
+
+    expect(project.logline).toBe('Custom logline');
+    expect(project.targetChapters).toBe(120);
   });
 });

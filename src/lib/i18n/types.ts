@@ -375,4 +375,21 @@ export interface TranslationMap {
     tacticTasks: string;
     tacticTasksSub: string;
   };
+
+  /** Safety & hardening strings */
+  safety: {
+    undoAction: string;
+    redoAction: string;
+    chapterDeleted: string;
+    chapterDeletedMessage: string;
+    chapterRestored: string;
+    trashLabel: string;
+    trashEmpty: string;
+    trashRestore: string;
+    trashDeletePermanent: string;
+    offlineBanner: string;
+    quotaWarning: string;
+    quotaCritical: string;
+    networkReconnected: string;
+  };
 }

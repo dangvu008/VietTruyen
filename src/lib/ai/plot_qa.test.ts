@@ -118,7 +118,7 @@ describe('plot_qa', () => {
       project: makeProject(),
       question: 'Review toàn bộ truyện đến hiện tại',
       model: MODEL,
-      apiKey: '__proxy__',
+
     });
 
     expect(result.source).toBe('local');
@@ -146,7 +146,7 @@ describe('plot_qa', () => {
       project: makeProject(),
       question: 'Tóm tắt truyện',
       model: MODEL,
-      apiKey: '__proxy__',
+
     });
 
     expect(result.source).toBe('local');
@@ -174,7 +174,7 @@ describe('plot_qa', () => {
       project: makeProject(),
       question: 'Kiểm tra tính liên kết giữa các chương',
       model: MODEL,
-      apiKey: '__proxy__',
+
     });
 
     expect(result.source).toBe('local');
@@ -202,7 +202,7 @@ describe('plot_qa', () => {
       project: makeProject(),
       question: 'Lâm Tề hiện tại đã tới cảnh giới nào?',
       model: MODEL,
-      apiKey: '__proxy__',
+
     });
 
     expect(result.source).toBe('local');
@@ -228,7 +228,7 @@ describe('plot_qa', () => {
       project: makeProject(),
       question: 'Liệu lời thề ở cấm địa sẽ dẫn đến hậu quả dây chuyền gì?',
       model: MODEL,
-      apiKey: '__proxy__',
+
     });
 
     expect(result.source).toBe('ai');

@@ -5,34 +5,56 @@
  * Domain: Projects
  */
 import React, { useState } from 'react';
-import { 
+import {
   Search, BookOpen, Clock, Trash2, Users, FileText,
   Plus, LayoutGrid, List as ListIcon, Book,
-  ChevronDown
+  ChevronDown, Cloud, CloudOff, Loader2
 } from 'lucide-react';
-import type { Project } from '../../types/story';
+import type { Project, ProjectStorageMode } from '../../types/story';
 import CreateProjectModal from '../shared/CreateProjectModal';
 import { useProjectDisplayStats } from '../../hooks/use_project_display_stats';
+import { useProjectStore } from '../../store/use_project_store';
 
 interface ProjectsPageProps {
-  projects: Project[];
+  /** @deprecated Wave 1: page subscribes internally — prop ignored. Kept for legacy render_active_page.tsx. */
+  projects?: Project[];
   activeProject?: Project;
   onCreateProject: (title: string) => void;
   onDuplicateProject: (id: string) => void;
   onDeleteProject: (id: string) => void;
   onSetActiveProject: (id: string) => void;
   onUpdateProject: (id: string, patch: Partial<Project>) => void;
+  onSyncProjectToCloud: (id: string) => Promise<void>;
+  onMakeLocalCopy: (id: string) => Promise<void>;
+}
+
+function getProjectStorageLabel(storageMode: ProjectStorageMode): {
+  label: string;
+  className: string;
+  icon: typeof Cloud;
+} {
+  if (storageMode === 'cloud' || storageMode === 'provider') {
+    return { label: 'Cloud', className: 'bg-sky-400/10 text-sky-300', icon: Cloud };
+  }
+  if (storageMode === 'local') {
+    return { label: 'Local', className: 'bg-emerald-400/10 text-emerald-300', icon: CloudOff };
+  }
+  return { label: 'Local cache', className: 'bg-white/8 text-[#c9b6a5]', icon: CloudOff };
 }
 
 const ProjectsPage: React.FC<ProjectsPageProps> = ({
-  projects,
   onCreateProject,
   onDeleteProject,
   onSetActiveProject,
+  onSyncProjectToCloud,
+  onMakeLocalCopy,
 }) => {
+  // [Wave 1] Subscribe to projects internally so App.tsx does not re-render on chapter edits.
+  const projects = useProjectStore((state) => state.projects);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [searchQuery, setSearchQuery] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [runningStorageActionId, setRunningStorageActionId] = useState<string | null>(null);
   const projectStats = useProjectDisplayStats(projects);
 
   // Lọc project theo text search
@@ -43,6 +65,22 @@ const ProjectsPage: React.FC<ProjectsPageProps> = ({
   const handleCreateProject = (title: string) => {
     onCreateProject(title);
     setShowCreateModal(false);
+  };
+
+  const runStorageAction = async (
+    event: React.MouseEvent<HTMLButtonElement>,
+    projectId: string,
+    action: (id: string) => Promise<void>,
+  ) => {
+    event.stopPropagation();
+    setRunningStorageActionId(projectId);
+    try {
+      await action(projectId);
+    } catch (error) {
+      console.error('[ProjectsPage] Storage action failed:', error);
+    } finally {
+      setRunningStorageActionId(null);
+    }
   };
 
   return (
@@ -124,6 +162,12 @@ const ProjectsPage: React.FC<ProjectsPageProps> = ({
               const statusData = statusMap[projectStatus] || statusMap['draft'];
               const statusLabel = statusData.label;
               const statusColor = statusData.color;
+              const storage = getProjectStorageLabel(project.storageMode);
+              const StorageIcon = storage.icon;
+              const canonicalStorage = project.storageMode === 'cloud' || project.storageMode === 'provider'
+                ? 'cloud'
+                : 'local';
+              const isStorageActionRunning = runningStorageActionId === project.id || project.syncStatus === 'syncing';
 
               const gradientIndex = (project.id.charCodeAt(0) + idx) % 3;
               const gradients = [
@@ -166,6 +210,10 @@ const ProjectsPage: React.FC<ProjectsPageProps> = ({
                         <span className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider rounded-md border border-current/10 ${statusColor}`}>
                           {statusLabel}
                         </span>
+                        <span className={`flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider rounded-md border border-current/10 ${storage.className}`}>
+                          <StorageIcon size={11} />
+                          {storage.label}
+                        </span>
                         <span className="flex items-center gap-1.5 text-[11px] text-[#8f7f72] font-medium">
                           <Clock size={12} className="opacity-70" />
                           {project.updatedAt.slice(0, 10)}
@@ -192,6 +240,29 @@ const ProjectsPage: React.FC<ProjectsPageProps> = ({
                         <div className="flex justify-between text-[11px] text-[#8f7f72] font-medium items-center">
                           <span>Tổng số chữ đã viết</span>
                           <span className="text-[#e5b589] font-bold text-xs">{(stats?.wordCount ?? 0).toLocaleString()} từ</span>
+                        </div>
+                        <div className="mt-3 flex items-center justify-end">
+                          {canonicalStorage === 'local' ? (
+                            <button
+                              type="button"
+                              disabled={isStorageActionRunning}
+                              onClick={(event) => runStorageAction(event, project.id, onSyncProjectToCloud)}
+                              className="inline-flex items-center gap-1.5 rounded-md border border-sky-300/15 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-sky-300 transition-colors hover:bg-sky-300/10 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              {isStorageActionRunning ? <Loader2 size={12} className="animate-spin" /> : <Cloud size={12} />}
+                              Sync Cloud
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              disabled={isStorageActionRunning}
+                              onClick={(event) => runStorageAction(event, project.id, onMakeLocalCopy)}
+                              className="inline-flex items-center gap-1.5 rounded-md border border-emerald-300/15 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-emerald-300 transition-colors hover:bg-emerald-300/10 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              {isStorageActionRunning ? <Loader2 size={12} className="animate-spin" /> : <CloudOff size={12} />}
+                              Copy Local
+                            </button>
+                          )}
                         </div>
                       </div>
                     </div>

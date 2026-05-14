@@ -7,6 +7,16 @@ export default defineConfig({
   plugins: [react()],
   test: {
     environment: 'node',
+    // [Wave 0] Pin test collection to app-owned files only.
+    // Prevents vitest from picking up .tmp-*, e2e Playwright specs, or dist artifacts.
+    include: ['src/**/*.test.{ts,tsx}', 'tests/**/*.test.{ts,tsx}', 'scripts/**/*.test.{ts,tsx}'],
+    exclude: [
+      '**/node_modules/**',
+      '**/dist/**',
+      '**/.tmp-*/**',
+      '**/e2e/**',
+      '**/src-tauri/**',
+    ],
   },
   worker: {
     format: 'es',
@@ -34,12 +44,33 @@ export default defineConfig({
     chunkSizeWarningLimit: 600,
     rollupOptions: {
       output: {
-        manualChunks: {
-          'vendor-react': ['react', 'react-dom', 'zustand'],
-          'vendor-supabase': ['@supabase/supabase-js'],
-          'vendor-docs': ['mammoth', 'docx', '@llamaindex/liteparse', 'jszip'],
-          'vendor-pdf': ['pdfjs-dist'],
-          'vendor-icons': ['lucide-react'],
+        manualChunks(id) {
+          // Vendor buckets — order matters: check narrower libs first to avoid
+          // greedy `includes('react')` swallowing lucide-react etc.
+          if (id.includes('node_modules')) {
+            if (id.includes('lucide-react')) return 'vendor-icons';
+            if (id.includes('pdfjs-dist')) return 'vendor-pdf';
+            if (
+              id.includes('mammoth') ||
+              id.includes('docx') ||
+              id.includes('@llamaindex/liteparse') ||
+              id.includes('jszip')
+            ) {
+              return 'vendor-docs';
+            }
+            if (id.includes('@supabase')) return 'vendor-supabase';
+            if (
+              id.includes('/react/') ||
+              id.includes('/react-dom/') ||
+              id.includes('/zustand/')
+            ) {
+              return 'vendor-react';
+            }
+          }
+          // [Bundle / D-Bundle=Aggressive] Isolate story template seed data so
+          // it stays cacheable independently from the (small) Zustand wrapper
+          // and isn't pulled into other lazy chunks that touch use_template_store.
+          if (id.includes('/data/story_templates/')) return 'story-templates-data';
         },
       },
     },

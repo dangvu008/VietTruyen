@@ -1,5 +1,6 @@
 import type { Project } from '../types/story';
 import { generateCanonBundleArchive } from '../lib/canon/canon_bundle';
+import { sortChaptersBySequence } from '../lib/memory/chapter_order';
 
 export type ExportFormat = 'txt' | 'md' | 'html' | 'docx' | 'canon';
 
@@ -80,10 +81,11 @@ const buildSections = (project: Project, options: ExportOptions) => {
   }
 
   if (options.includeChapters) {
+    const sorted = sortChaptersBySequence(project.chapters);
     sections.push({
       title: 'Chương truyện',
-      content: project.chapters.length
-        ? project.chapters.map((chapter, index) => `Chương ${project.chapters.length - index}: ${chapter.title}\n${chapter.content}`)
+      content: sorted.length
+        ? sorted.map((chapter, index) => `Chương ${index + 1}: ${chapter.title}\n${chapter.content}`)
         : ['Chưa có chương.'],
     });
   }

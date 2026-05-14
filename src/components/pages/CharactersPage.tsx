@@ -5,7 +5,7 @@
  * Domain: Characters → [CRUD, character cards, retcon-safe edits]
  */
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
-import { Plus, Sparkles, User, Trash2, X, RotateCcw, GitPullRequestArrow, Users as UsersIcon, ChevronRight } from 'lucide-react';
+import { Plus, Sparkles, Trash2, X, RotateCcw, GitPullRequestArrow, Users as UsersIcon } from 'lucide-react';
 import type { Character, CharacterPsychology } from '../../types/story';
 import { createId } from '../../core/id';
 import { useRetconStore } from '../../store/use_retcon_store';
@@ -34,7 +34,6 @@ const ROLE_GROUPS: Record<string, string[]> = {
   'Bầu không khí': ['Bí ẩn', 'Nền sống động', 'Nhân chứng', 'Chất xúc tác'],
   'Động': ['Biến chuyển', 'Ẩn boss'],
 };
-const ROLES = Object.values(ROLE_GROUPS).flat();
 
 function serializeCharacter(character: Character) {
   const normalized = normalizeCharacter(character);
@@ -173,14 +172,6 @@ const CharactersPage: React.FC<CharactersPageProps> = ({
     });
     return Object.fromEntries(entries);
   }, [characters, drafts]);
-
-  const stats = useMemo(() => {
-    const byRole = characters.reduce((acc, char) => {
-      acc[char.role] = (acc[char.role] || 0) + 1;
-      return acc;
-    }, {} as Record<string, number>);
-    return byRole;
-  }, [characters]);
 
   return (
     <div className="animate-fade-in flex flex-col h-full bg-[#0A0C10] text-[#E2E8F0]">

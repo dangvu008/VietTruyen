@@ -5,7 +5,7 @@
  * Domain: Navigation → [project workspace, layout]
  */
 import React from 'react';
-import { ArrowLeft, ChevronRight, Home } from 'lucide-react';
+import { ChevronRight } from 'lucide-react';
 import type { ProjectTabId } from '../../types/navigation';
 import type { Project } from '../../types/story';
 import ProjectSidebar from './ProjectSidebar';

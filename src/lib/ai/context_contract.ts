@@ -10,7 +10,6 @@ import type {
   ChapterContract,
   MasterSetting,
   RedLineReport,
-  StoryRuntimeHealth,
   StrandWeaveMetrics,
 } from '../../types/story_system';
 
