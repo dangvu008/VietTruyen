@@ -38,10 +38,12 @@ export function renderGlobalPage({
   projectActions,
 }: GlobalPageRenderProps): React.ReactNode {
   const handleStartCreationChat = (title?: string) => {
-    useCreationChatStore.getState().reset();
-    if (title && title !== 'Tác phẩm mới' && title !== 'Dự án mới') {
-      useCreationChatStore.getState().addUserText(`Tôi muốn viết một tác phẩm tựa đề: "${title}". Hãy giúp tôi thiết kế ý tưởng.`);
-    }
+    // [Domain:SessionArchive] Archive current session before starting new one
+    void useCreationChatStore.getState().archiveAndReset('new_session').then(() => {
+      if (title && title !== 'Tác phẩm mới' && title !== 'Dự án mới') {
+        useCreationChatStore.getState().addUserText(`Tôi muốn viết một tác phẩm tựa đề: "${title}". Hãy giúp tôi thiết kế ý tưởng.`);
+      }
+    });
     onNavigate('creation-chat');
   };
 

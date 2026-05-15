@@ -228,15 +228,17 @@ const App: React.FC = () => {
     const creationChat = useCreationChatStore.getState();
 
     if (creationChat.progress.linkedProjectId !== project.id) {
-      creationChat.reset();
-      const nextCreationChat = useCreationChatStore.getState();
-      nextCreationChat.linkProject(project.id);
+      // [Domain:SessionArchive] Archive current session before switching projects
+      void creationChat.archiveAndReset('switch_project').then(() => {
+        const nextCreationChat = useCreationChatStore.getState();
+        nextCreationChat.linkProject(project.id);
 
-      if (project.title && project.title !== 'Tác phẩm mới' && project.title !== 'Dự án mới') {
-        nextCreationChat.addUserText(
-          `Tôi muốn phát triển tác phẩm "${project.title}". Hãy hỏi tôi vài câu để chốt ý tưởng ban đầu.`,
-        );
-      }
+        if (project.title && project.title !== 'Tác phẩm mới' && project.title !== 'Dự án mới') {
+          nextCreationChat.addUserText(
+            `Tôi muốn phát triển tác phẩm "${project.title}". Hãy hỏi tôi vài câu để chốt ý tưởng ban đầu.`,
+          );
+        }
+      });
     }
 
     setGlobalTab('creation-chat');

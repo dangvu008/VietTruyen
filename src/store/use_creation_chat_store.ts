@@ -2,7 +2,7 @@
  * File: use_creation_chat_store.ts
  * Purpose: Persisted Zustand store cho Unified Creation Chat Flow — 4 phases + autosave/resume
  * Layer: Store
- * Domain: CreationChat → [phase management, workflow progress, autosave draft]
+ * Domain: CreationChat → [phase management, workflow progress, autosave draft, session archive]
  */
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
@@ -11,6 +11,7 @@ import type {
   AcceptedChapter,
   BatchComposeProgress,
   CreationChatState,
+  CreationCostPreviewData,
   CreationMessage,
   CreationMessageTokenUsage,
   CreationPhase,
@@ -23,6 +24,12 @@ import { normalizeCreationPlotPreview } from '../lib/creation/plot_preview_norma
 import { normalizeCreationFramework } from '../lib/creation/framework_normalizer';
 import { useNotificationStore } from './use_notification_store';
 import { createDebouncedPersistStorage } from '../lib/storage/debounced_local_storage';
+import {
+  archiveCurrentSession,
+  buildRestorePayload,
+} from '../lib/session/session_archiver';
+import { getArchivedSession } from '../db/session_archive_db';
+import type { ArchivedCreationSession } from '../db/session_archive_db';
 
 interface WorkflowProgressPatch {
   linkedProjectId?: string | null;
@@ -40,6 +47,7 @@ interface CreationChatActions {
     tokenUsage?: CreationMessageTokenUsage,
   ) => void;
   addSystemMessage: (text: string) => void;
+  addCostPreview: (data: CreationCostPreviewData, introText: string) => void;
   addLoadingMessage: () => string;
   removeMessage: (id: string) => void;
   setPhase: (phase: CreationPhase) => void;
@@ -97,6 +105,15 @@ interface CreationChatActions {
   setBatchComposeProgress: (progress: BatchComposeProgress | null) => void;
   setError: (error: string | null) => void;
   reset: () => void;
+  /**
+   * Archive current session to IndexedDB before resetting.
+   * Use this instead of raw reset() to prevent data loss.
+   */
+  archiveAndReset: (reason: ArchivedCreationSession['archiveReason']) => Promise<void>;
+  /**
+   * Restore a previously archived session from IndexedDB.
+   */
+  restoreFromArchive: (sessionId: string) => Promise<boolean>;
 }
 
 const nowIso = () => new Date().toISOString();
@@ -292,6 +309,16 @@ export const useCreationChatStore = create<
             role: 'system',
             content: text,
             type: 'phase_transition',
+          }),
+        ),
+
+      addCostPreview: (data, introText) =>
+        set((state) =>
+          buildPersistedMessage(state, {
+            role: 'ai',
+            content: introText,
+            type: 'cost_preview',
+            costPreviewData: data,
           }),
         ),
 
@@ -706,6 +733,35 @@ export const useCreationChatStore = create<
         })),
 
       reset: () => set(createInitialState()),
+
+      archiveAndReset: async (reason) => {
+        const currentState = useCreationChatStore.getState();
+        try {
+          await archiveCurrentSession(currentState, reason);
+        } catch (err) {
+          console.warn('[CreationChatStore] Archive failed, resetting anyway:', err);
+        }
+        set(createInitialState());
+      },
+
+      restoreFromArchive: async (sessionId) => {
+        try {
+          const archived = await getArchivedSession(sessionId);
+          if (!archived) return false;
+
+          const payload = buildRestorePayload(archived);
+          set({
+            ...payload,
+            isAiWorking: false,
+            isBatchComposing: false,
+            error: null,
+          });
+          return true;
+        } catch (err) {
+          console.warn('[CreationChatStore] Restore from archive failed:', err);
+          return false;
+        }
+      },
     }),
     {
       name: 'viettruyen-creation-chat',

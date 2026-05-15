@@ -17,6 +17,7 @@ import {
   PlayCircle,
   CheckCheck,
   RotateCcw,
+  History,
 } from 'lucide-react';
 import VoiceMicButton from '../shared/VoiceMicButton';
 import { getProjectSnapshot, useProjectStore } from '../../store/use_project_store';
@@ -35,7 +36,7 @@ import { AiThinkingIndicator } from '../shared/AiThinkingIndicator';
 import { AiConnectionDebugPanel } from '../shared/AiConnectionDebugPanel';
 import ModelSelectorDropdown from '../shared/ModelSelectorDropdown';
 import { STARTER_IDEAS } from '../../lib/ai/creation_discuss_config';
-import { estimateCreationCost } from '../../lib/ai/creation_cost_estimator';
+import { estimateCreationCost, resolveTargetChaptersFromAnswers } from '../../lib/ai/creation_cost_estimator';
 import { getModelForTask } from '../../lib/ai/model_router';
 import {
   buildPlotPreviewRepairFeedback,
@@ -56,6 +57,7 @@ import {
   handleAcceptChapter,
   retryFrameworkGeneration,
   batchComposeAllChapters,
+  handleConfirmCostAndProceed,
 } from '../../lib/ai/creation_orchestrator';
 import type { ProjectTabId } from '../../types/navigation';
 import type { CreationMessageTokenUsage } from '../../types/creation_chat';
@@ -64,6 +66,10 @@ import {
   selectLatestChapterDrafts,
   selectUnacceptedChapterDrafts,
 } from '../../lib/creation/chapter_draft_selection';
+import SessionRecoveryBanner from '../creation/SessionRecoveryBanner';
+import SessionHistoryDrawer from '../creation/SessionHistoryDrawer';
+import { getLatestSessionForProject } from '../../lib/session/session_archiver';
+import type { ArchivedCreationSession } from '../../db/session_archive_db';
 
 // ─── Styles ─────────────────────────────────────────────────
 
@@ -383,6 +389,9 @@ export default function CreationChatPage({
   const avgTokensPerPipeline = useTokenStore((state) => state.getStats().avgTokensPerPipeline);
 
   const [showChapterPanel, setShowChapterPanel] = useState(false);
+  const [showHistoryDrawer, setShowHistoryDrawer] = useState(false);
+  const [recoverySession, setRecoverySession] = useState<ArchivedCreationSession | null>(null);
+  const [recoveryDismissed, setRecoveryDismissed] = useState(false);
   const linkedProjectId = progress.linkedProjectId;
   const statusSummary = useMemo(() => describeCreationProgress(progress), [progress]);
   const hasIncompleteBatchCompose = Boolean(
@@ -501,6 +510,42 @@ export default function CreationChatPage({
     void fetchSubscription();
   }, [fetchSubscription]);
 
+  // [Domain:SessionArchive] Check for recoverable sessions on mount / project change
+  useEffect(() => {
+    if (recoveryDismissed || messages.length > 0) return;
+
+    // Only show recovery if current session is empty (just reset)
+    if (linkedProjectId) {
+      void getLatestSessionForProject(linkedProjectId).then((session) => {
+        if (session && session.messageCount > 0) {
+          setRecoverySession(session);
+        }
+      });
+    }
+  }, [linkedProjectId, messages.length, recoveryDismissed]);
+
+  const handleRestoreSession = useCallback(async (sessionId: string) => {
+    const restored = await useCreationChatStore.getState().restoreFromArchive(sessionId);
+    if (restored) {
+      setRecoverySession(null);
+      setRecoveryDismissed(true);
+    }
+  }, []);
+
+  const handleDismissRecovery = useCallback(() => {
+    setRecoverySession(null);
+    setRecoveryDismissed(true);
+  }, []);
+
+  const handleRestoreFromHistory = useCallback(async (sessionId: string) => {
+    // [Domain:SessionArchive] Archive current session before restoring from history
+    await useCreationChatStore.getState().archiveAndReset('switch_project');
+    const restored = await useCreationChatStore.getState().restoreFromArchive(sessionId);
+    if (restored) {
+      setShowHistoryDrawer(false);
+    }
+  }, []);
+
   // ── Transition handler: migrate creation data → Project → Editor ──
   const handleTransitionToEditor = useCallback(async () => {
     if (!canTransitionToEditor) return;
@@ -508,6 +553,7 @@ export default function CreationChatPage({
     const seed = buildCreationProjectSeed({
       framework,
       acceptedChapters,
+      targetChapterCount: answers.chapter_scope ? resolveTargetChaptersFromAnswers(answers) : undefined,
       createId,
     });
 
@@ -725,6 +771,14 @@ export default function CreationChatPage({
             {phaseInfo.label}
           </span>
           <ModelSelectorDropdown />
+          <button
+            style={S.headerBtn(showHistoryDrawer)}
+            onClick={() => setShowHistoryDrawer(true)}
+            title="Lịch sử phiên thảo luận"
+          >
+            <History size={14} />
+            Lịch sử
+          </button>
           {canTransitionToEditor && onOpenProjectDraft && (
             <button
               style={S.headerBtn(true)}
@@ -870,6 +924,15 @@ export default function CreationChatPage({
         </div>
       </div>
 
+      {/* [Domain:SessionArchive] Recovery banner for interrupted sessions */}
+      {recoverySession && !recoveryDismissed && messages.length === 0 && (
+        <SessionRecoveryBanner
+          session={recoverySession}
+          onRestore={handleRestoreSession}
+          onDismiss={handleDismissRecovery}
+        />
+      )}
+
       {creationCostEstimate && (
         <CreationCostPanel
           estimate={creationCostEstimate}
@@ -921,6 +984,133 @@ export default function CreationChatPage({
                   <AiThinkingIndicator
                     context={phase === 'compose' ? 'creation' : phase === 'describe' ? 'generic' : 'creation'}
                   />
+                </div>
+              );
+            }
+
+            // ── Cost preview (chapter scope confirmation) ──
+            if (msg.type === 'cost_preview' && msg.costPreviewData) {
+              const cpd = msg.costPreviewData;
+              const isLatestMsg = msg.id === messages[messages.length - 1]?.id;
+              const alreadyConfirmed = phase !== 'discuss';
+              function fmtTok(n: number) {
+                if (n < 1000) return `${n}`;
+                if (n < 1_000_000) return `${Math.round(n / 1000)}K`;
+                return `${(n / 1_000_000).toFixed(1)}M`;
+              }
+              return (
+                <div key={msg.id} style={S.msgRow('ai')}>
+                  <div style={S.msgLabel}>🤖 AI</div>
+                  <div style={{
+                    ...S.msgBubble('ai'),
+                    padding: '16px 20px',
+                    maxWidth: 480,
+                  }}>
+                    <div style={{ fontSize: 14, color: '#e8ddd5', marginBottom: 14, lineHeight: 1.6 }}>
+                      {msg.content.replace(/\*\*(.*?)\*\*/g, '$1')}
+                    </div>
+                    {/* Token breakdown */}
+                    <div style={{
+                      borderRadius: 14,
+                      border: '1px solid rgba(212,165,116,0.2)',
+                      background: 'rgba(22,19,16,0.6)',
+                      overflow: 'hidden',
+                      marginBottom: 12,
+                    }}>
+                      <div style={{
+                        padding: '10px 14px',
+                        borderBottom: '1px solid rgba(80,69,59,0.3)',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                      }}>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: '#cbb8aa' }}>
+                          📚 Mục tiêu: {cpd.targetChapters} chương
+                        </span>
+                        <span style={{ fontSize: 11, color: '#9c8e82' }}>Heuristic ước tính</span>
+                      </div>
+                      <div style={{ padding: '10px 14px', display: 'flex', gap: 20 }}>
+                        <div>
+                          <div style={{ fontSize: 10, color: '#9c8e82', textTransform: 'uppercase' as const, letterSpacing: '0.08em' }}>Thiết lập ban đầu</div>
+                          <div style={{ fontSize: 15, fontWeight: 800, color: '#f2c08d', marginTop: 2 }}>
+                            {fmtTok(cpd.setupTokensEstimate)} tokens
+                          </div>
+                          <div style={{ fontSize: 11, color: '#8f7f73', marginTop: 2 }}>{cpd.setupCostLabel}</div>
+                        </div>
+                        <div style={{ width: 1, background: 'rgba(80,69,59,0.4)' }} />
+                        <div>
+                          <div style={{ fontSize: 10, color: '#9c8e82', textTransform: 'uppercase' as const, letterSpacing: '0.08em' }}>Toàn bộ truyện</div>
+                          <div style={{ fontSize: 15, fontWeight: 800, color: '#f2c08d', marginTop: 2 }}>
+                            {fmtTok(cpd.totalTokensEstimate)} tokens
+                          </div>
+                          <div style={{ fontSize: 11, color: '#8f7f73', marginTop: 2 }}>{cpd.fullStoryCostLabel}</div>
+                        </div>
+                      </div>
+                      <div style={{
+                        padding: '8px 14px',
+                        borderTop: '1px solid rgba(80,69,59,0.2)',
+                        fontSize: 11,
+                        color: '#9c8e82',
+                        lineHeight: 1.5,
+                      }}>
+                        ⚡ {cpd.chapterPipelineNote}
+                      </div>
+                    </div>
+                    {/* Disclaimer */}
+                    <div style={{ fontSize: 11, color: '#8f7f73', lineHeight: 1.5, marginBottom: 14 }}>
+                      Dự toán sơ bộ, có thể lệch 20–30% tùy mô hình và độ dài thảo luận. Bạn có thể điều chỉnh số chương lúc nào.
+                    </div>
+                    {/* Confirm / adjust buttons */}
+                    {isLatestMsg && !alreadyConfirmed && !isAiWorking && (
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <button
+                          id="btn-confirm-cost-proceed"
+                          type="button"
+                          onClick={() => void handleConfirmCostAndProceed()}
+                          style={{
+                            flex: 1,
+                            padding: '10px 16px',
+                            borderRadius: 12,
+                            border: 'none',
+                            background: 'linear-gradient(135deg, #f2c08d, #d4a574)',
+                            color: '#472a03',
+                            fontSize: 13,
+                            fontWeight: 800,
+                            cursor: 'pointer',
+                            fontFamily: 'Manrope, system-ui, sans-serif',
+                          }}
+                        >
+                          ✅ Xác nhận — Bắt đầu
+                        </button>
+                        <button
+                          id="btn-adjust-chapter-scope"
+                          type="button"
+                          onClick={() => {
+                            setDraftInput('');
+                            setTimeout(() => inputRef.current?.focus(), 50);
+                          }}
+                          style={{
+                            padding: '10px 14px',
+                            borderRadius: 12,
+                            border: '1px solid rgba(80,69,59,0.4)',
+                            background: 'transparent',
+                            color: '#cbb8aa',
+                            fontSize: 13,
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            fontFamily: 'Manrope, system-ui, sans-serif',
+                          }}
+                        >
+                          ✏️ Điều chỉnh
+                        </button>
+                      </div>
+                    )}
+                    {alreadyConfirmed && (
+                      <div style={{ fontSize: 11, color: '#68d391', fontWeight: 700 }}>
+                        ✅ Đã xác nhận — đang tiến hành sáng tác
+                      </div>
+                    )}
+                  </div>
                 </div>
               );
             }
@@ -1116,6 +1306,14 @@ export default function CreationChatPage({
         onClose={() => setShowChapterPanel(false)}
         onTransitionToEditor={handleTransitionToEditor}
         canTransitionToEditor={canTransitionToEditor}
+      />
+
+      {/* [Domain:SessionArchive] Session History Drawer */}
+      <SessionHistoryDrawer
+        isOpen={showHistoryDrawer}
+        onClose={() => setShowHistoryDrawer(false)}
+        onRestore={handleRestoreFromHistory}
+        filterProjectId={linkedProjectId}
       />
     </div>
   );
