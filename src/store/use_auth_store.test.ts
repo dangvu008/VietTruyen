@@ -64,6 +64,51 @@ describe('use_auth_store', () => {
     });
   });
 
+  it('does not let a late empty auth event overwrite a successful auth event', async () => {
+    let authCallback: Parameters<typeof onAuthStateChange>[0] | null = null;
+
+    onAuthStateChange.mockImplementation((callback) => {
+      authCallback = callback;
+      return { unsubscribe: vi.fn() };
+    });
+
+    const { useAuthStore } = await import('./use_auth_store');
+
+    useAuthStore.getState().initAuth();
+    authCallback?.('SIGNED_IN', createSession('user-1'));
+    authCallback?.('INITIAL_SESSION', null);
+
+    expect(useAuthStore.getState()).toMatchObject({
+      user: expect.objectContaining({ id: 'user-1' }),
+      isAuthenticated: true,
+      isGuest: false,
+      isLoading: false,
+    });
+  });
+
+  it('does not let a late empty auth event overwrite a loaded session', async () => {
+    let authCallback: Parameters<typeof onAuthStateChange>[0] | null = null;
+
+    getCurrentSession.mockResolvedValue(createSession('user-1'));
+    onAuthStateChange.mockImplementation((callback) => {
+      authCallback = callback;
+      return { unsubscribe: vi.fn() };
+    });
+
+    const { useAuthStore } = await import('./use_auth_store');
+
+    useAuthStore.getState().initAuth();
+    await Promise.resolve();
+    authCallback?.('INITIAL_SESSION', null);
+
+    expect(useAuthStore.getState()).toMatchObject({
+      user: expect.objectContaining({ id: 'user-1' }),
+      isAuthenticated: true,
+      isGuest: false,
+      isLoading: false,
+    });
+  });
+
   it('sets the authenticated user after email login even if the auth listener is late', async () => {
     signInWithEmailPassword.mockResolvedValue({ error: null });
     getCurrentSession.mockResolvedValue(createSession('email-user'));

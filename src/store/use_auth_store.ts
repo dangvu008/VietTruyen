@@ -49,7 +49,7 @@ export const useAuthStore = create<AuthState>()((set) => ({
   initAuth: () => {
     authInitVersion += 1;
     const initVersion = authInitVersion;
-    let didReceiveAuthEvent = false;
+    let hasAcceptedAuthenticatedSession = false;
     activeAuthCleanup?.();
     traceStoryDebugEvent({
       domain: 'auth',
@@ -76,8 +76,12 @@ export const useAuthStore = create<AuthState>()((set) => ({
             email: user?.email ?? null,
           },
         });
+        if (user) {
+          hasAcceptedAuthenticatedSession = true;
+        }
+
         set((state) => {
-          if (!user && didReceiveAuthEvent) {
+          if (!user && hasAcceptedAuthenticatedSession) {
             return { isLoading: false };
           }
 
@@ -105,7 +109,6 @@ export const useAuthStore = create<AuthState>()((set) => ({
     // Listen for auth changes (login, logout, token refresh)
     const subscription = onAuthStateChange((event, session) => {
       if (initVersion !== authInitVersion) return;
-      didReceiveAuthEvent = true;
 
       const user = session?.user ?? null;
       traceStoryDebugEvent({
@@ -121,11 +124,22 @@ export const useAuthStore = create<AuthState>()((set) => ({
           hasSession: Boolean(session),
         },
       });
-      set({
-        user,
-        isAuthenticated: !!user,
-        isGuest: false,
-        isLoading: false,
+
+      if (user) {
+        hasAcceptedAuthenticatedSession = true;
+      }
+
+      set((state) => {
+        if (!user && event !== 'SIGNED_OUT' && hasAcceptedAuthenticatedSession) {
+          return { isLoading: false };
+        }
+
+        return {
+          user,
+          isAuthenticated: !!user,
+          isGuest: user ? false : state.isGuest && event !== 'SIGNED_OUT',
+          isLoading: false,
+        };
       });
     });
 
