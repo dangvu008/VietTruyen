@@ -43,6 +43,67 @@ export interface CreationCostEstimate {
   chapterPipelineSource: 'history' | 'heuristic';
 }
 
+/**
+ * Lightweight cost estimate — chỉ dùng targetChapters, không cần models.
+ * Dùng heuristic trung bình để tính nhanh ngay sau khi user chọn số chương.
+ */
+export interface StandaloneChapterCostEstimate {
+  targetChapters: number;
+  /** Tokens setup (discuss + plot_review + framework) */
+  setupTokens: number;
+  /** Tokens để viết toàn bộ chương bằng AI */
+  pipelineTokens: number;
+  /** Tổng tokens */
+  totalTokens: number;
+  setupCostLabel: string;
+  fullStoryCostLabel: string;
+  note: string;
+}
+
+/**
+ * [Domain:CreationChat] Tính ước tính token nhanh khi user xác nhận số chương.
+ * Không cần AI model thực tế — dùng heuristic:
+ * - Setup: ~12K tokens (discuss + plot_review + framework)
+ * - Mỗi chương pipeline: ~14K tokens trung bình (plan + write + review + summarize)
+ */
+export function estimateStandaloneChapterCost(targetChapters: number): StandaloneChapterCostEstimate {
+  const SETUP_TOKENS = 12_000;
+  const TOKENS_PER_CHAPTER = 14_000;
+  const COST_PER_M_TOKENS = 0.25; // USD/M tokens trung bình heuristic
+
+  const setupTokens = SETUP_TOKENS;
+  const pipelineTokens = Math.round(targetChapters * TOKENS_PER_CHAPTER);
+  const totalTokens = setupTokens + pipelineTokens;
+
+  const setupCostUsd = (setupTokens / 1_000_000) * COST_PER_M_TOKENS;
+  const fullStoryCostUsd = (totalTokens / 1_000_000) * COST_PER_M_TOKENS;
+
+  function fmtCost(usd: number): string {
+    if (usd <= 0) return 'Miễn phí';
+    if (usd < 0.001) return '<$0.001';
+    if (usd < 0.01) return `~$${usd.toFixed(4)}`;
+    if (usd < 1) return `~$${usd.toFixed(3)}`;
+    return `~$${usd.toFixed(2)}`;
+  }
+
+  function fmtTokens(n: number): string {
+    if (n < 1000) return `${n}`;
+    if (n < 1_000_000) return `${Math.round(n / 1000)}K`;
+    return `${(n / 1_000_000).toFixed(1)}M`;
+  }
+
+  return {
+    targetChapters,
+    setupTokens,
+    pipelineTokens,
+    totalTokens,
+    setupCostLabel: fmtCost(setupCostUsd),
+    fullStoryCostLabel: fmtCost(fullStoryCostUsd),
+    note: `${fmtTokens(pipelineTokens)} tokens để viết ${targetChapters} chương · ${fmtTokens(setupTokens)} tokens thiết lập ban đầu`,
+  };
+}
+
+
 interface EstimateCreationCostParams {
   phase: CreationPhase;
   originalIdea: string;
@@ -272,10 +333,42 @@ function estimateFrameworkTask(params: {
   };
 }
 
+/**
+ * Parse số chương từ answers.chapter_scope — user chọn chip hoặc tự nhập.
+ * Chip value = chuỗi số như "20", "100", v.v.
+ */
+export function resolveTargetChaptersFromAnswers(
+  answers: Record<string, string>,
+  fallback = DEFAULT_TARGET_CHAPTERS,
+): number {
+  const raw = answers.chapter_scope?.trim();
+  if (!raw) return fallback;
+  const parsed = parseInt(raw, 10);
+  if (Number.isFinite(parsed) && parsed > 0) {
+    return clamp(parsed, 5, 1000);
+  }
+  // Nếu user tự gõ text như "khoảng 80" thì thử extract số đầu tiên
+  const extracted = raw.match(/\d+/)?.[0];
+  if (extracted) return clamp(parseInt(extracted, 10), 5, 1000);
+  return fallback;
+}
+
 export function deriveCreationTargetChapterCount(
   framework: BrainstormResult | null,
   acceptedChapterCount: number,
+  answers: Record<string, string> = {},
 ): number {
+  // [Domain:CreationChat] STEP 1 — Ưu tiên lựa chọn trực tiếp của user từ chapter_scope
+  const userTarget = resolveTargetChaptersFromAnswers(answers, 0);
+  if (userTarget > 0) {
+    return clamp(
+      Math.max(userTarget, acceptedChapterCount),
+      5,
+      1000,
+    );
+  }
+
+  // [Domain:CreationChat] STEP 2 — Fallback: heuristic từ outline/skeleton
   if (framework) {
     const byOutline = framework.outline.length > 0 ? framework.outline.length * 12 : 0;
     const bySkeleton = framework.chapterSkeleton.length > 0 ? framework.chapterSkeleton.length * 6 : 0;
@@ -441,7 +534,7 @@ export function estimateCreationCost(params: EstimateCreationCostParams): Creati
     tasks.push(frameworkTask);
   }
 
-  const targetChapterCount = deriveCreationTargetChapterCount(framework, acceptedChapterCount);
+  const targetChapterCount = deriveCreationTargetChapterCount(framework, acceptedChapterCount, answers);
   const masterOutlineTask = estimateMasterOutlineTask({
     phase,
     originalIdea,

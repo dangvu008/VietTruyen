@@ -23,6 +23,12 @@ import type {
   SurgerySpec,
 } from '../types/surgery';
 import type { Arc } from '../types/story';
+import {
+  persistSurgerySession,
+  loadSurgerySession,
+  clearSurgerySession,
+  type PersistedSurgerySession,
+} from '../lib/surgery/surgery_session_persist';
 
 interface SurgeryState {
   arcs: Arc[];
@@ -31,6 +37,7 @@ interface SurgeryState {
   tasks: RewriteTask[];
   isLoading: boolean;
   error: string | null;
+  activeSession: PersistedSurgerySession | null;
   refreshProjectData: (projectId: string) => Promise<void>;
   createDraftSpec: (projectId: string) => Promise<SurgerySpec>;
   saveSpec: (spec: SurgerySpec) => Promise<void>;
@@ -41,6 +48,8 @@ interface SurgeryState {
   buildRewriteQueue: (projectId: string, scanId: string) => Promise<RewriteTask[]>;
   applyArcRewrite: (projectId: string, arcId: string, specId: string) => Promise<void>;
   applyChapterRewrite: (projectId: string, taskId: string) => Promise<void>;
+  resumeSession: (projectId: string) => Promise<PersistedSurgerySession | null>;
+  endSession: (projectId: string) => void;
 }
 
 const now = () => new Date().toISOString();
@@ -52,6 +61,7 @@ export const useSurgeryStore = create<SurgeryState>((set, get) => ({
   tasks: [],
   isLoading: false,
   error: null,
+  activeSession: null,
 
   refreshProjectData: async (projectId) => {
     set({ isLoading: true, error: null });
@@ -117,6 +127,12 @@ export const useSurgeryStore = create<SurgeryState>((set, get) => ({
     try {
       await buildProjectIndex(projectId);
       await get().refreshProjectData(projectId);
+      const session = get().activeSession;
+      if (session) {
+        const updated = { ...session, step: 'index' as const, savedAt: now() };
+        persistSurgerySession(updated);
+        set({ activeSession: updated });
+      }
     } catch (error: any) {
       set({ isLoading: false, error: error?.message || 'Build index thất bại.' });
     }
@@ -127,6 +143,15 @@ export const useSurgeryStore = create<SurgeryState>((set, get) => ({
     try {
       const scan = await runGlobalImpactScan(projectId, specId);
       await get().refreshProjectData(projectId);
+      const session: PersistedSurgerySession = {
+        projectId,
+        specId,
+        step: 'scan',
+        completedTasks: [],
+        savedAt: now(),
+      };
+      persistSurgerySession(session);
+      set({ activeSession: session });
       return scan;
     } catch (error: any) {
       set({ isLoading: false, error: error?.message || 'Impact scan thất bại.' });
@@ -139,6 +164,15 @@ export const useSurgeryStore = create<SurgeryState>((set, get) => ({
     try {
       const result = await freezeCanon(projectId, specId);
       await get().refreshProjectData(projectId);
+      const session: PersistedSurgerySession = {
+        projectId,
+        specId,
+        step: 'freeze',
+        completedTasks: get().activeSession?.completedTasks ?? [],
+        savedAt: now(),
+      };
+      persistSurgerySession(session);
+      set({ activeSession: session });
       return result;
     } catch (error: any) {
       set({ isLoading: false, error: error?.message || 'Freeze canon thất bại.' });
@@ -151,6 +185,12 @@ export const useSurgeryStore = create<SurgeryState>((set, get) => ({
     try {
       const tasks = await enqueueRewriteTasks(projectId, scanId);
       await get().refreshProjectData(projectId);
+      const prev = get().activeSession;
+      if (prev) {
+        const updated: PersistedSurgerySession = { ...prev, step: 'rewrite', savedAt: now() };
+        persistSurgerySession(updated);
+        set({ activeSession: updated });
+      }
       return tasks;
     } catch (error: any) {
       set({ isLoading: false, error: error?.message || 'Tạo rewrite queue thất bại.' });
@@ -174,9 +214,32 @@ export const useSurgeryStore = create<SurgeryState>((set, get) => ({
     try {
       await rewriteChapterTask(projectId, taskId);
       await get().refreshProjectData(projectId);
+      const prev = get().activeSession;
+      if (prev) {
+        const updated = {
+          ...prev,
+          completedTasks: [...prev.completedTasks, taskId],
+          savedAt: now(),
+        };
+        persistSurgerySession(updated);
+        set({ activeSession: updated });
+      }
     } catch (error: any) {
       set({ isLoading: false, error: error?.message || 'Rewrite chapter thất bại.' });
       throw error;
     }
+  },
+
+  resumeSession: async (projectId) => {
+    const session = loadSurgerySession(projectId);
+    if (!session) return null;
+    set({ activeSession: session });
+    await get().refreshProjectData(projectId);
+    return session;
+  },
+
+  endSession: (projectId) => {
+    clearSurgerySession(projectId);
+    set({ activeSession: null });
   },
 }));

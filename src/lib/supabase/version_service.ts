@@ -83,7 +83,108 @@ export async function saveVersion(
     .single();
 
   if (error) throw error;
+
+  // Fire-and-forget pruning — never block the save path
+  pruneChapterVersions(chapterId).catch((e) =>
+    console.warn('[VersionService] prune failed (non-fatal):', e),
+  );
+
   return mapVersionRow(data);
+}
+
+// ── Prune Versions (retention policy) ──
+
+const KEEP_LATEST = 5;
+const DAILY_WINDOW_DAYS = 30;
+
+export async function pruneChapterVersions(chapterId: string): Promise<number> {
+  const { data: allVersions, error } = await supabase
+    .from('chapter_versions')
+    .select('id, version_number, created_at')
+    .eq('chapter_id', chapterId)
+    .order('version_number', { ascending: false });
+
+  if (error || !allVersions || allVersions.length <= KEEP_LATEST) return 0;
+
+  const keepIds = selectVersionsToKeep(allVersions);
+  const pruneIds = allVersions
+    .filter((v) => !keepIds.has(v.id as string))
+    .map((v) => v.id as string);
+
+  if (pruneIds.length === 0) return 0;
+
+  const { error: deleteError } = await supabase
+    .from('chapter_versions')
+    .delete()
+    .in('id', pruneIds);
+
+  if (deleteError) throw deleteError;
+  return pruneIds.length;
+}
+
+export async function pruneProjectVersions(projectId: string): Promise<number> {
+  const { data: chapterIds, error } = await supabase
+    .from('chapters')
+    .select('id')
+    .eq('project_id', projectId);
+
+  if (error || !chapterIds) return 0;
+
+  let total = 0;
+  for (const row of chapterIds) {
+    total += await pruneChapterVersions(row.id as string);
+  }
+  return total;
+}
+
+export function selectVersionsToKeep(
+  versions: Array<{ id: unknown; version_number: unknown; created_at: unknown }>,
+): Set<string> {
+  const keep = new Set<string>();
+  const now = Date.now();
+  const dailyCutoff = now - DAILY_WINDOW_DAYS * 24 * 60 * 60 * 1000;
+
+  // Sort descending by version_number
+  const sorted = [...versions].sort(
+    (a, b) => (b.version_number as number) - (a.version_number as number),
+  );
+
+  // Rule 1: always keep the latest N
+  for (let i = 0; i < Math.min(KEEP_LATEST, sorted.length); i++) {
+    keep.add(sorted[i].id as string);
+  }
+
+  // Rule 2: always keep version 1 (original)
+  const v1 = sorted.find((v) => (v.version_number as number) === 1);
+  if (v1) keep.add(v1.id as string);
+
+  // Rule 3: keep 1 per day within the daily window
+  const dailyBest = new Map<string, { id: string; version: number }>();
+  for (const v of sorted) {
+    const ts = new Date(v.created_at as string).getTime();
+    if (ts < dailyCutoff) continue;
+    const dayKey = new Date(v.created_at as string).toISOString().slice(0, 10);
+    const existing = dailyBest.get(dayKey);
+    if (!existing || (v.version_number as number) > existing.version) {
+      dailyBest.set(dayKey, { id: v.id as string, version: v.version_number as number });
+    }
+  }
+  for (const { id } of dailyBest.values()) keep.add(id);
+
+  // Rule 4: keep 1 per month beyond the daily window
+  const monthlyBest = new Map<string, { id: string; version: number }>();
+  for (const v of sorted) {
+    const ts = new Date(v.created_at as string).getTime();
+    if (ts >= dailyCutoff) continue;
+    const monthKey = new Date(v.created_at as string).toISOString().slice(0, 7);
+    const existing = monthlyBest.get(monthKey);
+    if (!existing || (v.version_number as number) > existing.version) {
+      monthlyBest.set(monthKey, { id: v.id as string, version: v.version_number as number });
+    }
+  }
+  for (const { id } of monthlyBest.values()) keep.add(id);
+
+  return keep;
 }
 
 // ── List Versions for Chapter ──

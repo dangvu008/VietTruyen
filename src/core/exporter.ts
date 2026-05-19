@@ -85,7 +85,7 @@ const buildSections = (project: Project, options: ExportOptions) => {
     sections.push({
       title: 'Chương truyện',
       content: sorted.length
-        ? sorted.map((chapter, index) => `Chương ${index + 1}: ${chapter.title}\n${chapter.content}`)
+        ? sorted.map((chapter, index) => `Chương ${chapter.sequenceNumber ?? index + 1}: ${chapter.title}\n${chapter.content}`)
         : ['Chưa có chương.'],
     });
   }

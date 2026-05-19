@@ -30,6 +30,7 @@ import {
   buildCreationFrameworkPrompt,
 } from './creation_prompts';
 import { getDiscussTopicsForIdea } from './creation_discuss_config';
+import { resolveTargetChaptersFromAnswers } from './creation_cost_estimator';
 import { generateMasterOutline } from './outline_planner';
 import { createId } from '../../core/id';
 import { buildCreationProjectSeed } from '../creation/project_seed';
@@ -148,11 +149,16 @@ function getLinkedProjectId(): string | null {
   return getStore().progress.linkedProjectId;
 }
 
+function resolveConfirmedTargetChapterCount(answers: Record<string, string>): number | undefined {
+  return answers.chapter_scope ? resolveTargetChaptersFromAnswers(answers) : undefined;
+}
+
 async function ensureProjectFromFramework(framework: BrainstormResult): Promise<string> {
   const store = getStore();
   const seed = buildCreationProjectSeed({
     framework,
     acceptedChapters: store.acceptedChapters,
+    targetChapterCount: resolveConfirmedTargetChapterCount(store.answers),
     createId,
   });
   const projectState = useProjectStore.getState();
@@ -340,7 +346,7 @@ rồi giới thiệu câu hỏi đầu tiên: "${firstTopic.questionTemplate}"`,
 export async function handleDiscussAnswer(chosenText: string): Promise<void> {
   const store = getStore();
   const {
-    addUserText, addAiSuggestions, addAiText, setAnswer,
+    addUserText, addAiSuggestions, addAiText, addCostPreview, setAnswer,
     setCurrentTopicIndex, setAiWorking, setError,
     currentTopicIndex, answers, startWorkflowStep, finishWorkflowStep, failWorkflowStep,
   } = store;
@@ -351,7 +357,31 @@ export async function handleDiscussAnswer(chosenText: string): Promise<void> {
   if (!currentTopic) return;
 
   addUserText(chosenText);
+  const updatedAnswers = { ...answers, [currentTopic.id]: chosenText };
   setAnswer(currentTopic.id, chosenText);
+
+  // ─── [Domain:CreationChat] Special case: chapter_scope không cần gọi AI ───
+  // Hiển thị ước tính token ngay lập tức + yêu cầu xác nhận trước khi plot preview
+  if (currentTopic.id === 'chapter_scope') {
+    const { resolveTargetChaptersFromAnswers, estimateStandaloneChapterCost } = await import('./creation_cost_estimator');
+    const targetChapters = resolveTargetChaptersFromAnswers(updatedAnswers);
+    const costData = estimateStandaloneChapterCost(targetChapters);
+    addCostPreview(
+      {
+        targetChapters,
+        totalTokensEstimate: costData.totalTokens,
+        setupTokensEstimate: costData.setupTokens,
+        fullStoryCostLabel: costData.fullStoryCostLabel,
+        setupCostLabel: costData.setupCostLabel,
+        chapterPipelineNote: costData.note,
+      },
+      `Tuyệt! Với mục tiêu **${targetChapters} chương**, đây là ước tính chi phí token sơ bộ cho toàn bộ hành trình sáng tác:`,
+    );
+    setCurrentTopicIndex(currentTopicIndex + 1);
+    finishWorkflowStep('discuss', `Đã lưu quy mô truyện (${targetChapters} chương). Chờ xác nhận của người viết.`);
+    return;
+  }
+
   setAiWorking(true);
   setError(null);
   startWorkflowStep(
@@ -361,7 +391,6 @@ export async function handleDiscussAnswer(chosenText: string): Promise<void> {
 
   try {
     const model = await resolveModel();
-    const updatedAnswers = { ...answers, [currentTopic.id]: chosenText };
 
     // AI phản hồi lựa chọn
     const prompt = buildDiscussResponsePrompt(
@@ -410,6 +439,7 @@ export async function handleDiscussAnswer(chosenText: string): Promise<void> {
     setAiWorking(false);
   }
 }
+
 
 /**
  * User bấm "🤖 AI tự quyết định" cho 1 topic
@@ -460,7 +490,30 @@ export async function handleAiDecide(): Promise<void> {
     });
 
     // Save AI's choice as the answer
-    store.setAnswer(currentTopic.id, `(AI chọn) ${response}`);
+    const aiChoice = `(AI chọn) ${response}`;
+    store.setAnswer(currentTopic.id, aiChoice);
+
+    // ─── [Domain:CreationChat] Special case: chapter_scope → cost preview ───
+    if (currentTopic.id === 'chapter_scope') {
+      const { resolveTargetChaptersFromAnswers, estimateStandaloneChapterCost } = await import('./creation_cost_estimator');
+      const updatedAnswers = { ...answers, [currentTopic.id]: aiChoice };
+      const targetChapters = resolveTargetChaptersFromAnswers(updatedAnswers);
+      const costData = estimateStandaloneChapterCost(targetChapters);
+      store.addCostPreview(
+        {
+          targetChapters,
+          totalTokensEstimate: costData.totalTokens,
+          setupTokensEstimate: costData.setupTokens,
+          fullStoryCostLabel: costData.fullStoryCostLabel,
+          setupCostLabel: costData.setupCostLabel,
+          chapterPipelineNote: costData.note,
+        },
+        `AI ước tính truyện này phù hợp với **${targetChapters} chương**. Đây là chi phí token dự kiến:`,
+      );
+      store.setCurrentTopicIndex(currentTopicIndex + 1);
+      finishWorkflowStep('discuss', `AI đã ước tính ${targetChapters} chương. Chờ xác nhận của người viết.`);
+      return;
+    }
 
     // Move to next topic
     const nextIndex = currentTopicIndex + 1;
@@ -508,6 +561,32 @@ export async function handleSmartSkip(): Promise<void> {
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Lỗi khi tạo bản review cốt truyện';
     store.failWorkflowStep('review_plot', 'Không thể tạo bản review cốt truyện tự động.', message);
+    store.setError(message);
+  } finally {
+    store.setAiWorking(false);
+  }
+}
+
+/**
+ * User xác nhận ngân sách token sau khi xem cost preview.
+ * Trigger ngay vào phase review_plot (tạo plot preview).
+ */
+export async function handleConfirmCostAndProceed(): Promise<void> {
+  const store = getStore();
+  // [Domain:CreationChat] Guard: chỉ cho phép confirm khi đang ở discuss phase
+  if (store.phase !== 'discuss') return;
+
+  store.addUserText('✅ Xác nhận — Bắt đầu tạo cốt truyện');
+  store.addAiText('Tuyệt! Mình sẽ tóm tắt lại cốt truyện để bạn review trước khi dựng toàn bộ khung truyện...');
+  store.setAiWorking(true);
+  store.setError(null);
+  store.startWorkflowStep('review_plot', 'AI đang tạo bản review cốt truyện sau khi người viết xác nhận ngân sách.');
+
+  try {
+    await generatePlotPreview();
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Lỗi khi tạo bản review cốt truyện';
+    store.failWorkflowStep('review_plot', 'Không thể tạo bản review cốt truyện.', message);
     store.setError(message);
   } finally {
     store.setAiWorking(false);

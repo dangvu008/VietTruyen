@@ -87,7 +87,7 @@ describe('estimateCreationCost', () => {
       summarizeModel: SUMMARIZE_MODEL,
     });
 
-    expect(result.remainingDiscussTurns).toBe(5);
+    expect(result.remainingDiscussTurns).toBe(6);
     expect(result.targetChapterCount).toBe(60);
     expect(result.setupInputTokens).toBeGreaterThan(0);
     expect(result.fullStoryInputTokens).toBeGreaterThan(result.setupInputTokens);

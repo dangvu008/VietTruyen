@@ -37,6 +37,58 @@ describe('buildCreationProjectSeed', () => {
     expect(seed.chapters.map((chapter) => chapter.sequenceNumber)).toEqual([1, 2]);
   });
 
+  it('uses the confirmed chapter target instead of the generated shell count', () => {
+    const seed = buildCreationProjectSeed({
+      framework: {
+        bible: {
+          title: 'Trường Thiên',
+          genre: 'Tiên hiệp',
+          subGenre: [],
+          writingStyle: 'Chậm rãi',
+          logline: 'Một thiếu niên đi qua trăm kiếp.',
+          endgame: 'Hoàn thành đại đạo',
+          mainCharacterCount: 1,
+          supportCharacterCount: 2,
+          characterSetup: '',
+          worldSetting: '',
+          mainPlot: '',
+        },
+        characters: [],
+        world: {
+          geography: '',
+          magicSystem: '',
+          techLevel: '',
+          currency: '',
+          factions: [],
+          rules: '',
+        },
+        outline: [
+          { title: 'Mở màn', summary: 'Gieo mầm đại đạo', focus: 'Nam chính' },
+          { title: 'Rời núi', summary: 'Bước vào thế giới', focus: 'Nam chính' },
+        ],
+        chapterSkeleton: [
+          {
+            title: 'Chương 1',
+            summary: 'Khởi đầu',
+            keyEvents: [],
+            entityRefs: [],
+          },
+        ],
+        foreshadowings: [],
+      },
+      acceptedChapters: [],
+      targetChapterCount: 200,
+      createId: (() => {
+        let index = 0;
+        return () => `entity-${++index}`;
+      })(),
+      nowIso: '2026-04-20T12:00:00.000Z',
+    });
+
+    expect(seed.projectPatch.targetChapters).toBe(200);
+    expect(seed.chapters).toHaveLength(2);
+  });
+
   it('maps framework outline and foreshadowings into project patch', () => {
     const seed = buildCreationProjectSeed({
       framework: {

@@ -104,7 +104,8 @@ const ProjectWorkspace: React.FC<ProjectWorkspaceProps> = ({
       )}
 
       <div className="flex flex-1 flex-col min-w-0 overflow-hidden">
-        {!isReadingModeFullscreen && (
+        {/* AppHeader chỉ hiện khi không phải fullscreen tab (writer/review tự có EditorTopbar) */}
+        {!isReadingModeFullscreen && !isFullscreen && (
           <>
             <div
               className="h-px w-full shrink-0"
@@ -121,22 +122,22 @@ const ProjectWorkspace: React.FC<ProjectWorkspaceProps> = ({
                   <span className="text-[#c5b5a8]">{PROJECT_TAB_LABELS[activeTab]}</span>
                 </>
               }
-          primaryAction={
-            snapshot.recommendedTab !== activeTab ? (
-              <button
-                onClick={() => guardedNavigate(snapshot.recommendedTab)}
-                className="inline-flex items-center gap-2 rounded-full border border-[#f0c59a]/20 bg-[#f0c59a]/10 px-3 py-1.5 text-xs font-medium text-[#f0c59a] transition-colors hover:bg-[#f0c59a]/16"
-              >
-                Tiếp theo
-                <ChevronRight size={14} />
-                {PROJECT_TAB_LABELS[snapshot.recommendedTab]}
-              </button>
-            ) : undefined
-          }
-          rightActions={rightActions}
-        />
-      </>
-    )}
+              primaryAction={
+                snapshot.recommendedTab !== activeTab ? (
+                  <button
+                    onClick={() => guardedNavigate(snapshot.recommendedTab)}
+                    className="inline-flex items-center gap-2 rounded-full border border-[#f0c59a]/20 bg-[#f0c59a]/10 px-3 py-1.5 text-xs font-medium text-[#f0c59a] transition-colors hover:bg-[#f0c59a]/16"
+                  >
+                    Tiếp theo
+                    <ChevronRight size={14} />
+                    {PROJECT_TAB_LABELS[snapshot.recommendedTab]}
+                  </button>
+                ) : undefined
+              }
+              rightActions={rightActions}
+            />
+          </>
+        )}
 
         <main className="flex-1 overflow-y-auto">
           {isFullscreen ? (

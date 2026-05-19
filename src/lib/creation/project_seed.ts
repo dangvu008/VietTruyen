@@ -5,6 +5,7 @@ import type { Chapter, Foreshadowing, OutlineBeat, Project } from '../../types/s
 interface BuildCreationProjectSeedParams {
   framework: BrainstormResult | null;
   acceptedChapters: AcceptedChapter[];
+  targetChapterCount?: number;
   createId: () => string;
   nowIso?: string;
 }
@@ -119,11 +120,13 @@ function buildProjectChapters(
 export function buildCreationProjectSeed({
   framework,
   acceptedChapters,
+  targetChapterCount: confirmedTargetChapterCount,
   createId,
   nowIso = new Date().toISOString(),
 }: BuildCreationProjectSeedParams): CreationProjectSeed {
   const seededChapters = buildProjectChapters(framework, acceptedChapters, createId, nowIso);
   const targetChapterCount = Math.max(
+    confirmedTargetChapterCount || 0,
     seededChapters.length,
     framework?.chapterSkeleton?.length || 0,
     framework?.outline?.length || 0,

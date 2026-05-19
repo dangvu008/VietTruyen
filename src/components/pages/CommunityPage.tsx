@@ -19,6 +19,9 @@ import type { PublishStoryInput, SharedStory, StoryComment, StoryCommentKind } f
 import type { StoryReport, ReportCategory, ReportStatus } from '../../types/report';
 import { REPORT_CATEGORY_LABELS, REPORT_STATUS_LABELS } from '../../types/report';
 import * as reportService from '../../lib/supabase/report_service';
+import { checkContent } from '../../lib/community/content_guard';
+import { commentLimiter } from '../../lib/community/rate_limiter';
+import { isBlocked } from '../../lib/community/block_list';
 import PageHeader from '../layout/PageHeader';
 
 // ── WARM DARK PALETTE ──
@@ -337,14 +340,27 @@ const ReaderView: React.FC = () => {
   const chapter = activeStory.chapters[activeChapterIndex];
   const totalChapters = activeStory.chapters.length;
   const isWorkshop = activeStory.status === 'workshop';
-  const discussionComments = comments.filter((comment) => comment.kind === 'discussion');
-  const contributionComments = comments.filter((comment) => comment.kind !== 'discussion');
+  const visibleComments = comments.filter((comment) => !isBlocked(comment.user_id));
+  const discussionComments = visibleComments.filter((comment) => comment.kind === 'discussion');
+  const contributionComments = visibleComments.filter((comment) => comment.kind !== 'discussion');
   const canImportContributions = activeProject?.id === activeStory.project_id;
   const requiresHeadline = isWorkshop && commentKind !== 'discussion';
 
   const handleSubmitComment = async () => {
     if (!commentText.trim() || !user) return;
     if (requiresHeadline && !commentHeadline.trim()) return;
+    const notify = useNotificationStore.getState().push;
+
+    const contentCheck = checkContent(commentText);
+    if (!contentCheck.clean) {
+      notify({ type: 'warning', title: contentCheck.reason || 'Nội dung không phù hợp.' });
+      return;
+    }
+
+    if (!commentLimiter.tryAcquire()) {
+      notify({ type: 'warning', title: 'Bạn đang bình luận quá nhanh. Vui lòng chờ một chút.' });
+      return;
+    }
 
     await postComment(activeStory.id, user.id, commentText.trim(), {
       kind: isWorkshop ? commentKind : 'discussion',

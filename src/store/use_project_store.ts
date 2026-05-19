@@ -13,6 +13,7 @@ import { useStorageStore } from './use_storage_store';
 import { deriveAdaptationChapters } from '../lib/adaptation/derive_adaptation_chapters';
 import { guardChapterContent } from '../lib/chapter/chapter_content_guard';
 import { trashChapter } from '../lib/storage/trash_manager';
+import { trashProject } from '../lib/storage/project_trash_manager';
 import { summarizeDebugChapters, traceStoryDebugEvent } from '../lib/debug/story_debug_trace';
 import { ensureChapterSequenceNumbers, getNextChapterSequenceNumber } from '../lib/memory/chapter_order';
 import { normalizeCharacter, normalizeWorldRules } from '../lib/memory/memory_registry';
@@ -40,7 +41,7 @@ export interface ProjectState {
   createProject: (title?: string) => string;
   promotePreviewProject: (project: Project) => Promise<Project>;
   duplicateProject: (id: string) => void;
-  deleteProject: (id: string) => void;
+  deleteProject: (id: string) => Promise<void>;
   setActiveProject: (id: string) => void;
   updateProject: (id: string, patch: Partial<Project>) => void;
   updateWorld: (id: string, patch: Partial<WorldRules>) => void;
@@ -72,6 +73,7 @@ export interface ProjectState {
   adaptProject: (config: AdaptationConfig) => Promise<Project | undefined>;
   updateMasterOutline: (id: string, masterOutline: MasterOutline) => void;
   updateVolumeInMasterOutline: (id: string, volumeIndex: number, volume: VolumeOutline) => void;
+  _internalRestoreProject: (project: Project) => void;
 }
 
 const now = () => new Date().toISOString();
@@ -1290,7 +1292,15 @@ export const useProjectStore = create<ProjectState>()(
           })();
         },
 
-        deleteProject: (id) => {
+        deleteProject: async (id) => {
+          const projectToTrash = get().projects.find((p) => p.id === id);
+          if (projectToTrash) {
+            try {
+              trashProject(await loadProjectWithFullChapters(projectToTrash));
+            } catch {
+              try { trashProject(projectToTrash); } catch { /* non-blocking */ }
+            }
+          }
           set((state) => {
             const nextProjects = state.projects.filter((project) => project.id !== id);
             const nextActive = state.activeProjectId === id ? nextProjects[0]?.id ?? null : state.activeProjectId;
@@ -1304,6 +1314,14 @@ export const useProjectStore = create<ProjectState>()(
             void provider.deleteProject(id);
           }
           void deleteProjectData(id);
+        },
+
+        _internalRestoreProject: (project) => {
+          set((state) => ({
+            projects: [normalizeProject(project), ...state.projects.filter((p) => p.id !== project.id)],
+            activeProjectId: project.id,
+          }));
+          void get().hydrateProjectChapters(project.id);
         },
 
         setActiveProject: (id) => {

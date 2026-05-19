@@ -21,7 +21,7 @@ interface ProjectsPageProps {
   activeProject?: Project;
   onCreateProject: (title: string) => void;
   onDuplicateProject: (id: string) => void;
-  onDeleteProject: (id: string) => void;
+  onDeleteProject: (id: string) => void | Promise<void>;
   onSetActiveProject: (id: string) => void;
   onUpdateProject: (id: string, patch: Partial<Project>) => void;
   onSyncProjectToCloud: (id: string) => Promise<void>;

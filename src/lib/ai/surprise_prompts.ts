@@ -120,7 +120,14 @@ QUY TẮC:
 8. CONTENT không được là tóm tắt, dàn ý, phân tích, hay lời hứa sẽ viết.
 9. Viết bản thảo chi tiết khoảng 1.800-3.000 từ tiếng Việt nếu giới hạn token cho phép: có cảnh cụ thể, hành động, đối thoại, nội tâm, chuyển nhịp, và hook cuối chương.
 10. Phải giữ register từ vựng đúng bối cảnh trong context. Nếu context là cổ đại/cổ phong thì tránh từ hiện đại/kỹ thuật như "va chạm vật lý", "phản xạ thần kinh", "tâm lý học", "logic", "thành phố", "cao ốc", "app", "CEO" trừ khi chính context xác nhận có yếu tố xuyên không hoặc pha thời đại.
-11. Xưng hô phải nhất quán theo quan hệ, địa vị và cảm xúc của đúng cảnh đang viết. Nếu context có hồ sơ xưng hô riêng của nhân vật thì phải ưu tiên hồ sơ đó trước luật template chung. Không được trượt giữa "ta/ngươi", "thiếp/chàng", "thần/bệ hạ" sang "tôi/anh/em" nếu context là cổ đại. Lưu ý: "ta - ngươi" không chỉ dành cho kẻ thù; trong cổ phong nó còn có thể dùng khi giữ khoảng cách, thị uy, người trên nói với kẻ dưới, hoặc hai bên chưa thân. Nhưng nếu cảnh cần thân mật, cung kính, hoặc quân thần thì phải đổi sang cặp phù hợp hơn.
+11. XƯNG HÔ NHẤT QUÁN THEO CẶP (BẮT BUỘC):
+   - Xưng hô tiếng Việt luôn đi theo CẶP cố định. Các cặp phổ biến: tao↔mày, ta↔ngươi, tôi↔anh, tôi↔cô, anh↔em, thiếp↔chàng, thần↔bệ hạ, nô tỳ↔nương nương, vãn bối↔tiền bối. Khi đã chọn cặp nào cho một mối quan hệ thì PHẢI giữ nguyên cặp đó xuyên suốt cảnh. Không được trộn lẫn: ví dụ "ta" phải đi với "ngươi", không được "ta" đi với "anh"; "tôi" phải đi với "anh/cô/ông", không được "tôi" đi với "ngươi".
+   - Mỗi nhân vật chỉ dùng MỘT cặp xưng hô cho mỗi mối quan hệ trong cùng cảnh. Không được câu trước xưng "tôi" câu sau nhảy sang "ta" hay "tao". Nếu cần đổi cặp, phải có sự kiện cảm xúc rõ ràng (mất bình tĩnh, thay đổi quan hệ, tiết lộ thân phận).
+   - Nếu context có hồ sơ xưng hô riêng của nhân vật thì phải ưu tiên hồ sơ đó trước luật template chung.
+   - Không được trượt từ cặp cổ phong (ta↔ngươi, thiếp↔chàng, thần↔bệ hạ) sang cặp hiện đại (tôi↔anh, anh↔em) nếu context là cổ đại, và ngược lại.
+   - "ta↔ngươi" không chỉ dành cho kẻ thù; trong cổ phong còn dùng khi giữ khoảng cách, thị uy, hoặc chưa thân. Nhưng nếu cảnh cần thân mật hoặc quân thần thì phải đổi sang cặp phù hợp hơn.
+   - CẤM dùng cặp "tao↔mày" — xưng hô thô tục, phá giọng văn tiểu thuyết, trừ khi hồ sơ xưng hô nhân vật cho phép rõ ràng.
+   - Trong phần @@ECOT_ANALYSIS@@, PHẢI liệt kê CẶP xưng hô cố định cho từng mối quan hệ có thoại (VD: "Lý Minh→Tiểu Hồng: ta↔ngươi; Tiểu Hồng→Lý Minh: thiếp↔chàng; Lý Minh→Trưởng lão: vãn bối↔tiền bối") rồi bám theo bảng đó khi viết CONTENT.
 12. ANTI-AI STYLE (BẮT BUỘC): Cấm dùng các từ nối giáo khoa như "Tuy nhiên", "Điều quan trọng là", "Có thể nói rằng", "Tóm lại". Sử dụng câu đơn, câu phức xen kẽ để tạo nhịp điệu (sentence variance). Phải Show, Don't Tell - miêu tả biểu hiện vật lý thay vì gọi tên cảm xúc.
 13. Nếu context có các mục như "BẢN ĐỒ TÂM LÝ CẢNH", "KẾ HOẠCH CẢNH GHOSTWRITER", "RÀNG BUỘC GIỌNG VĂN" thì phải tuân thủ chúng như ràng buộc ưu tiên cao, chỉ đứng sau hard canon.
 14. Nếu context có mục "ERA, REGION, AND REGISTER LOCK" thì coi đó là luật ngôn ngữ ưu tiên cao: phải giữ đúng trục thời gian, trục văn minh-khu vực, tầng ngôn ngữ, và mode diễn giải; không được trộn thuật ngữ xuyên thời đại hay sai vùng văn hóa.
@@ -131,8 +138,8 @@ QUY TẮC:
    - Mỗi lượt thoại của nhân vật đứng trên MỘT dòng riêng, bắt đầu bằng dấu "—" (em-dash) hoặc "–" (en-dash).
    - KHÔNG gộp nhiều lượt thoại lên cùng một dòng.
    - Dấu câu (chấm, phẩy, chấm hỏi, chấm than) đặt NGAY SAU từ cuối, KHÔNG có khoảng trắng phía trước.
-   - Sau dấu chấm (.) hoặc chấm hỏi (?) kết thúc câu, nếu câu tiếp theo cùng đoạn thì xuống dòng mới.
-   - KHÔNG ngắt câu giữa chừng chỉ vì hết dòng; mỗi dòng phải là một câu hoàn chỉnh hoặc một đơn vị ý nghĩa trọn vẹn.
+   - Các câu trong cùng một đoạn viết liền nhau, KHÔNG xuống dòng giữa đoạn.
+   - Chỉ dùng dòng trống để tách đoạn văn hoặc trước/sau khối thoại.
    - KHÔNG bắt đầu câu bằng dấu phẩy hoặc dấu câu.
 
 ⚠️ CRITICAL: Output PHẢI bắt đầu bằng dòng @@ECOT_ANALYSIS@@. Viết phân tích ngắn gọn về Động lực tâm lý nhân vật, Biểu hiện cơ thể dự kiến, và Danh sách từ cấm.
@@ -144,6 +151,7 @@ OUTPUT BẮT BUỘC (copy CHÍNH XÁC structure này):
 - Tâm lý: [Phân tích ngắn gọn cảm xúc cốt lõi của nhân vật POV]
 - Biểu hiện: [Các cử chỉ vật lý, nhịp thở, ánh mắt để show cảm xúc này]
 - Từ cấm: [Liệt kê 3 từ/cụm từ sáo rỗng cần tránh]
+- Bảng xưng hô: [Liệt kê CẶP xưng hô cố định cho từng mối quan hệ có thoại. Mỗi dòng ghi: "NhânVậtA→NhânVậtB: cặp X↔Y". VD: "Lý Minh→Tiểu Hồng: ta↔ngươi; Tiểu Hồng→Lý Minh: thiếp↔chàng; Lý Minh→Trưởng lão: vãn bối↔tiền bối". Bám cặp này xuyên suốt CONTENT — không nhảy, không trộn.]
 @@LEDGER@@
 {"summary":"1 câu tóm tắt chương","beatStatus":"hit","usedCharacterNames":["TênNhânVật"],"introducedEntities":[],"foreshadowPlanted":[],"preservedAnchorIds":[]}
 @@CONTENT@@

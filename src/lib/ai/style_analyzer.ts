@@ -147,7 +147,11 @@ Trả về JSON đúng format:
 Lưu ý: "original" phải trích NGUYÊN VĂN từ nội dung, không paraphrase.
 Chỉ liệt kê lỗi thật sự quan trọng, tối đa 15 corrections.
 Nếu genre/tone gợi ý bối cảnh cổ đại hoặc cổ phong, hãy đặc biệt soi lỗi dùng từ hiện đại kiểu "va chạm vật lý", "phản xạ thần kinh", "thành phố", "cao ốc", "CEO", "app".
-Đồng thời soi kỹ lỗi xưng hô như "ta" đổi sang "tôi", "thiếp/chàng" đổi sang "anh/em", hoặc kẻ thù lại nói với nhau quá thân mật không có setup.`;
+Đồng thời soi kỹ lỗi xưng hô theo CẶP (xưng hô tiếng Việt luôn đi theo cặp: tao↔mày, ta↔ngươi, tôi↔anh, thiếp↔chàng, thần↔bệ hạ...):
+- Nhảy cặp: cùng một nhân vật câu trước dùng cặp "tôi↔anh" câu sau nhảy sang "ta↔ngươi" hoặc "tao↔mày" mà không có sự kiện cảm xúc giải thích.
+- Trộn cặp: dùng "ta" (từ cặp ta↔ngươi) nhưng gọi đối phương là "anh" (từ cặp tôi↔anh), hoặc xưng "tôi" nhưng gọi "ngươi".
+- Trượt register: cặp cổ phong (ta↔ngươi, thiếp↔chàng) đổi sang cặp hiện đại (tôi↔anh, anh↔em) trong cùng cảnh mà không có lý do.
+- Dùng cặp "tao↔mày" — thô tục, không phù hợp giọng văn tiểu thuyết trừ khi nhân vật có hồ sơ xưng hô cho phép rõ ràng.`;
 }
 
 function parseAnalysisResponse(

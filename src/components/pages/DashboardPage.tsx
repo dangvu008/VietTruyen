@@ -20,6 +20,7 @@ import { useCommunityStore } from '../../store/use_community_store';
 import { useNotificationStore } from '../../store/use_notification_store';
 import { useProjectStore } from '../../store/use_project_store';
 import { useProjectDisplayStats } from '../../hooks/use_project_display_stats';
+import { restoreProjectFromTrash } from '../../lib/storage/project_trash_manager';
 import {
   buildDashboardActivities,
   buildDashboardMetrics,
@@ -102,11 +103,29 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
   }, []);
 
   const deleteProject = useProjectStore((state) => state.deleteProject);
+  const pushNotification = useNotificationStore((state) => state.push);
 
-  const handleDelete = (projectId: string, title: string) => {
-    if (window.confirm(`Bạn có chắc chắn muốn xoá tác phẩm "${title}" không? Hành động này không thể hoàn tác.`)) {
-      deleteProject(projectId);
+  const handleDelete = async (projectId: string, title: string) => {
+    if (window.confirm(`Bạn có chắc chắn muốn xoá tác phẩm "${title}" không?`)) {
+      await deleteProject(projectId);
       setOpenMenuId(null);
+      pushNotification({
+        type: 'success',
+        title: 'Đã xóa tác phẩm',
+        message: 'Tác phẩm đã chuyển vào thùng rác (30 ngày).',
+        duration: 8000,
+        action: {
+          label: 'Hoàn tác',
+          onClick: () => {
+            const restored = restoreProjectFromTrash(projectId);
+            if (restored) {
+              const store = useProjectStore.getState();
+              store._internalRestoreProject(restored.project);
+              pushNotification({ type: 'success', title: 'Đã khôi phục tác phẩm' });
+            }
+          },
+        },
+      });
     }
   };
 

@@ -88,6 +88,7 @@ export type CreationMessageType =
   | 'framework_preview'
   | 'chapter_draft'
   | 'phase_transition'
+  | 'cost_preview'
   | 'loading';
 
 export interface CreationMessage {
@@ -116,6 +117,9 @@ export interface CreationMessage {
     content: string;
     charCount: number;
   };
+
+  /** Cost preview data — shown after chapter_scope is answered, before plot preview */
+  costPreviewData?: CreationCostPreviewData;
 }
 
 export interface CreationMessageTokenUsage {
@@ -129,6 +133,17 @@ export interface CreationMessageTokenUsage {
   callCount?: number;
 }
 
+// ─── Cost Preview (after chapter_scope answer) ──────────────
+
+export interface CreationCostPreviewData {
+  targetChapters: number;
+  totalTokensEstimate: number;
+  setupTokensEstimate: number;
+  fullStoryCostLabel: string;
+  setupCostLabel: string;
+  chapterPipelineNote: string;
+}
+
 // ─── Discussion Topic (Phase 2 config) ──────────────────────
 
 export type DiscussTopicId =
@@ -137,6 +152,7 @@ export type DiscussTopicId =
   | 'conflict'
   | 'protagonist'
   | 'tone_antagonist'
+  | 'chapter_scope'
   | 'ready_check';
 
 export interface DiscussTopic {

@@ -557,6 +557,9 @@ export async function executeFullWritePipeline(opts: PipelineOptions): Promise<F
         updatedAt: new Date().toISOString(),
       }));
 
+      const aiState = useAiStore.getState();
+      const legacyApiKey = aiState.getApiKey?.(dataModel.provider) ?? aiState.apiKeys?.[dataModel.provider] ?? '';
+
       dataResult = await executePostWritePipeline({
         projectId: project.id,
         chapter: draftChapter,
@@ -564,7 +567,7 @@ export async function executeFullWritePipeline(opts: PipelineOptions): Promise<F
         contentHash: buildChapterContentHash(draftChapter),
         provider: dataModel.provider,
         modelId: dataModel.modelId,
-        apiKey: '',
+        apiKey: legacyApiKey,
         model: dataModel,
       });
     } catch (error) {
@@ -575,6 +578,26 @@ export async function executeFullWritePipeline(opts: PipelineOptions): Promise<F
     emitProgress(5, 'Trích xuất thực thể & phân cảnh', dataResult ? 'done' : 'failed', stepTimings['data_agent']);
   } else {
     emitProgress(5, 'Trích xuất thực thể & phân cảnh (bỏ qua)', 'skipped');
+  }
+
+  // ── Bridge: promote ledger.foreshadowPlanted → project.foreshadowings ──
+  if (writeResult.ledger.foreshadowPlanted.length > 0) {
+    const { useProjectStore } = await import('../../store/use_project_store');
+    const nowIso = new Date().toISOString();
+    for (const desc of writeResult.ledger.foreshadowPlanted) {
+      if (!desc.trim()) continue;
+      const already = project.foreshadowings.some(
+        (f) => f.description.toLowerCase() === desc.toLowerCase(),
+      );
+      if (!already) {
+        useProjectStore.getState().addForeshadowing(project.id, {
+          id: createId(),
+          description: desc,
+          isResolved: false,
+          createdAt: nowIso,
+        });
+      }
+    }
   }
 
   // ── STEP 6: Memory Sync ───────────────────────────

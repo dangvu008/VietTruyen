@@ -46,8 +46,12 @@ const GlobalShell: React.FC<GlobalShellProps> = ({
     'community': 'Cộng đồng',
     'ai-settings': 'Cài đặt AI & Runtime',
     'templates': 'Template Truyện',
+    'creation-chat': 'Xưởng AI',
   };
   const title = TAB_LABELS[activeTab] || 'VietTruyen';
+
+  // Tabs tự quản lý layout toàn màn hình (có header riêng, không cần GlobalShell AppHeader + padding)
+  const isFullscreenTab = activeTab === 'creation-chat';
   return (
     <div
       className="flex h-screen w-screen overflow-hidden antialiased"
@@ -80,16 +84,28 @@ const GlobalShell: React.FC<GlobalShellProps> = ({
           }}
         />
 
-        <AppHeader 
-          breadcrumbs={<span className="text-[13px] font-medium text-text-primary uppercase tracking-wider">{title}</span>}
-          rightActions={rightActions}
-        />
+        {/* AppHeader: ẩn cho fullscreen tab (tự có header riêng) */}
+        {!isFullscreenTab && (
+          <AppHeader 
+            breadcrumbs={<span className="text-[13px] font-medium text-text-primary uppercase tracking-wider">{title}</span>}
+            rightActions={rightActions}
+          />
+        )}
 
         {/* Page content */}
-        <main className="flex-1 overflow-y-auto">
-          <div className="mx-auto w-full max-w-[1600px] px-6 py-8 lg:px-10">
-            {children}
-          </div>
+        <main className="flex-1 overflow-hidden">
+          {isFullscreenTab ? (
+            // Fullscreen tab: không có padding, child tự chiếm toàn bộ height
+            <div className="h-full w-full">
+              {children}
+            </div>
+          ) : (
+            <div className="overflow-y-auto h-full">
+              <div className="mx-auto w-full max-w-[1600px] px-6 py-8 lg:px-10">
+                {children}
+              </div>
+            </div>
+          )}
         </main>
       </div>
     </div>

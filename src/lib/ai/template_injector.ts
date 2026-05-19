@@ -97,13 +97,13 @@ function inferLanguageRegisterProfile(
       preferredTerms: ['đô thị', 'khu', 'trạm', 'cảng', 'quỹ đạo', 'mô-đun', 'giao thức'],
       avoidTerms: ['phủ', 'trấn', 'châu', 'điện hạ', 'nương tử', 'chiếu chỉ'],
       preferredPronouns: ['tôi', 'anh', 'cô', 'ông', 'bà', 'cậu'],
-      forbiddenPronouns: ['trẫm', 'bổn cung', 'thiếp', 'chàng', 'ngươi'],
+      forbiddenPronouns: ['trẫm', 'bổn cung', 'thiếp', 'chàng', 'ngươi', 'tao', 'mày'],
       dialogueRules: [
         {
           context: 'đối thoại đời thường hoặc công sở',
           preferredPairs: ['tôi - anh', 'tôi - cô', 'anh - tôi'],
           forbiddenPairs: ['ta - ngươi', 'thiếp - chàng'],
-          note: 'Giữ xưng hô hiện đại, tự nhiên theo tuổi và vị thế.',
+          note: 'Giữ xưng hô hiện đại theo cặp cố định (tôi↔anh, tôi↔cô, anh↔em). Không trộn cặp trong cùng cảnh.',
         },
       ],
       hanVietGuidance: 'Ưu tiên từ hiện đại, kỹ thuật rõ nghĩa; chỉ dùng Hán Việt khi là danh xưng riêng hoặc thuật ngữ đã thiết lập.',
@@ -119,13 +119,13 @@ function inferLanguageRegisterProfile(
       preferredTerms: ['thành', 'phố', 'ga tàu', 'công quán', 'nhà in', 'nhà hát', 'khu chợ'],
       avoidTerms: ['app', 'startup', 'CEO', 'cao ốc kính', 'livestream', 'raid boss'],
       preferredPronouns: ['tôi', 'anh', 'cô', 'cậu', 'ông', 'bà'],
-      forbiddenPronouns: ['bổn cung', 'trẫm', 'thiếp'],
+      forbiddenPronouns: ['bổn cung', 'trẫm', 'thiếp', 'tao', 'mày'],
       dialogueRules: [
         {
           context: 'đối thoại xã giao cận đại',
           preferredPairs: ['tôi - anh', 'tôi - cô', 'ông - tôi'],
           forbiddenPairs: ['ta - ngươi'],
-          note: 'Không kéo xưng hô phong kiến thuần cổ vào bối cảnh niên đại.',
+          note: 'Giữ cặp xưng hô cận đại (tôi↔anh, tôi↔cô, ông↔tôi) xuyên suốt. Không kéo cặp phong kiến (ta↔ngươi, thiếp↔chàng) vào bối cảnh niên đại.',
         },
       ],
       hanVietGuidance: 'Dùng Hán Việt mức vừa phải, thiên về giọng văn cận đại; tránh cả khẩu ngữ Gen Z lẫn cổ phong quá đà.',
@@ -141,13 +141,13 @@ function inferLanguageRegisterProfile(
       preferredTerms: ['thành phố', 'khu phố', 'cao ốc', 'văn phòng', 'trường học', 'điện thoại', 'mạng xã hội'],
       avoidTerms: ['kinh thành', 'phủ đệ', 'trấn', 'châu', 'điện hạ', 'nương nương'],
       preferredPronouns: ['tôi', 'anh', 'em', 'cậu', 'bạn', 'chị'],
-      forbiddenPronouns: ['trẫm', 'bổn cung', 'ta - ngươi kiểu cổ phong'],
+      forbiddenPronouns: ['trẫm', 'bổn cung', 'ta - ngươi kiểu cổ phong', 'tao', 'mày'],
       dialogueRules: [
         {
           context: 'đối thoại thân mật hoặc tình cảm hiện đại',
           preferredPairs: ['anh - em', 'em - anh', 'tôi - anh'],
           forbiddenPairs: ['thiếp - chàng', 'ta - ngươi'],
-          note: 'Cặp xưng hô phải phù hợp tuổi tác, mức thân mật và quyền lực.',
+          note: 'Giữ cặp xưng hô hiện đại (anh↔em, tôi↔anh) cố định theo quan hệ. Không trộn cặp cổ phong vào trừ khi có yếu tố xuyên không.',
         },
       ],
       hanVietGuidance: 'Ưu tiên tiếng Việt tự nhiên, Hán Việt chỉ nên xuất hiện ở tên riêng, thuật ngữ chuyên môn, hoặc sắc thái trang trọng thật sự cần thiết.',
@@ -163,7 +163,7 @@ function inferLanguageRegisterProfile(
       preferredTerms: ['thành', 'trấn', 'châu', 'phủ', 'sơn môn', 'động phủ', 'giang hồ', 'đạo hữu'],
       avoidTerms: ['thành phố', 'chung cư', 'app', 'CEO', 'quán bar', 'taxi'],
       preferredPronouns: ['ta', 'ngươi', 'bổn tọa', 'đạo hữu', 'lão phu', 'vãn bối'],
-      forbiddenPronouns: ['tôi', 'anh', 'em', 'bạn'],
+      forbiddenPronouns: ['tôi', 'anh', 'em', 'bạn', 'tao', 'mày'],
       dialogueRules: [
         {
           context: 'giữ khoảng cách, thị uy, hoặc đối đầu',
@@ -191,7 +191,7 @@ function inferLanguageRegisterProfile(
       preferredTerms: ['kinh thành', 'thành', 'phủ', 'trấn', 'châu', 'huyện', 'nội viện', 'điện', 'các'],
       avoidTerms: ['thành phố', 'căn hộ', 'cao ốc', 'CEO', 'livestream', 'app', 'quận trung tâm'],
       preferredPronouns: ['ta', 'ngươi', 'thiếp', 'chàng', 'thần', 'bệ hạ', 'điện hạ', 'nô tỳ'],
-      forbiddenPronouns: ['tôi', 'anh', 'em', 'bạn'],
+      forbiddenPronouns: ['tôi', 'anh', 'em', 'bạn', 'tao', 'mày'],
       dialogueRules: [
         {
           context: 'giữ khoảng cách, thị uy, hoặc đối đầu',
@@ -224,13 +224,13 @@ function inferLanguageRegisterProfile(
     preferredTerms: ['địa danh', 'xưng hô', 'đồ vật', 'thiết chế xã hội'],
     avoidTerms: ['từ lạc register với world-building đã thiết lập'],
     preferredPronouns: ['xưng hô bám theo quan hệ và bối cảnh'],
-    forbiddenPronouns: ['xưng hô phá world-building'],
+    forbiddenPronouns: ['xưng hô phá world-building', 'tao', 'mày'],
     dialogueRules: [
       {
         context: 'mọi cảnh hội thoại',
         preferredPairs: ['giữ một cặp xưng hô nhất quán theo quan hệ hiện tại'],
         forbiddenPairs: ['nhảy ngôi đột ngột trong cùng lượt thoại'],
-        note: 'Theo dõi speaker/listener và cảm xúc cảnh để tránh trượt xưng hô.',
+        note: 'Xưng hô đi theo CẶP cố định (tao↔mày, ta↔ngươi, tôi↔anh, thiếp↔chàng...). Khi đã chọn cặp nào thì giữ nguyên xuyên suốt cảnh, không trộn lẫn giữa các cặp. Chỉ đổi cặp khi có sự kiện cảm xúc rõ ràng.',
       },
     ],
     hanVietGuidance: 'Mật độ Hán Việt nên bám theo world-building và tone thay vì chèn ngẫu nhiên.',

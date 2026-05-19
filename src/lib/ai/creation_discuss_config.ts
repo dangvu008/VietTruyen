@@ -146,6 +146,28 @@ export const DISCUSS_TOPICS: DiscussTopic[] = [
     aiDecideLabel: '🤖 AI tự quyết định cả 2',
     required: false,
   },
+
+  // ❺ Quy mô truyện — Bao nhiêu chương?
+  {
+    id: 'chapter_scope',
+    questionTemplate:
+      'Bạn muốn truyện kéo dài khoảng bao nhiêu chương?',
+    suggestionGroups: [
+      {
+        groupLabel: 'Chọn quy mô mục tiêu:',
+        chips: [
+          chip('📖', 'Truyện ngắn ~20 chương', '20'),
+          chip('📚', 'Truyện vừa ~50 chương', '50'),
+          chip('📕', 'Truyện dài ~100 chương', '100'),
+          chip('📗', 'Truyện rất dài ~200 chương', '200'),
+          chip('📙', 'Thiên truyện ~500 chương', '500'),
+          chip('🏆', 'Không giới hạn (AI tự ước lượng)', '60'),
+        ],
+      },
+    ],
+    aiDecideLabel: '🤖 AI ước tính dựa trên ý tưởng',
+    required: false,
+  },
 ];
 
 const STORY_ENGINE_TOPIC: DiscussTopic = {
