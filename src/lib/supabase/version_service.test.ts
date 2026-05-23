@@ -159,30 +159,42 @@ describe('selectVersionsToKeep', () => {
   });
 
   it('keeps 1 per month beyond the 30-day window', () => {
+    // Use a fixed reference date so month boundaries don't shift on test run date.
+    // Build versions with explicit ISO timestamps instead of "daysAgo" helper.
+    const now = new Date('2026-05-23T12:00:00.000Z');
+    const msPerDay = 24 * 60 * 60 * 1000;
+
+    const makeFixed = (id: string, vn: number, daysAgo: number) => ({
+      id,
+      version_number: vn,
+      created_at: new Date(now.getTime() - daysAgo * msPerDay).toISOString(),
+    });
+
     const versions = [
-      makeVersion('recent', 20, 0),
-      makeVersion('r2', 19, 1),
-      makeVersion('r3', 18, 2),
-      makeVersion('r4', 17, 3),
-      makeVersion('r5', 16, 4),
-      // Beyond 30 days — two versions in same month (use large gap to guarantee same month)
-      makeVersion('old-a', 5, 35),
-      makeVersion('old-b', 4, 37),
-      // A clearly different month
-      makeVersion('older-a', 3, 140),
-      makeVersion('older-b', 2, 145),
-      makeVersion('v1', 1, 365),
+      makeFixed('recent', 20, 0),
+      makeFixed('r2', 19, 1),
+      makeFixed('r3', 18, 2),
+      makeFixed('r4', 17, 3),
+      makeFixed('r5', 16, 4),
+      // Beyond 30 days — two versions in April 2026 (same month)
+      makeFixed('old-a', 5, 35),  // 2026-04-18
+      makeFixed('old-b', 4, 37),  // 2026-04-16 — same month as old-a
+      // A clearly different month: both in January 2026
+      makeFixed('older-a', 3, 132), // 2026-01-11
+      makeFixed('older-b', 2, 135), // 2026-01-08 — same month as older-a
+      makeFixed('v1', 1, 365),
     ];
     const keep = selectVersionsToKeep(versions);
 
     // Latest 5: recent, r2, r3, r4, r5
     // Version 1: v1
-    // Monthly: old-a (higher version), older-a (higher version)
+    // Monthly: old-a (higher version in April), older-a (higher version in January)
     expect(keep.has('old-a')).toBe(true);
     expect(keep.has('old-b')).toBe(false);
     expect(keep.has('older-a')).toBe(true);
     expect(keep.has('older-b')).toBe(false);
   });
+
 
   it('handles aggressive editing scenario: 50 versions in 1 day', () => {
     const versions = Array.from({ length: 50 }, (_, i) =>

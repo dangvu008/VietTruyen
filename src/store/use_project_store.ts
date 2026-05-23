@@ -2653,12 +2653,22 @@ export const useProjectStore = create<ProjectState>()(
               }
             }
 
-            // [Step 2.2] Đánh dấu hoàn thành migration — flush sync để tránh mất nếu reload
-            useProjectStore.setState({ storageSchemaVersion: 2 });
+            // [Step 2.2] Đánh dấu hoàn thành migration — defer sang microtask vì
+            // useProjectStore chưa được assign tại thời điểm onRehydrateStorage chạy
+            // (Zustand rehydrate xảy ra trong module init — TDZ). queueMicrotask đảm bảo
+            // store đã available trước khi setState được gọi.
+            queueMicrotask(() => {
+              try {
+                useProjectStore.setState({ storageSchemaVersion: 2 });
+              } catch (setErr) {
+                console.warn('[Migration v1→v2] setState failed:', setErr);
+              }
+            });
             try {
               const { flushAllDebouncedStorages } = await import('../lib/storage/debounced_local_storage');
               flushAllDebouncedStorages();
             } catch { /* non-blocking */ }
+
 
             traceStoryDebugEvent({
               domain: 'storage',
