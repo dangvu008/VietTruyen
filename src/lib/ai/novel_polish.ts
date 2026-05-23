@@ -6,6 +6,7 @@
  */
 import type { Chapter } from '../../types/story';
 import { estimateTokens } from './token_estimator';
+import { VIET_WRITER_ANTI_AI_DEEP, VIET_WRITER_REVIEW_RULES } from './viet_writer_rules';
 
 export type NovelPolishModeId =
   | 'comprehensive'
@@ -129,6 +130,9 @@ const DEEP_PASS_INSTRUCTIONS: Record<
   string
 > = {
   anti_ai_tic: [
+    VIET_WRITER_ANTI_AI_DEEP,
+    '---',
+    'QUY TRÌNH PHÁT HIỆN VÀ SỬA (áp sau khi đã nắm tiêu chuẩn trên):',
     'MỤC TIÊU: phá các dấu vân tay cấu trúc lặp đặc trưng của văn AI, chỉ động vào câu vi phạm.',
     'BƯỚC 1 - QUÉT: liệt kê nội bộ (không in ra) mọi pattern sau và đếm số lần xuất hiện:',
     '  (a) Cấu trúc tam đoạn phủ định "không X, không Y, không (cả) Z".',
@@ -332,6 +336,8 @@ export function buildNovelPolishInstruction(input: NovelPolishInstructionInput):
     ...(chunkHeader ? [chunkHeader] : []),
     outputRule,
     'Không thêm giải thích ngoài phần đầu ra cần thiết.',
+    '',
+    VIET_WRITER_REVIEW_RULES,
     '',
     'Văn bản thô:',
     '"""',

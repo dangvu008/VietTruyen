@@ -1,6 +1,7 @@
 import type { AnchorSet, ExpectationProfile, SurpriseBranch, TensionLevel } from '../../types/surprise';
 import type { OutlineBeat, Project } from '../../types/story';
 import { buildChapterCharacterGuardrails } from './character_cast_guardrails';
+import { VIET_WRITER_PROSE_RULES } from './viet_writer_rules';
 
 function formatAnchors(anchors: AnchorSet): string {
   return anchors.all
@@ -141,6 +142,8 @@ QUY TẮC:
    - Các câu trong cùng một đoạn viết liền nhau, KHÔNG xuống dòng giữa đoạn.
    - Chỉ dùng dòng trống để tách đoạn văn hoặc trước/sau khối thoại.
    - KHÔNG bắt đầu câu bằng dấu phẩy hoặc dấu câu.
+
+${VIET_WRITER_PROSE_RULES}
 
 ⚠️ CRITICAL: Output PHẢI bắt đầu bằng dòng @@ECOT_ANALYSIS@@. Viết phân tích ngắn gọn về Động lực tâm lý nhân vật, Biểu hiện cơ thể dự kiến, và Danh sách từ cấm.
 Tiếp theo là @@LEDGER@@ (JSON hợp lệ).
