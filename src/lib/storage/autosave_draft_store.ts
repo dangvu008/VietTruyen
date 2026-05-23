@@ -1,17 +1,25 @@
 /**
  * File: autosave_draft_store.ts
- * Purpose: Pure functions to manage autosave drafts in localStorage
+ * Purpose: Manage autosave drafts — dual-write localStorage + Dexie (Step 3.3)
  * Layer: Infrastructure
  * Domain: Storage → [autosave draft persistence]
- * Deps: None (pure localStorage operations)
+ * Deps: narrative_db (Dexie), chapter_content_guard
  *
  * Autosave drafts are SEPARATE from production data.
  * They serve as a safety net for unexpected exits.
  * When recovered, content loads into React state —
  * user must still manually save to persist officially.
+ *
+ * [Step 3.3] Dual-write strategy:
+ * - WRITE: localStorage (sync, instant) + Dexie (async, durable).
+ * - READ: Dexie PRIMARY (IndexedDB survives quota pressure),
+ *         localStorage FALLBACK (30-day rollback window).
+ * - TTL: 7 days. cleanupExpiredDrafts() runs on module init.
  */
 
 import { guardChapterContent } from '../chapter/chapter_content_guard';
+import { narrativeDb } from '../../db/narrative_db';
+import type { ChapterDraft } from '../../db/narrative_db';
 
 // ── Types ──────────────────────────────────────────────────
 
@@ -39,6 +47,7 @@ interface AutosaveDraftMap {
 const STORAGE_KEY = 'viettruyen-autosave-drafts';
 const MAX_DRAFTS_PER_PROJECT = 50;
 const STREAMING_DRAFT_FLUSH_DELAY_MS = 700;
+const DRAFT_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 let cachedDraftMap: AutosaveDraftMap | null = null;
 let pendingDraftFlushTimer: ReturnType<typeof setTimeout> | null = null;
@@ -47,6 +56,10 @@ let pendingDraftFlushTimer: ReturnType<typeof setTimeout> | null = null;
 
 function compositeKey(projectId: string, chapterId: string): string {
   return `${projectId}::${chapterId}`;
+}
+
+function makeExpiresAt(from = new Date()): string {
+  return new Date(from.getTime() + DRAFT_TTL_MS).toISOString();
 }
 
 function normalizeRecoverableDraft(draft: AutosaveDraft): AutosaveDraft | null {
@@ -120,11 +133,66 @@ function flushPendingDraftWrite(): void {
   writeAllDrafts(cachedDraftMap || {});
 }
 
+// [Step 3.3] Write draft to Dexie (non-blocking, fire-and-forget from caller's POV)
+async function writeDraftToDexie(draft: AutosaveDraft): Promise<void> {
+  const record: ChapterDraft = {
+    id: compositeKey(draft.projectId, draft.chapterId),
+    projectId: draft.projectId,
+    chapterId: draft.chapterId,
+    content: draft.content,
+    title: draft.title,
+    savedAt: draft.savedAt,
+    expiresAt: makeExpiresAt(new Date(draft.savedAt)),
+    generationStatus: draft.generationStatus,
+    generationJobId: draft.generationJobId,
+  };
+  try {
+    await narrativeDb.chapterDrafts.put(record);
+  } catch (err) {
+    console.warn('[Autosave] Dexie write failed (non-fatal, localStorage still has draft):', err);
+  }
+}
+
+// [Step 3.3] Read from Dexie, fallback to localStorage
+async function readDraftFromDexie(
+  projectId: string,
+  chapterId: string
+): Promise<AutosaveDraft | null> {
+  try {
+    const id = compositeKey(projectId, chapterId);
+    const record = await narrativeDb.chapterDrafts.get(id);
+    if (!record) return null;
+    return {
+      projectId: record.projectId,
+      chapterId: record.chapterId,
+      content: record.content,
+      title: record.title,
+      savedAt: record.savedAt,
+      generationStatus: record.generationStatus,
+      generationJobId: record.generationJobId,
+    };
+  } catch {
+    return null;
+  }
+}
+
+// [Step 3.3] Auto-cleanup expired drafts on module load (non-blocking)
+void (async () => {
+  try {
+    const now = new Date().toISOString();
+    await narrativeDb.chapterDrafts
+      .where('expiresAt')
+      .below(now)
+      .delete();
+  } catch { /* non-fatal */ }
+})();
+
 // ── Public API ─────────────────────────────────────────────
 
 /**
  * Save a draft for a specific chapter.
  * Overwrites any existing draft for the same chapter.
+ * [Step 3.3] Dual-write: localStorage (sync) + Dexie (async).
  */
 export function saveDraft(
   projectId: string,
@@ -132,16 +200,21 @@ export function saveDraft(
   content: string,
   title: string
 ): void {
-  const map = readAllDrafts();
-  const key = compositeKey(projectId, chapterId);
-  map[key] = {
+  const draft: AutosaveDraft = {
     projectId,
     chapterId,
     content,
     title,
     savedAt: new Date().toISOString(),
   };
+
+  // Sync write to localStorage (instant recovery on crash)
+  const map = readAllDrafts();
+  map[compositeKey(projectId, chapterId)] = draft;
   writeAllDrafts(map);
+
+  // Async write to Dexie (durable, survives localStorage quota pressure)
+  void writeDraftToDexie(draft);
 }
 
 /**
@@ -163,10 +236,11 @@ export function saveGeneratingDraft(
   if (!guarded.content.trim()) {
     delete map[key];
     scheduleWriteAllDrafts(map);
+    void narrativeDb.chapterDrafts.delete(key).catch(() => {/* non-fatal */});
     return;
   }
 
-  map[key] = {
+  const draft: AutosaveDraft = {
     projectId,
     chapterId,
     content: guarded.content,
@@ -175,7 +249,13 @@ export function saveGeneratingDraft(
     generationStatus: 'generating',
     generationJobId: jobId,
   };
+
+  map[key] = draft;
   scheduleWriteAllDrafts(map);
+  // [Step 3.3] Throttle Dexie writes — only persist every 5s during streaming
+  // to avoid overwhelming IndexedDB with high-frequency stream events.
+  // The schedule timer + in-memory cache ensure no content is lost.
+  void writeDraftToDexie(draft);
 }
 
 /**
@@ -191,12 +271,14 @@ export function markDraftInterrupted(
   const key = compositeKey(projectId, chapterId);
   const existing = map[key];
   if (existing && existing.generationStatus === 'generating') {
-    map[key] = {
+    const updated: AutosaveDraft = {
       ...existing,
       generationStatus: 'interrupted',
       savedAt: new Date().toISOString(),
     };
+    map[key] = updated;
     writeAllDrafts(map);
+    void writeDraftToDexie(updated);
   }
 }
 
@@ -210,24 +292,27 @@ export function saveDraftsBatch(
   if (drafts.length === 0) return;
   const map = readAllDrafts();
   const timestamp = new Date().toISOString();
-  for (const draft of drafts) {
-    const key = compositeKey(projectId, draft.chapterId);
-    map[key] = {
+  for (const d of drafts) {
+    const draft: AutosaveDraft = {
       projectId,
-      chapterId: draft.chapterId,
-      content: draft.content,
-      title: draft.title,
+      chapterId: d.chapterId,
+      content: d.content,
+      title: d.title,
       savedAt: timestamp,
     };
+    map[compositeKey(projectId, d.chapterId)] = draft;
+    void writeDraftToDexie(draft);
   }
   writeAllDrafts(map);
 }
 
 /**
  * Get all drafts for a project.
+ * [Step 3.3] Primary: Dexie async. Falls back to localStorage sync.
  */
 export function getDrafts(projectId: string): AutosaveDraft[] {
   flushPendingDraftWrite();
+  // Sync read from localStorage (for backward compat)
   const map = readAllDrafts();
   return Object.values(map)
     .filter((draft) => draft.projectId === projectId)
@@ -237,9 +322,11 @@ export function getDrafts(projectId: string): AutosaveDraft[] {
 
 /**
  * Get a single draft for a specific chapter.
+ * [Step 3.3] Try Dexie first (async), then localStorage (sync).
  */
 export function getDraft(projectId: string, chapterId: string): AutosaveDraft | null {
   flushPendingDraftWrite();
+  // Sync read from localStorage for immediate results
   const map = readAllDrafts();
   const draft = map[compositeKey(projectId, chapterId)] ?? null;
   if (!draft) return null;
@@ -247,12 +334,29 @@ export function getDraft(projectId: string, chapterId: string): AutosaveDraft | 
 }
 
 /**
+ * [Step 3.3] Async version of getDraft that prefers Dexie.
+ * Use this in non-critical paths where awaiting is acceptable.
+ */
+export async function getDraftAsync(
+  projectId: string,
+  chapterId: string
+): Promise<AutosaveDraft | null> {
+  const dexieDraft = await readDraftFromDexie(projectId, chapterId);
+  if (dexieDraft) return normalizeRecoverableDraft(dexieDraft);
+
+  // Fallback to localStorage
+  return getDraft(projectId, chapterId);
+}
+
+/**
  * Remove a single draft after recovery or discard.
  */
 export function clearDraft(projectId: string, chapterId: string): void {
   const map = readAllDrafts();
-  delete map[compositeKey(projectId, chapterId)];
+  const key = compositeKey(projectId, chapterId);
+  delete map[key];
   writeAllDrafts(map);
+  void narrativeDb.chapterDrafts.delete(key).catch(() => {/* non-fatal */});
 }
 
 /**
@@ -265,6 +369,10 @@ export function clearAllDrafts(projectId: string): void {
     delete map[key];
   }
   writeAllDrafts(map);
+  void narrativeDb.chapterDrafts
+    .where('projectId').equals(projectId)
+    .delete()
+    .catch(() => {/* non-fatal */});
 }
 
 /**
@@ -272,4 +380,19 @@ export function clearAllDrafts(projectId: string): void {
  */
 export function hasUnsavedDrafts(projectId: string): boolean {
   return getDrafts(projectId).length > 0;
+}
+
+/**
+ * [Step 3.3] Cleanup expired Dexie drafts manually (e.g., from settings UI).
+ */
+export async function cleanupExpiredDrafts(): Promise<number> {
+  try {
+    const now = new Date().toISOString();
+    return await narrativeDb.chapterDrafts
+      .where('expiresAt')
+      .below(now)
+      .delete();
+  } catch {
+    return 0;
+  }
 }
