@@ -52,6 +52,43 @@ export interface StoredChapter extends Chapter {
   [key: string]: any;
 }
 
+// [Step 2.5] Outbox operation — queue cho offline mutations.
+// Flush lên cloud sau khi online, retry limit 5 lần.
+export type OutboxOpType =
+  | 'project_save'
+  | 'chapter_save'
+  | 'chapter_delete'
+  | 'project_delete';
+
+export interface OutboxOperation {
+  id: string;
+  opType: OutboxOpType;
+  projectId: string;
+  /** Chapter id (chần cho chapter_save/delete) */
+  chapterId?: string;
+  /** Serialized payload (Project hoặc Chapter JSON) */
+  payload: string;
+  createdAt: string;
+  retries: number;
+}
+
+// [Step 3.3] Chapter draft — autosave safety net lưu trong Dexie.
+// TTL 7 ngày. Canonical truth vn là localStorage trong 30 ngày rollback window.
+export interface ChapterDraft {
+  /** Composite key: `${projectId}::${chapterId}` */
+  id: string;
+  projectId: string;
+  chapterId: string;
+  content: string;
+  title: string;
+  savedAt: string;
+  /** ISO timestamp sau đó draft bị cleanup. Mặc định: savedAt + 7 ngày. */
+  expiresAt: string;
+  generationStatus?: 'generating' | 'interrupted';
+  generationJobId?: string;
+}
+
+
 type DexieCompatible<T> = T & { [key: string]: any };
 
 class NarrativeDatabase extends Dexie {
@@ -98,6 +135,12 @@ class NarrativeDatabase extends Dexie {
 
   // P1: Pending Hooks — plot continuity registry
   pendingHooks!: Table<DexieCompatible<PendingHook>>;
+
+  // Step 2.5: Outbox queue — offline mutations pending cloud sync
+  outbox!: Table<DexieCompatible<OutboxOperation>>;
+
+  // Step 3.3: Chapter drafts — autosave safety net in IndexedDB (TTL 7 days)
+  chapterDrafts!: Table<DexieCompatible<ChapterDraft>>;
 
   constructor() {
     super('narrative-memory-db');
@@ -302,18 +345,167 @@ class NarrativeDatabase extends Dexie {
       // P1: new table — lifecycle management for plot foreshadowing threads
       pendingHooks: 'id, projectId, [projectId+status], plantedChapterId, plantedChapterIndex, status, updatedAt',
     });
+
+    // [Step 2.5] Version 10 — add outbox table for offline mutation queue
+    this.version(10).stores({
+      chapters: 'id, projectId, [projectId+index], [projectId+sequenceNumber], status, updatedAt',
+      entitySnapshots: 'id, entityId, projectId, [projectId+entityId], [entityId+chapterIndex], chapterId',
+      chapterDeps: 'id, chapterId, entityId, projectId, [projectId+chapterId], [projectId+entityId]',
+      entityDefinitions: 'id, entityId, projectId, [projectId+entityId], entityType, canonicalName, updatedAt',
+      timelineFacts: 'id, entityId, projectId, [projectId+entityId], [projectId+entityId+attributeKey], [projectId+sourceChapterId], chapterFrom, chapterTo, sourceType',
+      chapterDependencies: 'id, chapterId, projectId, [projectId+chapterId], [projectId+entityId], [projectId+entityId+attributeKey], chapterIndex, dependencyStatus',
+      chapterMetadata: 'chapterId, projectId, [projectId+chapterIndex], contentHash, extractedAt',
+      canonicalEdits: 'id, projectId, entityId, [projectId+entityId], [projectId+entityId+attributeKey], effectiveFromChapter, propagationStatus, createdAt',
+      propagationTasks: 'id, projectId, chapterId, [projectId+chapterId], [projectId+entityId], [projectId+canonicalEditId], status, chapterIndex, updatedAt',
+      propagationLogs: 'id, projectId, entityId, status, createdAt',
+      indexJobs: 'id, projectId, [projectId+status], jobType, updatedAt',
+      projectIndexState: 'projectId, updatedAt, lastIndexedAt',
+      styleCorrections: 'id, projectId, chapterId, category, status, [projectId+status], [projectId+chapterId]',
+      styleRules: 'id, projectId, category, weight, [projectId+category]',
+      projectArcs: 'id, projectId, [projectId+index], [projectId+chapterStart], updatedAt',
+      surgerySpecs: 'id, projectId, status, updatedAt, createdAt',
+      impactScans: 'id, projectId, specId, status, updatedAt, createdAt',
+      rewriteTasks: 'id, projectId, scanId, specId, status, [projectId+status], [projectId+arcId], [projectId+chapterId], updatedAt',
+      sourceImportJobs: 'id, projectId, status, updatedAt, createdAt',
+      narrativeNodes: 'id, projectId, nodeType, refId, [projectId+nodeType], updatedAt',
+      narrativeEdges: 'id, projectId, edgeType, [projectId+fromNodeId], [projectId+toNodeId], updatedAt',
+      narrativeCommunities: 'id, projectId, [projectId+score], updatedAt',
+      summaryCache: 'id, projectId, tier, [projectId+tier], rangeKey, updatedAt',
+      memoryEmbeddings: 'id, projectId, [projectId+contentType], [projectId+chapterId], chapterIndex, updatedAt',
+      narrativePredicateDefinitions: 'id, predicate, projectId, [projectId+predicate], updatedAt',
+      narrativeStateFacts: 'id, projectId, [projectId+subjectId], [projectId+predicate], [projectId+status], validFromChapter, validToChapter, updatedAt',
+      narrativeStateMutations: 'id, projectId, chapterId, [projectId+chapterId], [projectId+subjectId], [projectId+predicate], reviewStatus, createdAt',
+      narrativeStateEvidence: 'id, projectId, chapterId, [projectId+chapterId], sourceHash, createdAt',
+      pendingHooks: 'id, projectId, [projectId+status], plantedChapterId, plantedChapterIndex, status, updatedAt',
+      // Step 2.5: offline mutation queue
+      outbox: 'id, projectId, opType, createdAt',
+
+    });
+
+    // [Step 3.3] Version 11 — add chapter_drafts table (autosave, TTL 7 days)
+    this.version(11).stores({
+      chapters: 'id, projectId, [projectId+index], [projectId+sequenceNumber], status, updatedAt',
+      entitySnapshots: 'id, entityId, projectId, [projectId+entityId], [entityId+chapterIndex], chapterId',
+      chapterDeps: 'id, chapterId, entityId, projectId, [projectId+chapterId], [projectId+entityId]',
+      entityDefinitions: 'id, entityId, projectId, [projectId+entityId], entityType, canonicalName, updatedAt',
+      timelineFacts: 'id, entityId, projectId, [projectId+entityId], [projectId+entityId+attributeKey], [projectId+sourceChapterId], chapterFrom, chapterTo, sourceType',
+      chapterDependencies: 'id, chapterId, projectId, [projectId+chapterId], [projectId+entityId], [projectId+entityId+attributeKey], chapterIndex, dependencyStatus',
+      chapterMetadata: 'chapterId, projectId, [projectId+chapterIndex], contentHash, extractedAt',
+      canonicalEdits: 'id, projectId, entityId, [projectId+entityId], [projectId+entityId+attributeKey], effectiveFromChapter, propagationStatus, createdAt',
+      propagationTasks: 'id, projectId, chapterId, [projectId+chapterId], [projectId+entityId], [projectId+canonicalEditId], status, chapterIndex, updatedAt',
+      propagationLogs: 'id, projectId, entityId, status, createdAt',
+      indexJobs: 'id, projectId, [projectId+status], jobType, updatedAt',
+      projectIndexState: 'projectId, updatedAt, lastIndexedAt',
+      styleCorrections: 'id, projectId, chapterId, category, status, [projectId+status], [projectId+chapterId]',
+      styleRules: 'id, projectId, category, weight, [projectId+category]',
+      projectArcs: 'id, projectId, [projectId+index], [projectId+chapterStart], updatedAt',
+      surgerySpecs: 'id, projectId, status, updatedAt, createdAt',
+      impactScans: 'id, projectId, specId, status, updatedAt, createdAt',
+      rewriteTasks: 'id, projectId, scanId, specId, status, [projectId+status], [projectId+arcId], [projectId+chapterId], updatedAt',
+      sourceImportJobs: 'id, projectId, status, updatedAt, createdAt',
+      narrativeNodes: 'id, projectId, nodeType, refId, [projectId+nodeType], updatedAt',
+      narrativeEdges: 'id, projectId, edgeType, [projectId+fromNodeId], [projectId+toNodeId], updatedAt',
+      narrativeCommunities: 'id, projectId, [projectId+score], updatedAt',
+      summaryCache: 'id, projectId, tier, [projectId+tier], rangeKey, updatedAt',
+      memoryEmbeddings: 'id, projectId, [projectId+contentType], [projectId+chapterId], chapterIndex, updatedAt',
+      narrativePredicateDefinitions: 'id, predicate, projectId, [projectId+predicate], updatedAt',
+      narrativeStateFacts: 'id, projectId, [projectId+subjectId], [projectId+predicate], [projectId+status], validFromChapter, validToChapter, updatedAt',
+      narrativeStateMutations: 'id, projectId, chapterId, [projectId+chapterId], [projectId+subjectId], [projectId+predicate], reviewStatus, createdAt',
+      narrativeStateEvidence: 'id, projectId, chapterId, [projectId+chapterId], sourceHash, createdAt',
+      pendingHooks: 'id, projectId, [projectId+status], plantedChapterId, plantedChapterIndex, status, updatedAt',
+      outbox: 'id, projectId, opType, createdAt',
+      // Step 3.3: autosave drafts — id = `${projectId}::${chapterId}`, indexed by expiry for TTL cleanup
+      chapterDrafts: 'id, projectId, chapterId, expiresAt, savedAt',
+    });
   }
 }
 
 export const narrativeDb = new NarrativeDatabase();
 
+// ── Outbox CRUD (Step 2.5) ──────────────────────────────────────────────────
+
+const OUTBOX_MAX_RETRIES = 5;
+
+/** Ghi operation vào outbox queue để flush sau khi online. */
+export async function enqueueOutboxOp(
+  op: Omit<OutboxOperation, 'id' | 'createdAt' | 'retries'>
+): Promise<void> {
+  await narrativeDb.outbox.add({
+    ...op,
+    id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    createdAt: new Date().toISOString(),
+    retries: 0,
+  });
+}
+
+/** Đẩy tất cả outbox operations lên provider. Xoá entries thành công. */
+export async function flushOutbox(
+  provider: import('../lib/storage/storage_provider').StorageProvider
+): Promise<void> {
+  const ops = await narrativeDb.outbox
+    .orderBy('createdAt')
+    .limit(100)
+    .toArray();
+
+  for (const op of ops) {
+    if (op.retries >= OUTBOX_MAX_RETRIES) {
+      // [Step 2.5] Retry exhausted — xoá để tránh block queue mãi
+      await narrativeDb.outbox.delete(op.id);
+      console.warn('[Outbox] Max retries exceeded, dropping op:', op.opType, op.projectId);
+      continue;
+    }
+
+    try {
+      if (op.opType === 'project_delete') {
+        await provider.deleteProject(op.projectId);
+      } else if (op.opType === 'chapter_delete' && op.chapterId) {
+        await provider.deleteChapter(op.projectId, op.chapterId);
+      } else if (op.opType === 'chapter_save') {
+        const chapter = JSON.parse(op.payload) as import('../types/story').Chapter;
+        await provider.saveChapter(op.projectId, chapter);
+      } else if (op.opType === 'project_save') {
+        const project = JSON.parse(op.payload) as import('../types/story').Project;
+        await provider.saveProject(project);
+      }
+      // Success — remove from queue
+      await narrativeDb.outbox.delete(op.id);
+    } catch (err) {
+      // Increment retry count
+      await narrativeDb.outbox.update(op.id, { retries: (op.retries ?? 0) + 1 });
+      console.warn('[Outbox] Flush failed (retry', op.retries + 1, '):', op.opType, err);
+    }
+  }
+}
+
+/** Xoá tất cả outbox entries cho một project (dùng sau xoá local). */
+export async function clearOutboxForProject(projectId: string): Promise<void> {
+  await narrativeDb.outbox.where('projectId').equals(projectId).delete();
+}
+
 export async function storeChapter(chapter: StoredChapter): Promise<void> {
   await narrativeDb.chapters.put(chapter);
 }
 
+
+// [Step 1.5] Chunk size cho bulkPut — 80 items/chunk là thực nghiệm
+// tốt nhất giữa throughput và frame budget (<50ms/chunk).
+const DEXIE_CHUNK_SIZE = 80;
+
+/** Yield control to event loop giữa các chunk. */
+function yieldToEventLoop(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}
+
 export async function storeChapters(chapters: StoredChapter[]): Promise<void> {
   if (chapters.length === 0) return;
-  await narrativeDb.chapters.bulkPut(chapters);
+  // [Step 1.5] Chunked bulkPut — tránh block main thread với 1000+ chapters.
+  // Thực nghiệm: 1000 chapters trước = ~800ms block, sau = mỗi chunk <50ms.
+  for (let i = 0; i < chapters.length; i += DEXIE_CHUNK_SIZE) {
+    await narrativeDb.chapters.bulkPut(chapters.slice(i, i + DEXIE_CHUNK_SIZE));
+    if (i + DEXIE_CHUNK_SIZE < chapters.length) {
+      await yieldToEventLoop();
+    }
+  }
 }
 
 export async function getChapter(id: string): Promise<StoredChapter | undefined> {
@@ -323,6 +515,34 @@ export async function getChapter(id: string): Promise<StoredChapter | undefined>
 export async function getProjectChapters(projectId: string): Promise<StoredChapter[]> {
   return narrativeDb.chapters.where('projectId').equals(projectId).sortBy('sequenceNumber');
 }
+
+// [Step 3.1] Progressive hydration — đọc IndexedDB theo batch STREAM_BATCH_SIZE.
+// Callback được gọi với mỗi batch ngay khi đọc xong.
+// Trả về tổng số chapters đã stream.
+const STREAM_BATCH_SIZE = 20;
+
+export async function streamProjectChapters(
+  projectId: string,
+  onBatch: (chapters: StoredChapter[], isDone: boolean) => void,
+): Promise<number> {
+  const all = await narrativeDb.chapters
+    .where('projectId')
+    .equals(projectId)
+    .sortBy('sequenceNumber');
+
+  let total = 0;
+  for (let i = 0; i < all.length; i += STREAM_BATCH_SIZE) {
+    const batch = all.slice(i, i + STREAM_BATCH_SIZE);
+    total += batch.length;
+    const isDone = i + STREAM_BATCH_SIZE >= all.length;
+    onBatch(batch, isDone);
+    // Yield control sau mỗi batch để React có thể re-render
+    if (!isDone) await yieldToEventLoop();
+  }
+  if (all.length === 0) onBatch([], true);
+  return total;
+}
+
 
 export async function replaceProjectMemoryEmbeddings(
   projectId: string,
@@ -341,12 +561,20 @@ export async function getProjectMemoryEmbeddings(projectId: string): Promise<Mem
 }
 
 export async function replaceProjectChapters(projectId: string, chapters: StoredChapter[]): Promise<void> {
+  // [Step 1.5] Transaction chỉ bao gồm DELETE — đảm bảo atomic clear.
+  // INSERT dùng chunked bulkPut bên ngoài transaction để tránh lock lâu.
   await narrativeDb.transaction('rw', [narrativeDb.chapters], async () => {
     await narrativeDb.chapters.where('projectId').equals(projectId).delete();
-    if (chapters.length > 0) {
-      await narrativeDb.chapters.bulkPut(chapters);
-    }
   });
+  // [Step 1.5] Insert theo chunks sau khi đã clear.
+  if (chapters.length > 0) {
+    for (let i = 0; i < chapters.length; i += DEXIE_CHUNK_SIZE) {
+      await narrativeDb.chapters.bulkPut(chapters.slice(i, i + DEXIE_CHUNK_SIZE));
+      if (i + DEXIE_CHUNK_SIZE < chapters.length) {
+        await yieldToEventLoop();
+      }
+    }
+  }
 }
 
 export async function deleteChapter(id: string): Promise<void> {

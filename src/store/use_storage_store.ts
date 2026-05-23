@@ -38,6 +38,14 @@ export interface StorageState {
   /** Whether migration from IndexedDB has been completed */
   migrationCompleted: boolean;
 
+  /**
+   * [Step 1.1] True khi provider.init() đã hoàn tất thành công.
+   * App.tsx dùng flag này để block render pageContent cho tới khi
+   * provider sẵn sàng, loại bỏ race condition giữa Zustand hydrate
+   * và async initProvider.
+   */
+  storageReady: boolean;
+
   /** Set storage mode and re-initialize provider */
   setMode: (mode: StorageMode) => Promise<void>;
 
@@ -60,6 +68,7 @@ export const useStorageStore = create<StorageState>()(
       isInitializing: false,
       initError: null,
       migrationCompleted: false,
+      storageReady: false,
 
       setMode: async (mode) => {
         const current = get();
@@ -97,7 +106,8 @@ export const useStorageStore = create<StorageState>()(
           await current.provider.dispose();
         }
 
-        set({ provider: null, providerUserId: null, isInitializing: false, initError: null });
+        // [Step 1.1] Reset storageReady khi provider bị clear (logout)
+        set({ provider: null, providerUserId: null, isInitializing: false, initError: null, storageReady: false });
         traceStoryDebugEvent({
           domain: 'storage',
           action: 'provider.reset',
@@ -177,7 +187,9 @@ export const useStorageStore = create<StorageState>()(
 
           // [Domain:Storage] STEP 3 — Initialize provider
           await provider.init();
-          set({ provider, providerUserId: resolvedUserId, isInitializing: false });
+          // [Step 1.1] Set storageReady=true ngay sau provider.init() thành công.
+          // PHẢI set trước syncProjectsFromProvider để App.tsx có thể unblock render.
+          set({ provider, providerUserId: resolvedUserId, isInitializing: false, storageReady: true });
           traceStoryDebugEvent({
             domain: 'storage',
             action: 'provider.init.success',
@@ -197,8 +209,19 @@ export const useStorageStore = create<StorageState>()(
           try {
             const { useProjectStore } = await import('./use_project_store');
 
+            // [Step 2.6] Flush outbox TRƯỚC syncProjectsFromProvider.
+            // Đảm bảo delete tombstones được đẩy lên cloud trước khi pull list,
+            // tránh project đã xoá revive lại.
+            try {
+              const { flushOutbox } = await import('../db/narrative_db');
+              await flushOutbox(provider);
+            } catch (flushError) {
+              console.warn('[StorageStore] Outbox flush failed (non-fatal):', flushError);
+            }
+
             await useProjectStore.getState().syncProjectsFromProvider().catch((syncError) => {
               console.warn('[StorageStore] Provider project sync failed after init:', syncError);
+
               traceStoryDebugEvent({
                 domain: 'storage',
                 action: 'provider.project_sync.failed',

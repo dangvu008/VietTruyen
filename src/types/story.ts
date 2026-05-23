@@ -234,9 +234,12 @@ export interface Project {
   authorIntent?: string;
   /** Short-term focus for the current writing batch — injected as [TRỌNG TÂM HIỆN TẠI] */
   currentFocus?: string;
+  /** [Step 2.1] Minimal chapter metadata cho localStorage (id+seq+title). Không có content. */
+  chapterIds?: Array<{ id: string; sequenceNumber?: number; title: string }>;
   createdAt: string;
   updatedAt: string;
 }
+
 
 export type AiProvider = string; // Allows dynamic providers, built-ins: 'gemini' | 'openrouter' | 'openai' | 'claude' | 'custom'
 export type WorkflowEngineType = 'api' | 'claude_plugin';

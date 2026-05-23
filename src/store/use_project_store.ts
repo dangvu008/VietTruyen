@@ -3,12 +3,17 @@ import { persist } from 'zustand/middleware';
 import { createDebouncedPersistStorage } from '../lib/storage/debounced_local_storage';
 import { createId } from '../core/id';
 import {
+  clearOutboxForProject,
   deleteChapter as deleteStoredChapter,
   deleteProjectData,
+  enqueueOutboxOp,
   getProjectChapters,
   replaceProjectChapters as replaceStoredProjectChapters,
   storeChapter,
+  streamProjectChapters,
 } from '../db/narrative_db';
+
+
 import { useStorageStore } from './use_storage_store';
 import { deriveAdaptationChapters } from '../lib/adaptation/derive_adaptation_chapters';
 import { guardChapterContent } from '../lib/chapter/chapter_content_guard';
@@ -38,6 +43,8 @@ import type {
 export interface ProjectState {
   projects: Project[];
   activeProjectId: string | null;
+  /** [Step 2.2] Schema version for migration tracking. v2 = chapters moved to IndexedDB. */
+  storageSchemaVersion: number;
   createProject: (title?: string) => string;
   promotePreviewProject: (project: Project) => Promise<Project>;
   duplicateProject: (id: string) => void;
@@ -401,15 +408,79 @@ const stripPersistedChapter = (chapter: Chapter): Chapter => ({
   summary: undefined,
 });
 
-// [Perf] Strip chapter content for localStorage persistence.
-// INTENTIONALLY skips normalizeProject — data is already normalized in memory.
-// Re-normalizing on every persist was the #1 performance killer (runs 
-// guardChapterContent + ensureChapterSequenceNumbers + normalizeCharacter 
-// for every chapter/character on every state change).
-const stripPersistedProject = (project: Project): Project => ({
-  ...project,
-  chapters: (project.chapters || []).map((chapter) => stripPersistedChapter(chapter)),
-});
+// [Step 2.1] stripPersistedProject — loại bỏ HOÀN TOÀN chapters[] khỏi localStorage.
+// Chỉ giữ chapterIds (id + sequenceNumber + title) đủ để UI render danh sách
+// trước khi IndexedDB hydrate. Chapter content ở IndexedDB và Supabase.
+//
+// Feature flag LOCALSTORAGE_INCLUDE_CHAPTERS=true để rollback trong 2 tuần đầu.
+// Sau đó xoá flag và stripPersistedChapter (không còn cần thiết).
+const INCLUDE_CHAPTERS_IN_LOCALSTORAGE =
+  typeof import.meta.env !== 'undefined' &&
+  import.meta.env.VITE_LOCALSTORAGE_INCLUDE_CHAPTERS === 'true';
+
+const stripPersistedProject = (project: Project): Project => {
+  // [Kill switch] Nếu flag bật → giữ behavior cũ (strip content, giữ structure)
+  if (INCLUDE_CHAPTERS_IN_LOCALSTORAGE) {
+    return {
+      ...project,
+      chapters: (project.chapters || []).map((chapter) => stripPersistedChapter(chapter)),
+    };
+  }
+
+  // [Step 2.1] Canonical path — loại bỏ chapters[], chỉ giữ chapterIds metadata
+  return {
+    ...project,
+    chapters: [], // IndexedDB là canonical source
+    chapterIds: (project.chapters || []).map((ch) => ({
+      id: ch.id,
+      sequenceNumber: ch.sequenceNumber,
+      title: ch.title,
+    })),
+  };
+};
+
+
+// [Step 2.4] Merge chapters c\u1ea5p chapter v\u1edbi last-write-wins theo updatedAt.
+// Local m\u1edbi h\u01a1n → gi\u1eef local (user có th\u1ec3 có edit ch\u01b0a sync).
+// Provider m\u1edbi h\u01a1n → d\u00f9ng provider.
+// C\u00f9ng updatedAt → gi\u1eef local (user agency).
+// Chapter ch\u1ec9 t\u1ed3n t\u1ea1i \u1edf m\u1ed9t b\u00ean → gi\u1eef nguy\u00ean.
+function mergeChaptersByUpdatedAt(
+  localChapters: Chapter[],
+  providerChapters: Chapter[],
+): Chapter[] {
+  if (localChapters.length === 0) return providerChapters;
+  if (providerChapters.length === 0) return localChapters;
+
+  const localById = new Map(localChapters.map((ch) => [ch.id, ch]));
+  const providerById = new Map(providerChapters.map((ch) => [ch.id, ch]));
+
+  const merged = new Map<string, Chapter>();
+
+  // Process local chapters
+  for (const local of localChapters) {
+    const provider = providerById.get(local.id);
+    if (!provider) {
+      merged.set(local.id, local);
+      continue;
+    }
+    // Both exist — last-write-wins by updatedAt
+    const localTime = local.updatedAt ?? '';
+    const providerTime = provider.updatedAt ?? '';
+    merged.set(local.id, providerTime > localTime ? provider : local);
+  }
+
+  // Add provider-only chapters
+  for (const provider of providerChapters) {
+    if (!localById.has(provider.id)) {
+      merged.set(provider.id, provider);
+    }
+  }
+
+  return Array.from(merged.values()).sort(
+    (a, b) => (a.sequenceNumber ?? 0) - (b.sequenceNumber ?? 0)
+  );
+}
 
 function mergeProviderProjects(
   localProjects: Project[],
@@ -423,30 +494,13 @@ function mergeProviderProjects(
 
   const mergedProviderProjects = providerProjects.map((providerProject) => {
     const localProject = localById.get(providerProject.id);
-    // [Domain:Storage] FIX — Use hasAnyChapterPayload instead of chapters.length.
-    // After reload, partialize strips content to '' so local chapters always have
-    // length > 0 but zero content. This caused provider chapters (with real content)
-    // to be discarded in favor of empty local shells.
-    const localHasContent = localProject?.chapters.length
-      ? localProject.chapters.some((ch) => ch.content?.trim())
-      : false;
-    const providerHasContent = providerProject.chapters?.length
-      ? providerProject.chapters.some((ch) => ch.content?.trim())
-      : false;
 
-    let mergedChapters: Chapter[];
-    if (localHasContent) {
-      // Local has real content — prefer it (user may have unsaved edits)
-      mergedChapters = localProject!.chapters;
-    } else if (providerHasContent) {
-      // Provider has content, local is stripped — use provider
-      mergedChapters = providerProject.chapters;
-    } else if (localProject?.chapters.length) {
-      // Both stripped — keep local structure (titles/metadata)
-      mergedChapters = localProject.chapters;
-    } else {
-      mergedChapters = providerProject.chapters || [];
-    }
+    // [Step 2.4] Merge c\u1ea5p chapter — lo\u1ea1i b\u1ecf heuristic localHasContent/providerHasContent.
+    // Heuristic c\u0169 sai khi c\u1ea3 2 b\u00ean \u0111\u1ec1u c\u00f3 content kh\u00e1c nhau.
+    const mergedChapters = mergeChaptersByUpdatedAt(
+      localProject?.chapters ?? [],
+      providerProject.chapters ?? [],
+    );
 
     return normalizeProject({
       ...providerProject,
@@ -464,6 +518,7 @@ function mergeProviderProjects(
     right.updatedAt.localeCompare(left.updatedAt)
   );
 }
+
 
 function hasChapterPayload(chapter: Chapter): boolean {
   return Boolean(chapter.content?.trim() || chapter.summary?.trim());
@@ -1130,15 +1185,65 @@ async function loadProjectWithFullChapters(project: Project): Promise<Project> {
   });
 }
 
-/** 
- * Đồng bộ metadata Project một chiều xuống StorageProvider. 
+/**
+ * Đồng bộ metadata Project một chiều xuống StorageProvider.
  * Gọi sau khi project được update trong trạng thái.
- *
+ */
+
+// [Step 3.2] Debounce registry — 1 timer per projectId.
+// Nhiều mutations trong 1s → chỉ 1 Supabase call.
+const _pendingSyncTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const _pendingSyncFlush = new Map<string, () => Promise<void>>();
+
+
+/** Flush all pending metadata syncs synchronously (call in beforeunload). */
+export function flushAllPendingProviderSyncs(): void {
+  for (const [projectId, flush] of _pendingSyncFlush) {
+    const timer = _pendingSyncTimers.get(projectId);
+    if (timer) clearTimeout(timer);
+    _pendingSyncTimers.delete(projectId);
+    _pendingSyncFlush.delete(projectId);
+    void flush();
+  }
+}
+
+// Auto-flush on page hide / close
+if (typeof window !== 'undefined') {
+  window.addEventListener('beforeunload', flushAllPendingProviderSyncs);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') flushAllPendingProviderSyncs();
+  });
+}
+
+const METADATA_SYNC_DEBOUNCE_MS = 1000;
+
+/**
  * [Domain:Storage] Guard: nếu snapshot chapters đều rỗng content nhưng
  * in-memory state có chapters có content → KHÔNG gọi saveProject để tránh
  * uploadProject nhận snapshot stripped và xoá trắng chapters trên Supabase.
+ *
+ * [Step 3.2] Debounced 1s + coalesce theo projectId.
+ * 22 caller sites không cần thay đổi — chỉ thêm debounce tại đây.
  */
 async function syncProjectMetadataToProvider(projectId: string) {
+  // [Step 3.2] Debounce: hủy timer cũ, đặt timer mới
+  const existing = _pendingSyncTimers.get(projectId);
+  if (existing) clearTimeout(existing);
+
+  // Capture flush fn để flushAllPendingProviderSyncs có thể gọi ngay
+  const flush = async () => {
+    _pendingSyncTimers.delete(projectId);
+    _pendingSyncFlush.delete(projectId);
+    await _doSyncProjectMetadata(projectId);
+  };
+  _pendingSyncFlush.set(projectId, flush);
+
+  const timer = setTimeout(() => { void flush(); }, METADATA_SYNC_DEBOUNCE_MS);
+  _pendingSyncTimers.set(projectId, timer);
+}
+
+/** Thực thi sync thực sự — được gọi sau debounce window. */
+async function _doSyncProjectMetadata(projectId: string) {
   const state = useProjectStore.getState();
   const project = state.projects.find((p) => p.id === projectId);
   if (!project) return;
@@ -1206,6 +1311,7 @@ async function syncProjectMetadataToProvider(projectId: string) {
     });
 }
 
+
 export const useProjectStore = create<ProjectState>()(
   persist(
     (set, get) => {
@@ -1214,6 +1320,8 @@ export const useProjectStore = create<ProjectState>()(
       return {
         projects: [initialProject],
         activeProjectId: initialProject.id,
+        // [Step 2.2] Khởi tạo version 1. sẽ được update thành 2 sau migration.
+        storageSchemaVersion: 1,
 
         createProject: (title) => {
           const project = normalizeProject(
@@ -1293,6 +1401,7 @@ export const useProjectStore = create<ProjectState>()(
         },
 
         deleteProject: async (id) => {
+          // [Step 1.2] Trash local copy đầu tiên
           const projectToTrash = get().projects.find((p) => p.id === id);
           if (projectToTrash) {
             try {
@@ -1301,6 +1410,8 @@ export const useProjectStore = create<ProjectState>()(
               try { trashProject(projectToTrash); } catch { /* non-blocking */ }
             }
           }
+
+          // [Step 1.2] Xoá khỏi local state TRƯỚC khi cloud delete
           set((state) => {
             const nextProjects = state.projects.filter((project) => project.id !== id);
             const nextActive = state.activeProjectId === id ? nextProjects[0]?.id ?? null : state.activeProjectId;
@@ -1309,12 +1420,39 @@ export const useProjectStore = create<ProjectState>()(
               activeProjectId: nextActive,
             };
           });
+
+          // [Step 1.2 + 2.5] AWAIT provider delete hoặc enqueue vào outbox nếu offline.
           const provider = useStorageStore.getState().provider;
           if (provider) {
-            void provider.deleteProject(id);
+            try {
+              await provider.deleteProject(id);
+              // Xoá outbox entries cũ của project này (nếu có từ lần offline trước)
+              void clearOutboxForProject(id);
+            } catch (providerError) {
+              console.warn(
+                '[deleteProject] Provider delete failed; enqueueing to outbox for retry:',
+                providerError instanceof Error ? providerError.message : providerError,
+              );
+              // [Step 2.5] Enqueue để retry khi provider online lại
+              void enqueueOutboxOp({
+                opType: 'project_delete',
+                projectId: id,
+                payload: '',
+              });
+            }
+          } else {
+            // [Step 2.5] Offline — enqueue tombstone intent
+            void enqueueOutboxOp({
+              opType: 'project_delete',
+              projectId: id,
+              payload: '',
+            });
           }
+
+          // [Step 1.2] Xoá IndexedDB data — fire-and-forget OK vì local-only
           void deleteProjectData(id);
         },
+
 
         _internalRestoreProject: (project) => {
           set((state) => ({
@@ -1697,18 +1835,81 @@ export const useProjectStore = create<ProjectState>()(
           const project = get().projects.find((item) => item.id === id);
           if (!project) return;
 
+          // [Step 3.1] Progressive streaming for large IndexedDB-backed projects.
+          // Threshold: ≥50 chapters (from in-memory or chapterIds metadata).
+          // Falls back to legacy path for inline/provider-only storage modes.
+          const estimatedChapterCount =
+            project.chapters.length ||
+            (project.chapterIds?.length ?? 0);
+
+          const canStream =
+            estimatedChapterCount >= 50 &&
+            (project.storageMode === 'indexeddb' ||
+              project.storageMode === 'local' ||
+              project.storageMode === 'cloud');
+
           const run = (async () => {
             traceStoryDebugEvent({
               domain: 'storage',
               action: 'project.hydrate.start',
               level: 'info',
-              summary: `Hydrating project chapters for ${id}.`,
+              summary: `Hydrating project chapters for ${id} (${canStream ? 'streaming' : 'batch'}).`,
               details: {
                 projectId: id,
                 current: summarizeDebugChapters(project.chapters),
                 storageMode: project.storageMode,
+                estimatedChapterCount,
+                mode: canStream ? 'stream' : 'batch',
               },
             });
+
+            if (canStream) {
+              // [Step 3.1] STREAMING PATH — batch 20 chapters → set state per batch
+              const currentChapters = get().projects.find((p) => p.id === id)?.chapters ?? [];
+              const currentById = new Map(currentChapters.map((c) => [c.id, c]));
+              let accumulatedChapters: import('../types/story').Chapter[] = [...currentChapters];
+
+              await streamProjectChapters(id, (batch, isDone) => {
+                const newChapters = batch.map((stored) => {
+                  const existing = currentById.get(stored.id);
+                  return {
+                    ...stored,
+                    // [Step 3.1] Prefer in-memory content if newer
+                    content: (existing?.updatedAt ?? '') > (stored.updatedAt ?? '')
+                      ? (existing?.content ?? stored.content)
+                      : stored.content,
+                  } as import('../types/story').Chapter;
+                });
+
+                // Merge batch into accumulated set
+                const batchById = new Map(newChapters.map((c) => [c.id, c]));
+                accumulatedChapters = accumulatedChapters
+                  .map((c) => batchById.has(c.id) ? batchById.get(c.id)! : c)
+                  .concat(newChapters.filter((c) => !accumulatedChapters.some((a) => a.id === c.id)))
+                  .sort((a, b) => (a.sequenceNumber ?? 0) - (b.sequenceNumber ?? 0));
+
+                set((state) => ({
+                  projects: state.projects.map((p) =>
+                    p.id === id
+                      ? { ...p, chapters: [...accumulatedChapters] }
+                      : p
+                  ),
+                }));
+
+                if (isDone) {
+                  traceStoryDebugEvent({
+                    domain: 'storage',
+                    action: 'project.hydrate.stream_complete',
+                    level: 'info',
+                    summary: `Progressive hydration complete for ${id}: ${accumulatedChapters.length} chapters.`,
+                    details: { projectId: id, total: accumulatedChapters.length },
+                  });
+                }
+              });
+              return; // Stream path done — skip legacy batch path below
+            }
+
+            // [Legacy batch path] — unchanged for small/inline/provider projects
             const fullProject = await loadProjectWithFullChapters(project);
 
             // [Domain:Storage] STEP — Determine if state needs updating
@@ -1880,21 +2081,39 @@ export const useProjectStore = create<ProjectState>()(
               return;
             }
 
-            const providerProjects = (
-              await Promise.all(
-                summaries.map(async (summary) => {
+            // [Step 2.3] Fetch chapters song song với metadata.
+            // Tr\u01b0\u1edbc: getProject() tr\u1ea3 chapters:[] → providerHasContent luôn false
+            //        → mergeProviderProjects ch\u1ecdn local (stripped) thay vì provider.
+            // Sau: fetch c\u1ea3 chapters → merge có d\u1eef li\u1ec7u th\u1ef1c.
+            // Concurrency limit 4 \u0111\u1ec3 tránh N+1 quá nhi\u1ec1u Supabase calls.
+            const CONCURRENCY = 4;
+            const providerProjects: Project[] = [];
+
+            for (let i = 0; i < summaries.length; i += CONCURRENCY) {
+              const batch = summaries.slice(i, i + CONCURRENCY);
+              const batchResults = await Promise.all(
+                batch.map(async (summary) => {
                   try {
-                    return await provider.getProject(summary.id);
+                    const [project, chapters] = await Promise.all([
+                      provider.getProject(summary.id),
+                      provider.getProjectChapters(summary.id),
+                    ]);
+                    if (!project) return null;
+                    return { ...project, chapters };
                   } catch (error) {
                     console.warn(
-                      `[syncProjectsFromProvider] Provider getProject failed for ${summary.id}:`,
+                      `[syncProjectsFromProvider] Provider fetch failed for ${summary.id}:`,
                       error instanceof Error ? error.message : error,
                     );
                     return null;
                   }
                 }),
-              )
-            ).filter((project): project is Project => Boolean(project));
+              );
+              providerProjects.push(
+                ...batchResults.filter((p): p is Project => Boolean(p))
+              );
+            }
+
 
             if (providerProjects.length === 0) {
               traceStoryDebugEvent({
@@ -2361,12 +2580,15 @@ export const useProjectStore = create<ProjectState>()(
         let cachedProjects: Project[] | null = null;
         let cachedStripped: Project[] | null = null;
         let cachedActiveId: string | null = null;
-        let cachedResult: { projects: Project[]; activeProjectId: string | null } | null = null;
+        let cachedSchemaVersion: number | null = null;
+        let cachedResult: { projects: Project[]; activeProjectId: string | null; storageSchemaVersion: number } | null = null;
+
 
         return (state: ProjectState) => {
           if (
             cachedProjects === state.projects &&
             cachedActiveId === state.activeProjectId &&
+            cachedSchemaVersion === (state.storageSchemaVersion ?? 1) &&
             cachedResult
           ) {
             return cachedResult;
@@ -2379,15 +2601,74 @@ export const useProjectStore = create<ProjectState>()(
           }
 
           cachedActiveId = state.activeProjectId;
+          cachedSchemaVersion = state.storageSchemaVersion ?? 1;
           cachedResult = {
             projects: cachedStripped!,
             activeProjectId: state.activeProjectId,
+            // [Step 2.2] Persist schema version để migration có thể detect trên reload
+            storageSchemaVersion: state.storageSchemaVersion ?? 1,
           };
           return cachedResult;
         };
+
       })(),
       onRehydrateStorage: () => (state) => {
         if (!state) return;
+
+        // [Step 2.2] Migration v1 → v2 — phát hiện và migrate chapters còn
+        // content trong localStorage TRƯỚC khi partialize strip chúng.
+        // Idempotent: chạy 2 lần không duplicate.
+        if ((state.storageSchemaVersion ?? 1) < 2) {
+          // Bảo vệ user hiện hữu: save backup trước khi migrate
+          try {
+            const raw = localStorage.getItem('viettruyen-projects');
+            if (raw) {
+              localStorage.setItem('viettruyen-projects-backup-v1', raw);
+            }
+          } catch { /* non-blocking */ }
+
+          // Chạy migration bất đồng bộ — không block rehydrate
+          void (async () => {
+            const projectsWithContent = state.projects.filter((project) =>
+              (project.chapters || []).some((ch) => ch.content?.trim())
+            );
+
+            if (projectsWithContent.length > 0) {
+              const { storeChapters: storeChaptersDb } = await import('../db/narrative_db');
+              for (const project of projectsWithContent) {
+                const chaptersToMigrate = project.chapters
+                  .filter((ch) => ch.content?.trim())
+                  .map((ch) => ({
+                    ...ch,
+                    projectId: project.id,
+                    index: Math.max(0, (ch.sequenceNumber ?? 1) - 1),
+                  }));
+                if (chaptersToMigrate.length > 0) {
+                  try {
+                    await storeChaptersDb(chaptersToMigrate);
+                  } catch (migErr) {
+                    console.warn('[Migration v1→v2] storeChapters failed for project', project.id, migErr);
+                  }
+                }
+              }
+            }
+
+            // [Step 2.2] Đánh dấu hoàn thành migration — flush sync để tránh mất nếu reload
+            useProjectStore.setState({ storageSchemaVersion: 2 });
+            try {
+              const { flushAllDebouncedStorages } = await import('../lib/storage/debounced_local_storage');
+              flushAllDebouncedStorages();
+            } catch { /* non-blocking */ }
+
+            traceStoryDebugEvent({
+              domain: 'storage',
+              action: 'migration.v1_to_v2.complete',
+              level: 'info',
+              summary: `Migration v1→v2 done. ${projectsWithContent.length} projects migrated to IndexedDB.`,
+              details: { projectCount: projectsWithContent.length },
+            });
+          })();
+        }
         // [Wave 2] Skip normalize when the project already has all canonical fields.
         // normalizeProject is idempotent but iterates every chapter/character — for
         // large projects this is the main CPU cost on rehydrate. We still normalize
@@ -2451,15 +2732,18 @@ export const useProjectStore = create<ProjectState>()(
         // Previously queueMicrotask ran hydrate immediately but provider was
         // still null → Supabase chapters couldn't be fetched → content stayed empty.
         // Now we poll for provider readiness (max 5s) before hydrating.
+        // [Step 1.1 + Step 2.2] Tần gải thành polling vì storageReady gate đã xử lý
+        // race condition trong App.tsx. Polling này chỉ là safety net bảo đảm
+        // trong trường hợp App.tsx không block được (ví dụ: SSR, test env).
         const projectId = state.activeProjectId;
         if (projectId) {
           queueMicrotask(async () => {
-            // [Domain:Storage] STEP 1 — Wait for provider (max 5 seconds)
+            // Wait for storageReady (uu tiên) hoặc poll timeout (fallback)
             const MAX_WAIT_MS = 5000;
             const POLL_INTERVAL_MS = 100;
             const start = Date.now();
             while (
-              !useStorageStore.getState().provider &&
+              !useStorageStore.getState().storageReady &&
               !useStorageStore.getState().initError &&
               Date.now() - start < MAX_WAIT_MS
             ) {
@@ -2467,58 +2751,25 @@ export const useProjectStore = create<ProjectState>()(
             }
 
             const providerReady = Boolean(useStorageStore.getState().provider);
-            console.log('[onRehydrateStorage] Hydrating project', projectId, {
-              providerReady,
-              waitedMs: Date.now() - start,
-            });
             traceStoryDebugEvent({
               domain: 'storage',
               action: 'project_store.rehydrate.auto_hydrate',
               level: 'info',
               summary: 'Auto-syncing provider projects and hydrating active project after project store rehydrate.',
-              details: {
-                projectId,
-                providerReady,
-                waitedMs: Date.now() - start,
-              },
+              details: { projectId, providerReady, waitedMs: Date.now() - start },
             });
 
-            // [Domain:Storage] STEP 2 — Pull provider project metadata before hydrating.
-            // This prevents an old/local seed project from being the only visible item
-            // in "Kho truyện" when Supabase already has the user's real projects.
             await useProjectStore.getState().syncProjectsFromProvider().catch((err) => {
               console.warn('[onRehydrateStorage] Provider project sync failed:', err);
-              traceStoryDebugEvent({
-                domain: 'storage',
-                action: 'project_store.rehydrate.provider_sync_failed',
-                level: 'warn',
-                summary: 'Provider project sync failed during project store rehydrate.',
-                details: { projectId, error: err },
-              });
             });
 
             const activeProjectId = useProjectStore.getState().activeProjectId ?? projectId;
             if (!activeProjectId) return;
 
-            // [Domain:Storage] STEP 3 — Hydrate (will use provider if available, IndexedDB fallback otherwise)
             useProjectStore.getState().hydrateProjectChapters(activeProjectId)
-              .then(() => {
-                // [Domain:Storage] STEP 4 — After hydration restores content,
-                // trigger metadata sync so project metadata (title, world,
-                // characters, etc.) also reaches Supabase. The allChaptersStripped
-                // guard is removed, so this will succeed even if some chapters
-                // are still stripped.
-                void syncProjectMetadataToProvider(activeProjectId);
-              })
+              .then(() => { void syncProjectMetadataToProvider(activeProjectId); })
               .catch((err) => {
                 console.warn('[onRehydrateStorage] Auto-hydrate failed:', err);
-                traceStoryDebugEvent({
-                  domain: 'storage',
-                  action: 'project_store.rehydrate.auto_hydrate_failed',
-                  level: 'error',
-                  summary: 'Auto-hydrate failed after project store rehydrate.',
-                  details: { projectId: activeProjectId, error: err },
-                });
               });
           });
         }

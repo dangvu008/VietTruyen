@@ -40,6 +40,15 @@ import type {
 const CHAPTER_READ_FAILURE_COOLDOWN_MS = 30_000;
 const chapterReadRetryAfter = new Map<string, number>();
 
+// [Step 1.3] withTimeout — bọc Promise với timeout rồi trả fallback.
+// Tránh UI freeze khi Supabase chậm. Fallback = empty/null để IndexedDB vẫn hoạt động.
+function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
+  const timer = new Promise<T>((resolve) => setTimeout(() => resolve(fallback), ms));
+  return Promise.race([promise, timer]);
+}
+
+const SUPABASE_READ_TIMEOUT_MS = 8_000;
+
 export class OnlineStorageProvider implements StorageProvider {
   readonly mode = 'online' as const;
 
@@ -70,6 +79,11 @@ export class OnlineStorageProvider implements StorageProvider {
   // ── Project CRUD ────────────────────────────────────────
 
   async listProjects(): Promise<ProjectSummary[]> {
+    // [Step 1.3] Wrap in 8s timeout — trả empty array thay vì hang UI
+    return withTimeout(this._listProjectsInternal(), SUPABASE_READ_TIMEOUT_MS, []);
+  }
+
+  private async _listProjectsInternal(): Promise<ProjectSummary[]> {
     // [Domain:Storage] STEP 1 — Fetch all projects
     const { data, error } = await supabase
       .from('projects')
@@ -109,6 +123,11 @@ export class OnlineStorageProvider implements StorageProvider {
   }
 
   async getProject(projectId: string): Promise<Project | null> {
+    // [Step 1.3] 8s timeout — trả null nếu Supabase chậm
+    return withTimeout(this._getProjectInternal(projectId), SUPABASE_READ_TIMEOUT_MS, null);
+  }
+
+  private async _getProjectInternal(projectId: string): Promise<Project | null> {
     // [Domain:Storage] STEP 1 — Fetch project row
     const { data: row, error } = await supabase
       .from('projects')
@@ -117,6 +136,7 @@ export class OnlineStorageProvider implements StorageProvider {
       .maybeSingle();
 
     if (error || !row) return null;
+
 
     // [Domain:Storage] STEP 2 — Fetch related entities in parallel
     const [worldRes, charsRes, beatsRes, foreshadowingsRes] = await Promise.all([
@@ -228,6 +248,11 @@ export class OnlineStorageProvider implements StorageProvider {
   // ── Chapter CRUD ────────────────────────────────────────
 
   async getProjectChapters(projectId: string): Promise<Chapter[]> {
+    // [Step 1.3] 8s timeout — trả empty array nếu Supabase chậm
+    return withTimeout(this._getProjectChaptersInternal(projectId), SUPABASE_READ_TIMEOUT_MS, []);
+  }
+
+  private async _getProjectChaptersInternal(projectId: string): Promise<Chapter[]> {
     const retryAfter = chapterReadRetryAfter.get(projectId);
     if (retryAfter && retryAfter > Date.now()) {
       console.warn(

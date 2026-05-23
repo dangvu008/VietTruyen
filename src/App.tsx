@@ -59,6 +59,18 @@ const PageLoadingFallback: React.FC<{ fullHeight?: boolean }> = ({ fullHeight = 
   </div>
 );
 
+// [Step 1.1] Skeleton hiển thị trong khi storage provider đang khởi tạo.
+// Tránh "flash of empty chapter list" do race condition giữa Zustand
+// hydrate và async initProvider.
+const StorageLoadingScreen: React.FC = () => (
+  <div className="flex items-center justify-center h-screen bg-[#120f0d]">
+    <div className="flex flex-col items-center gap-4">
+      <div className="w-10 h-10 border-[3px] border-[rgba(240,197,154,0.20)] border-t-[#f0c59a] rounded-full animate-spin" />
+      <p className="text-[#6f6259] text-sm">Đang kết nối kho lưu trữ...</p>
+    </div>
+  </div>
+);
+
 // ─── App ───
 
 const App: React.FC = () => {
@@ -197,6 +209,9 @@ const App: React.FC = () => {
   const storageMode = useStorageStore((state) => state.mode);
   const initStorageProvider = useStorageStore((state) => state.initProvider);
   const resetStorageProvider = useStorageStore((state) => state.resetProvider);
+  // [Step 1.1] Gate: block render until provider is ready or errored
+  const storageReady = useStorageStore((state) => state.storageReady);
+  const storageInitError = useStorageStore((state) => state.initError);
 
   useEffect(() => {
     if (authLoading) return;
@@ -373,6 +388,13 @@ const App: React.FC = () => {
 
   if (!isAuthenticated) {
     return <LoginPage />;
+  }
+
+  // [Step 1.1] Block render khi authenticated nhưng storage chưa sẵn sàng.
+  // Tránh flash of empty content và race condition RC-2.
+  // initError = vẫn cho qua (hiển thị app với offline mode, không block vô tận).
+  if (!storageReady && !storageInitError) {
+    return <StorageLoadingScreen />;
   }
 
   // ─── No project state ───
