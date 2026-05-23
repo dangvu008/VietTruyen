@@ -15,6 +15,8 @@ import { NINE_ROUTER_PROVIDER_ID } from '../../lib/ai/nine_router_catalog';
 import { resolveModelCostRates } from '../../lib/ai/token_estimator';
 import type { AiModel, WorkflowEngineType } from '../../types/story';
 import TokenDashboard from '../shared/TokenDashboard';
+import StorageHealthDashboard from '../shared/StorageHealthDashboard';
+
 import {
   useAppearanceStore,
   type AppearanceTheme,
@@ -382,6 +384,19 @@ const AiSettingsPage: React.FC<AiSettingsPageProps> = ({ activeTab }) => {
                 </div>
               </button>
             </div>
+          </section>
+
+          <hr style={{ borderColor: 'rgba(80,69,59,0.2)' }} />
+
+          {/* [Step 3.4] Storage Health Dashboard */}
+          <section className="space-y-4">
+            <div>
+              <h3 className="text-sm font-semibold uppercase tracking-wider" style={{ color: '#d4c4b7' }}>Sức Khỏe Bộ Nhớ</h3>
+              <p className="mt-2 text-sm" style={{ color: '#9c8e82' }}>
+                Theo dõi tình trạng đọc/ghi dữ liệu — lỗi tải chapter, hàng đợi upload, tốc độ IndexedDB.
+              </p>
+            </div>
+            <StorageHealthDashboard />
           </section>
 
           <hr style={{ borderColor: 'rgba(80,69,59,0.2)' }} />
