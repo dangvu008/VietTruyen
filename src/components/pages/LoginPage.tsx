@@ -15,7 +15,7 @@ import { Sparkles, Feather, Mail, Lock, Eye, EyeOff, Shield } from 'lucide-react
 import { isTauriEnvironment } from '../../lib/storage/detect_environment';
 
 const LoginPage: React.FC = () => {
-  const { signInWithGoogle, signInWithEmail, signUpWithEmail, isLoading } = useAuthStore();
+  const { signInWithGoogle, signInWithEmail, signUpWithEmail, signInAsGuest, isLoading } = useAuthStore();
   const [authMode, setAuthMode] = useState<'choices' | 'email-login' | 'email-signup'>('choices');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -161,6 +161,19 @@ const LoginPage: React.FC = () => {
                   )}
                   <span>{isLoading ? 'Đang kết nối...' : 'Tiếp tục với Google'}</span>
                 </button>
+
+                {/* Guest Mode Bypass */}
+                <button
+                  onClick={signInAsGuest}
+                  disabled={isLoading}
+                  className="w-full flex items-center justify-center gap-3 px-6 py-4 rounded-xl font-medium transition-all duration-300 disabled:opacity-50 group relative overflow-hidden mt-3"
+                  style={{ background: '#1d1b18', color: '#e8e1dc', border: '1px solid #3a322b' }}
+                >
+                  <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" style={{ background: 'linear-gradient(90deg, rgba(242,192,141,0.05), transparent)' }} />
+                  <Sparkles size={20} style={{ color: '#d4a574' }} />
+                  <span>Dùng thử không cần đăng nhập</span>
+                </button>
+
                 {isDesktopApp && (
                   <p className="px-1 text-xs leading-relaxed" style={{ color: '#9c8e82' }}>
                     Google OAuth hiện chỉ hỗ trợ bản web. Trong ứng dụng desktop, hãy dùng đăng nhập email hoặc chế độ khách.

@@ -34,6 +34,7 @@ interface AuthState {
   signInWithEmail: (email: string, password: string) => Promise<{ error: Error | null }>;
   signUpWithEmail: (email: string, password: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
+  signInAsGuest: () => void;
 }
 
 let activeAuthCleanup: (() => void) | null = null;
@@ -272,6 +273,30 @@ export const useAuthStore = create<AuthState>()((set) => ({
     set({
       user: null,
       isAuthenticated: false,
+      isLoading: false,
+    });
+  },
+
+  signInAsGuest: () => {
+    const guestUser = {
+      id: 'guest',
+      email: 'guest@viettruyen.local',
+      user_metadata: { full_name: 'Khách' },
+      app_metadata: {},
+      aud: 'authenticated',
+      created_at: new Date().toISOString(),
+    } as any;
+
+    traceStoryDebugEvent({
+      domain: 'auth',
+      action: 'signin.guest.success',
+      level: 'info',
+      summary: 'Logged in as guest user (local bypass).',
+    });
+
+    set({
+      user: guestUser,
+      isAuthenticated: true,
       isLoading: false,
     });
   },

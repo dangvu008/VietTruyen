@@ -109,4 +109,16 @@ describe('use_auth_store', () => {
 
     expect(unsubscribe).toHaveBeenCalledTimes(1);
   });
+
+  it('signs in as a guest user', async () => {
+    const { useAuthStore } = await import('./use_auth_store');
+
+    useAuthStore.getState().signInAsGuest();
+
+    expect(useAuthStore.getState()).toMatchObject({
+      user: expect.objectContaining({ id: 'guest', email: 'guest@viettruyen.local' }),
+      isAuthenticated: true,
+      isLoading: false,
+    });
+  });
 });

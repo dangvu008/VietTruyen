@@ -17,3 +17,5 @@
 [2026-05-02 08:46] — Added `viettruyen-canon-v1` hybrid export: zip package with Markdown canon docs, JSON snapshots, context-map indexes, and a lightweight story graph, exposed via ExportPage as `CANON ZIP`.
 [2026-05-04 05:26] — Added persistent story debug trace across AI generation, streaming, workflow, storage persist/hydrate, auth login/logout, and close/reload lifecycle; verified with focused Vitest and build.
 [2026-05-05 21:23] — Added Chữa Canon plot direction preview before rewrite queue: AI proposes 2-3 route choices, the selected direction is persisted on SurgerySpec, and rewrite/QA tasks receive that direction as guidance.
+[2026-05-26 09:46] — Implemented Guest Mode bypass login by adding the "Dùng thử không cần đăng nhập" button in LoginPage and implementing signInAsGuest action in useAuthStore for local/offline usage when Supabase DNS fails.
+

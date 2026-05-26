@@ -294,3 +294,22 @@
 
 **Next Session Should:**
 - Smoke-test the Chữa Canon flow with a real AI provider and a blocked scan to verify option quality in a real story project.
+
+## [2026-05-26 09:46] Session Summary
+
+**Completed:**
+- [x] Triển khai Chế độ khách (Bypass Login) cho màn hình đăng nhập.
+- [x] Thêm hàm `signInAsGuest` vào `useAuthStore` để set mock user (`guest`) và set `isAuthenticated = true` để bypass cổng đăng nhập Supabase.
+- [x] Bổ sung nút "Dùng thử không cần đăng nhập" trên giao diện `LoginPage`.
+- [x] Thêm unit test xác nhận hành vi đăng nhập khách cục bộ trong `use_auth_store.test.ts`.
+- [x] Kiểm tra thành công 531/531 tests và build biên dịch thành công.
+
+**In Progress:**
+- [ ] Chạy dev server thử nghiệm đăng nhập vai trò Khách và làm việc offline qua IndexedDB.
+
+**Blocked:**
+- [ ] Tên miền Supabase cloud `lplxgxiulgsufpvoadhi.supabase.co` bị lỗi `NXDOMAIN` (bất khả dụng). Đã được bypass qua Chế độ khách để tiếp tục phát triển local.
+
+**Next Session Should:**
+- Tiếp tục hoàn thiện các chức năng nâng cao của Adaptation Studio (Deep Edit / Phóng Tác Pro).
+
