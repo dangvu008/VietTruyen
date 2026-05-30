@@ -374,6 +374,41 @@ export interface TranslationMap {
     buttonCopy: string;
     tacticTasks: string;
     tacticTasksSub: string;
+    emptyTitle: string;
+    emptySub: string;
+    actionPlotQA: string;
+    retryTitle: string;
+    retryLabel: string;
+    statusWriting: string;
+    statusPaused: string;
+    statusAssistant: string;
+    statusDrafting: string;
+    statusStalledDetail: string;
+    buttonResume: string;
+    buttonInsertDraft: string;
+    statusConnecting: string;
+    statusPreparing: string;
+    reviewTitle: string;
+    suggestedTasks: string;
+    presetReview: string;
+    polishingRunning: string;
+    polishingRun: string;
+    readModeTitle: string;
+    readModeSub: string;
+    buttonOpenReview: string;
+    polishResultReportStory: string;
+    polishResultReportChapter: string;
+    polishResultRewriteStory: string;
+    polishResultRewriteChapter: string;
+  };
+
+  /** Chapter management */
+  chapter: {
+    favorite: string;
+    unfavorite: string;
+    duplicate: string;
+    delete: string;
+    createNew: string;
   };
 
   /** Safety & hardening strings */

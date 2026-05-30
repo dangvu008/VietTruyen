@@ -1194,6 +1194,9 @@ async function loadProjectWithFullChapters(project: Project): Promise<Project> {
 // Nhiều mutations trong 1s → chỉ 1 Supabase call.
 const _pendingSyncTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const _pendingSyncFlush = new Map<string, () => Promise<void>>();
+const _syncCircuitBreaker = new Map<string, number>();
+const SYNC_CIRCUIT_BREAKER_MS = 60_000;
+let _globalSyncPausedUntil = 0;
 
 
 /** Flush all pending metadata syncs synchronously (call in beforeunload). */
@@ -1226,6 +1229,11 @@ const METADATA_SYNC_DEBOUNCE_MS = 1000;
  * 22 caller sites không cần thay đổi — chỉ thêm debounce tại đây.
  */
 async function syncProjectMetadataToProvider(projectId: string) {
+  // Circuit breaker: skip if recently failed with RLS/auth error
+  const breakerUntil = _syncCircuitBreaker.get(projectId);
+  if (breakerUntil && Date.now() < breakerUntil) return;
+  if (Date.now() < _globalSyncPausedUntil) return;
+
   // [Step 3.2] Debounce: hủy timer cũ, đặt timer mới
   const existing = _pendingSyncTimers.get(projectId);
   if (existing) clearTimeout(existing);
@@ -1296,6 +1304,11 @@ async function _doSyncProjectMetadata(projectId: string) {
       });
     })
     .catch((e) => {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (msg.includes('row-level security') || msg.includes('403') || msg.includes('JWT')) {
+        _syncCircuitBreaker.set(projectId, Date.now() + SYNC_CIRCUIT_BREAKER_MS);
+        _globalSyncPausedUntil = Date.now() + SYNC_CIRCUIT_BREAKER_MS;
+      }
       console.warn('[syncProjectMetadataToProvider] Provider saveProject failed:', e);
       traceStoryDebugEvent({
         domain: 'storage',
@@ -2240,6 +2253,8 @@ export const useProjectStore = create<ProjectState>()(
           const userId = useStorageStore.getState().providerUserId;
           if (!userId || userId === 'guest') return;
 
+          if (Date.now() < _globalSyncPausedUntil) return;
+
           // [Domain:Storage] STEP 1 — Identify local-only projects that need cloud backup
           const localOnlyProjects = get().projects.filter((project) => {
             const canonical = canonicalProjectStorageMode(project.storageMode);
@@ -2316,6 +2331,11 @@ export const useProjectStore = create<ProjectState>()(
               });
             } catch (error) {
               const message = error instanceof Error ? error.message : String(error);
+              if (message.includes('row-level security') || message.includes('403') || message.includes('JWT')) {
+                _globalSyncPausedUntil = Date.now() + SYNC_CIRCUIT_BREAKER_MS;
+                _syncCircuitBreaker.set(project.id, Date.now() + SYNC_CIRCUIT_BREAKER_MS);
+                break;
+              }
               console.warn(`[autoSyncLocalProjectsToCloud] Failed for "${project.title}":`, message);
               traceStoryDebugEvent({
                 domain: 'storage',

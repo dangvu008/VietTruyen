@@ -25,6 +25,7 @@ export type ProjectTabId =
   | 'chapters'
   | 'storymap'
   | 'review'
+  | 'adaptation-studio'
   | 'export';
 
 /** Tất cả tab IDs — union để backward compat */
@@ -60,6 +61,7 @@ export const PROJECT_TABS = new Set<ProjectTabId>([
   'chapters',
   'storymap',
   'review',
+  'adaptation-studio',
   'export',
 ]);
 

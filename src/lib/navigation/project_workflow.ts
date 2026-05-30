@@ -33,6 +33,7 @@ export const PROJECT_TAB_LABELS: Record<ProjectTabId, string> = {
   chapters: 'Chương',
   storymap: 'Bản đồ truyện',
   review: 'Kiểm duyệt',
+  'adaptation-studio': 'Studio',
   export: 'Xuất bản',
 };
 
@@ -45,6 +46,7 @@ export const PROJECT_TAB_PHASES: Record<ProjectTabId, ProjectWorkflowPhase> = {
   chapters: 'writing',
   storymap: 'writing',
   review: 'finalize',
+  'adaptation-studio': 'finalize',
   export: 'finalize',
 };
 

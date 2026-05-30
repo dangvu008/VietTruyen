@@ -1,7 +1,7 @@
 {
   "version": 2,
-  "generated": "2026-05-01T00:07:07.837Z",
-  "skillCount": 63,
+  "generated": "2026-05-21T02:52:00.000Z",
+  "skillCount": 64,
   "skills": {
     "adversary": {
       "layer": "L2",
@@ -2003,6 +2003,26 @@
       "chain": [
         "retro"
       ]
+    },
+    "viet-writer": {
+      "layer": "L1",
+      "model": "sonnet",
+      "group": "content",
+      "description": "Tòa soạn báo AI — viết tiếng Việt chuyên nghiệp. Tổng Biên Tập nhận đề bài, phân tích, thiết kế quy trình GATE, điều phối 6 ban chuyên trách (research, editorial, review, publishing, archive, development) để tạo sản phẩm viết chất lượng cao bằng tiếng Việt.",
+      "connections": [
+        "research",
+        "review",
+        "marketing"
+      ],
+      "signals": {
+        "emit": [
+          "content.drafted",
+          "content.published"
+        ],
+        "listen": [
+          "ideas.ready"
+        ]
+      }
     }
   }
 }

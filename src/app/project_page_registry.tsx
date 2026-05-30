@@ -18,6 +18,7 @@ import {
   LazyStoryMapPage,
   LazyWriterPage,
   LazyWorldPage,
+  LazyAdaptationStudioPage,
 } from './page_registry';
 
 export interface ProjectPageRenderProps {
@@ -137,6 +138,9 @@ export function renderProjectPage({
           onOpenCreationChat={onOpenCreationChat}
         />
       );
+
+    case 'adaptation-studio':
+      return <LazyAdaptationStudioPage />;
 
     case 'export':
       return <LazyExportPage project={activeProject} />;

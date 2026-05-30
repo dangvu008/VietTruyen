@@ -15,7 +15,13 @@ export type PipelineStepLabel =
   | 'review_checkers'
   | 'style_analysis'
   | 'data_extraction'
-  | 'memory_sync';
+  | 'memory_sync'
+  | 'translation_polish'
+  | 'prose_elevation'
+  | 'source_dna_scan'
+  | 'batch_correction'
+  | 'ooc_scan'
+  | 'naturalness_score';
 
 /** Record cho mỗi lần gọi AI */
 export interface TokenUsageRecord {

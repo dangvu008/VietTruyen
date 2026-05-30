@@ -32,6 +32,12 @@ const STEP_LABELS: Record<PipelineStepLabel, string> = {
   style_analysis: 'Văn phong',
   data_extraction:'Trích xuất',
   memory_sync:    'Bộ nhớ',
+  translation_polish: 'Dịch thuật',
+  prose_elevation: 'Nâng văn',
+  source_dna_scan: 'Source DNA',
+  batch_correction: 'Sửa hàng loạt',
+  ooc_scan:       'Quét OOC',
+  naturalness_score: 'Tự nhiên',
 };
 
 const STEP_COLORS: Record<PipelineStepLabel, string> = {
@@ -43,6 +49,12 @@ const STEP_COLORS: Record<PipelineStepLabel, string> = {
   style_analysis: 'bg-purple-400/50',
   data_extraction:'bg-accent-teal/30',
   memory_sync:    'bg-green-400/30',
+  translation_polish: 'bg-blue-400/50',
+  prose_elevation: 'bg-indigo-400/50',
+  source_dna_scan: 'bg-violet-400/50',
+  batch_correction: 'bg-orange-400/40',
+  ooc_scan:       'bg-red-400/30',
+  naturalness_score: 'bg-emerald-400/40',
 };
 
 const TokenDashboard: React.FC = () => {

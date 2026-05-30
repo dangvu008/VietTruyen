@@ -10,6 +10,7 @@ import {
   BookTemplate,
   Globe2,
   LayoutDashboard,
+  MessageSquarePlus,
   Scissors,
   Settings,
   Bell,
@@ -29,6 +30,7 @@ interface GlobalNavItem {
 
 const GLOBAL_NAV_ITEMS: GlobalNavItem[] = [
   { id: 'dashboard', label: 'Điều phối', icon: <LayoutDashboard size={18} /> },
+  { id: 'creation-chat', label: 'Tạo truyện AI', icon: <MessageSquarePlus size={18} /> },
   { id: 'projects', label: 'Kho truyện', icon: <BookOpen size={18} /> },
   { id: 'adaptation', label: 'Phóng tác', icon: <Scissors size={18} /> },
   { id: 'community', label: 'Cộng đồng', icon: <Globe2 size={18} /> },

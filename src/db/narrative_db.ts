@@ -30,6 +30,7 @@ import type {
   PropagationTask,
   TimelineFact,
 } from '../types/narrative_memory';
+import type { AdaptationGlossary, AdaptationScanIssue } from '../types/adaptation_studio';
 import type {
   NarrativeCommunity,
   NarrativeEdge,
@@ -141,6 +142,10 @@ class NarrativeDatabase extends Dexie {
 
   // Step 3.3: Chapter drafts — autosave safety net in IndexedDB (TTL 7 days)
   chapterDrafts!: Table<DexieCompatible<ChapterDraft>>;
+
+  // Adaptation Studio tables
+  adaptationGlossaries!: Table<DexieCompatible<AdaptationGlossary>>;
+  adaptationScanResults!: Table<DexieCompatible<AdaptationScanIssue>>;
 
   constructor() {
     super('narrative-memory-db');
@@ -416,6 +421,43 @@ class NarrativeDatabase extends Dexie {
       outbox: 'id, projectId, opType, createdAt',
       // Step 3.3: autosave drafts — id = `${projectId}::${chapterId}`, indexed by expiry for TTL cleanup
       chapterDrafts: 'id, projectId, chapterId, expiresAt, savedAt',
+    });
+
+    // [AdaptationStudio] Version 12 — glossary + scan results tables
+    this.version(12).stores({
+      chapters: 'id, projectId, [projectId+index], [projectId+sequenceNumber], status, updatedAt',
+      entitySnapshots: 'id, entityId, projectId, [projectId+entityId], [entityId+chapterIndex], chapterId',
+      chapterDeps: 'id, chapterId, entityId, projectId, [projectId+chapterId], [projectId+entityId]',
+      entityDefinitions: 'id, entityId, projectId, [projectId+entityId], entityType, canonicalName, updatedAt',
+      timelineFacts: 'id, entityId, projectId, [projectId+entityId], [projectId+entityId+attributeKey], [projectId+sourceChapterId], chapterFrom, chapterTo, sourceType',
+      chapterDependencies: 'id, chapterId, projectId, [projectId+chapterId], [projectId+entityId], [projectId+entityId+attributeKey], chapterIndex, dependencyStatus',
+      chapterMetadata: 'chapterId, projectId, [projectId+chapterIndex], contentHash, extractedAt',
+      canonicalEdits: 'id, projectId, entityId, [projectId+entityId], [projectId+entityId+attributeKey], effectiveFromChapter, propagationStatus, createdAt',
+      propagationTasks: 'id, projectId, chapterId, [projectId+chapterId], [projectId+entityId], [projectId+canonicalEditId], status, chapterIndex, updatedAt',
+      propagationLogs: 'id, projectId, entityId, status, createdAt',
+      indexJobs: 'id, projectId, [projectId+status], jobType, updatedAt',
+      projectIndexState: 'projectId, updatedAt, lastIndexedAt',
+      styleCorrections: 'id, projectId, chapterId, category, status, [projectId+status], [projectId+chapterId]',
+      styleRules: 'id, projectId, category, weight, [projectId+category]',
+      projectArcs: 'id, projectId, [projectId+index], [projectId+chapterStart], updatedAt',
+      surgerySpecs: 'id, projectId, status, updatedAt, createdAt',
+      impactScans: 'id, projectId, specId, status, updatedAt, createdAt',
+      rewriteTasks: 'id, projectId, scanId, specId, status, [projectId+status], [projectId+arcId], [projectId+chapterId], updatedAt',
+      sourceImportJobs: 'id, projectId, status, updatedAt, createdAt',
+      narrativeNodes: 'id, projectId, nodeType, refId, [projectId+nodeType], updatedAt',
+      narrativeEdges: 'id, projectId, edgeType, [projectId+fromNodeId], [projectId+toNodeId], updatedAt',
+      narrativeCommunities: 'id, projectId, [projectId+score], updatedAt',
+      summaryCache: 'id, projectId, tier, [projectId+tier], rangeKey, updatedAt',
+      memoryEmbeddings: 'id, projectId, [projectId+contentType], [projectId+chapterId], chapterIndex, updatedAt',
+      narrativePredicateDefinitions: 'id, predicate, projectId, [projectId+predicate], updatedAt',
+      narrativeStateFacts: 'id, projectId, [projectId+subjectId], [projectId+predicate], [projectId+status], validFromChapter, validToChapter, updatedAt',
+      narrativeStateMutations: 'id, projectId, chapterId, [projectId+chapterId], [projectId+subjectId], [projectId+predicate], reviewStatus, createdAt',
+      narrativeStateEvidence: 'id, projectId, chapterId, [projectId+chapterId], sourceHash, createdAt',
+      pendingHooks: 'id, projectId, [projectId+status], plantedChapterId, plantedChapterIndex, status, updatedAt',
+      outbox: 'id, projectId, opType, createdAt',
+      chapterDrafts: 'id, projectId, chapterId, expiresAt, savedAt',
+      adaptationGlossaries: 'id, projectId, [projectId+category], canonical, createdAt',
+      adaptationScanResults: 'id, projectId, chapterId, [projectId+chapterId], issueType, status, contentHash, createdAt',
     });
   }
 }

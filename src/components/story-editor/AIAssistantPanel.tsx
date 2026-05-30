@@ -1514,7 +1514,7 @@ QUY TẮC TRAU CHUỐT:
 
                           <div className="flex shrink-0 flex-col items-end gap-1.5">
                             <span className={`rounded-full border px-2 py-1 text-[10px] font-semibold ${meta.badge}`}>
-                              {meta.label}
+                              {t(meta.label as any)}
                             </span>
                             {completionAction && onCompleteChapter && (
                               <button

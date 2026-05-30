@@ -89,6 +89,7 @@ interface CreationChatActions {
   ) => void;
   interruptWorkflowStep: (detail?: string) => void;
   linkProject: (projectId: string) => void;
+  unlinkProject: () => void;
   syncEditorTextMessages: (
     projectId: string,
     chapterId: string,
@@ -631,6 +632,16 @@ export const useCreationChatStore = create<
             updatedAt: touch(),
           },
           draftSavedAt: touch(),
+        })),
+
+      unlinkProject: () =>
+        set((state) => ({
+          progress: {
+            ...state.progress,
+            linkedProjectId: null,
+            updatedAt: touch(),
+          },
+          isBatchComposing: false,
         })),
 
       syncEditorTextMessages: (projectId, chapterId, messages) =>

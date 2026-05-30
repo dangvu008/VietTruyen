@@ -914,6 +914,23 @@ export default function CreationChatPage({
               Về editor
             </button>
           )}
+          {linkedProjectId && onOpenProjectDraft && !canTransitionToEditor && (
+            <button
+              style={{
+                ...S.headerBtn(false),
+                color: '#e87c5b',
+                borderColor: '#e87c5b40',
+              }}
+              onClick={() => {
+                useCreationChatStore.getState().unlinkProject();
+                onOpenProjectDraft(linkedProjectId, 'bible');
+              }}
+              title="Bỏ qua hội thoại AI, vào thẳng workspace để tạo thủ công"
+            >
+              <RotateCcw size={14} />
+              Bỏ qua & Vào Workspace
+            </button>
+          )}
           <button
             style={S.headerBtn()}
             onClick={() => setShowChapterPanel(true)}

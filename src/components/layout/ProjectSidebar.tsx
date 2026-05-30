@@ -17,6 +17,7 @@ import {
   PenTool,
   Users,
   Cpu,
+  Wrench,
 } from 'lucide-react';
 import type { ProjectTabId } from '../../types/navigation';
 import type { Project } from '../../types/story';
@@ -56,6 +57,7 @@ const PROJECT_NAV_GROUPS: ProjectNavGroup[] = [
   {
     label: 'HOÀN THIỆN',
     items: [
+      { id: 'adaptation-studio', label: 'Studio', icon: <Wrench size={18} className="h-[18px] w-[18px]" /> },
       { id: 'review',   label: 'Kiểm duyệt',  icon: <CheckSquare size={18} className="h-[18px] w-[18px]" /> },
       { id: 'export',   label: 'Xuất bản',    icon: <FileOutput size={18} className="h-[18px] w-[18px]" /> },
     ],

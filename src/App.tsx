@@ -22,6 +22,7 @@ const RetconImpactModal = lazy(() => import('./components/shared/RetconImpactMod
 const NotificationCenter = lazy(() => import('./components/shared/NotificationCenter'));
 const MemoryBootstrap = lazy(() => import('./components/system/MemoryBootstrap'));
 import LanguageSwitcher from './components/shared/LanguageSwitcher';
+import UserAvatarMenu from './components/shared/UserAvatarMenu';
 
 import type { AnyTabId, AppShell, ProjectTabId } from './types/navigation';
 import { DEFAULT_PROJECT_TAB, isGlobalTab } from './types/navigation';
@@ -358,17 +359,11 @@ const App: React.FC = () => {
       <LanguageSwitcher />
 
       {isAuthenticated && user && (
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full border border-[#f0c59a]/20 bg-[#241c17] text-xs font-bold text-[#f0c59a]">
-          {user.user_metadata?.avatar_url ? (
-            <img
-              src={user.user_metadata.avatar_url}
-              alt="User"
-              className="h-full w-full object-cover"
-            />
-          ) : (
-            (user.user_metadata?.full_name || user.email || '?')[0].toUpperCase()
-          )}
-        </div>
+        <UserAvatarMenu
+          user={user}
+          onSignOut={() => useAuthStore.getState().signOut()}
+          onOpenSettings={handleNavigateToSettings}
+        />
       )}
     </>
   );
