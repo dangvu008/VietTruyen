@@ -1,37 +1,68 @@
-schema_version: 1
+schema_version: 2
 status: PLANNED
-target_chapters: 2000_plus
+length_model:
+  minimum_viable_chapters: 2000
+  target_capable_chapters: 3000
+  elastic_ceiling_chapters: 4000
+  exact_length_locked: false
+  principle: extend only when characters exploration world change or unresolved threads retain intrinsic value
 macro_arcs:
   - id: M01
-    range: [1, 100]
-    focus: dream_continuity_real_world_verification_first_steps_into_cultivation
+    range: [1, 300]
+    focus: mortal_life_dream_continuity_real_world_verification_entry_into_cultivation
   - id: M02
-    range: [101, 300]
-    focus: loose_cultivator_survival_first_market_sect_contacts_and_wider_travel
+    range: [301, 700]
+    focus: low_cultivation_world_loose_cultivators_markets_sects_survival_and_exploration
   - id: M03
-    range: [301, 600]
-    focus: foundation_building_region_conflicts_deeper_dream_geography_and_old_records
+    range: [701, 1100]
+    focus: middle_cultivation_world_regions_conflicts_ancient_traces_and_broken_history
   - id: M04
-    range: [601, 900]
-    focus: multi_region_journey_major_factions_identity_of_dream_walking_begins_to_matter
+    range: [1101, 1500]
+    focus: dream_world_becomes_second_lived_world_with_independent_relationships_enemies_and_responsibilities
   - id: M05
-    range: [901, 1200]
-    focus: old_civilization_layers_history_gaps_and_first_hard_evidence_of_recurring_resets
+    range: [1501, 1900]
+    focus: greater_world_expansion_and_increasingly_abnormal_historical_gaps
   - id: M06
-    range: [1201, 1500]
-    focus: dream_world_crisis_ancient_survivor_interests_and_cost_of_two_world_connection
+    range: [1901, 2300]
+    focus: ancient_civilizations_reset_cycles_and_evidence_that_history_has_been_cut_repeatedly
   - id: M07
-    range: [1501, 1800]
-    focus: heavenly_order_pressure_inheritance_fragments_and_rejection_of_predecessor_limits
+    range: [2301, 2700]
+    focus: origins_of_dream_world_traces_of_ancient_dream_master_and_failed_old_war
   - id: M08
-    range: [1801, 2100]
-    focus: build_new_path_alliances_losses_and_direct_conflict_with_reset_mechanism
+    range: [2701, 3100]
+    focus: heavenly_order_becomes_direct_pressure_while_mortal_factional_conflicts_continue
   - id: M09
-    range: [2101, 2400]
-    focus: endgame_can_expand_based_on_story_growth_without_forcing_exact_chapter_count
+    range: [3101, 3500]
+    focus: inherit_then_surpass_predecessor_path_build_a_new_way_and_pay_its_costs
+  - id: M10
+    range: [3501, 4000]
+    focus: elastic_endgame_heavenly_order_dream_world_reset_cycle_and_lu_tram_own_path
+elastic_arc_budget:
+  default:
+    expected: 300
+    minimum: 200
+    maximum: 450
+  extension_allowed_when:
+    - character_arc_has_value
+    - exploration_is_novel
+    - unresolved_threads_are_organic
+    - world_expansion_changes_story
+    - conflict_changes_relationships_or_worldview
+  extension_forbidden_when:
+    - repeated_conflict
+    - repeated_reward_pattern
+    - cultivation_grind
+    - disposable_villain_padding
+    - mystery_stalling
+    - secret_realm_fight_loot_breakthrough_padding
+mystery_progression:
+  rule: resolve_questions_then_open_deeper_different_questions_not_same_question_delayed
+  forbidden: delay_reveal_only_to_reach_chapter_quota
 rules:
-  - ranges_are_guides_not_fixed_scene_counts
+  - ranges_are_elastic_guides_not_fixed_scene_counts
+  - story_may_end_before_4000_when_core_arcs_are_complete
   - every_100_chapters_requires_arc_health_review
   - every_macro_arc_must_change_main_worldview_relationships_and_capabilities
   - dream_mystery_must_not_replace_cultivation_adventure_or_human_stories
   - no_arc_exists_only_to_deliver_one_power_up
+  - dream_and_real_worlds_must_not_become_symmetric_duplicate_campaigns
