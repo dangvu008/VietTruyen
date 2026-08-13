@@ -1,0 +1,24 @@
+schema_version: 1
+arc_id: ARC01
+status: PLANNED
+range: [1, 30]
+goal: establish dream continuity, active verification, and a grounded route toward cultivation
+segments:
+  - range: [1, 5]
+    function: Ha Ha time mismatch and independent-history evidence
+  - range: [6, 10]
+    function: real-world traces; investigation must not become conclusion
+  - range: [11, 15]
+    function: mountain travel, survival and exploration; no secret-realm boss loop
+  - range: [16, 20]
+    function: first contact with cultivators through consequences of their conflict
+  - range: [21, 25]
+    function: trade knowledge/guidance for information about the cultivation world
+  - range: [26, 30]
+    function: verify cultivation, spirit-root status and route to a market
+requirements:
+  - include_mundane_relationship_progression
+  - include_at_least_one_failed_or_inconclusive_investigation
+  - no_mystery_escalation_every_chapter
+  - no_unearned_cross_world_confirmation
+  - protagonist_can_be_wrong
