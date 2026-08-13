@@ -26,6 +26,34 @@ the agent MUST:
 5. Load accepted canon/state/evidence through Story OS retrieval.
 6. Never infer the next chapter from chat memory when repository state is available.
 
+## Pre-Production / IP Development routing — mandatory for new stories
+
+Before Story Bible, Story OS has a separate pre-production layer defined by `config/story-os/preproduction-pipeline.yaml` and `config/story-os/preproduction-gate.md`.
+
+Trigger it when the user:
+- asks to create a new story or new IP;
+- says they are stuck for ideas;
+- asks for a commercially promising concept;
+- wants to write a genre they do not understand well;
+- asks to research market/genre/reference patterns before designing a story.
+
+Mode A — user already has a concrete concept:
+`IDEA_INTAKE -> CONCEPT_VALIDATION -> STORY_DNA -> STORY_BIBLE -> LONG_TERM_OUTLINE -> ARC/VOLUME -> CHAPTER_PIPELINE`
+
+Mode B — discovery or unfamiliar genre:
+`MARKET_INTELLIGENCE -> GENRE_RESEARCH -> REFERENCE_ANALYSIS -> IDEA_MINING -> CONCEPT_GENERATION -> CONCEPT_EVALUATION -> RED_TEAM -> TOP_3_5_SHORTLIST -> LONGFORM_STRESS_TEST -> APPROVAL -> STORY_DNA -> STORY_BIBLE`
+
+Fail-closed rules:
+- Do not jump from a vague “make me a good story” prompt directly to Story Bible or prose.
+- Current-market claims require fresh research; trend is evidence of reader need, not a template to imitate.
+- Reference analysis may retain only abstract craft patterns, not renamed plots, scene sequences, or derivative imitation.
+- Do not auto-select Top 1 and start writing. Present 3–5 strong concepts with audience fit, novelty, risks and long-form potential unless the user has already explicitly approved one.
+- Long-form concepts require the checkpoint stress test at 1/10/30/100/300/500/1000 before promotion.
+- Pre-production research remains RESEARCH/PROPOSED and must never enter canon or accepted history.
+- Story DNA defines why readers keep reading; Story Bible defines world/canon. Do not merge them.
+
+Existing stories with accepted canon do not rerun market/genre research merely to continue chapters. They enter the established Story OS retrieval/writing pipeline unless the user explicitly asks for strategic repositioning or concept redesign.
+
 ## Non-negotiable long-form pipeline
 
 For each chapter:
