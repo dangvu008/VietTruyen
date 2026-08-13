@@ -1,0 +1,24 @@
+schema_version: 1
+status: CANON
+rules:
+  continuity_independent_of_main: true
+  residents_have_independent_histories: true
+  fixed_real_dream_time_ratio: false
+  dream_is_not_dungeon: true
+  dream_is_not_reward_system: true
+  dream_seed:
+    role: anchor_for_dream_walking_consciousness
+    grants_direct_power: false
+    true_nature: UNKNOWN
+  cross_world_relation:
+    default_status: UNCONFIRMED_RELATION
+    similarity_alone_is_evidence: false
+    accepted_verification_required: true
+memory_dimensions:
+  - REAL_TIMELINE
+  - DREAM_TIMELINE
+  - CROSS_WORLD_RELATIONS
+forbidden_agent_actions:
+  - invent_true_nature_of_dream_world
+  - invent_true_nature_of_dream_seed
+  - promote_similarity_to_identity_without_evidence
