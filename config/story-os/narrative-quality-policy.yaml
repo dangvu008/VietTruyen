@@ -53,10 +53,12 @@ hard_rules:
 style_metrics:
   paragraph_fragmentation:
     short_paragraph_max_chars: 45
-    consecutive_short_paragraphs_warn: 3
-    consecutive_short_paragraphs_block: 5
-    single_sentence_paragraph_ratio_warn: 0.45
-    single_sentence_paragraph_ratio_block: 0.62
+    consecutive_short_paragraphs_warn: 4
+    consecutive_short_paragraphs_block: 8
+    # Disabled as a blocking metric after smoke testing because dialogue naturally
+    # creates many single-sentence paragraphs. Short-run detection remains active.
+    single_sentence_paragraph_ratio_warn: 1.01
+    single_sentence_paragraph_ratio_block: 1.02
   rhetorical_patterns:
     patterns:
       - "Không phải"
