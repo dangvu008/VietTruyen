@@ -1,0 +1,35 @@
+schema_version: 1
+status: PLANNED
+inheritance_model:
+  complete_manual_at_once: false
+  self_locked_by_comprehension_and_soul_capacity: true
+  fragmentation_causes:
+    - first_dream_master_died
+    - dream_world_decayed
+    - ancient_methods_no_longer_fully_match_current_heaven_and_earth
+  early_access:
+    purpose: solve_current_survival_and_cultivation_problems
+    examples:
+      - nourish_spirit
+      - stabilize_dream_entry
+      - observe_dream_traces
+  provisional_stage_names:
+    status: PROPOSED
+    sequence: [Duong_Mong, Nhap_Mong, Quan_Mong, Dan_Mong, Hoa_Mong]
+    names_may_change: true
+protagonist_deviation:
+  required: true
+  causes:
+    - weak_body_or_inadequate_conditions
+    - missing_fragments
+    - damaged_dream_world
+    - ancient_method_mismatch
+  growth_pattern:
+    - small_practical_modification
+    - combine_external_knowledge
+    - create_own_techniques
+    - identify_predecessor_weaknesses
+    - accumulated_changes_become_own_path
+late_choice:
+  choice: follow_prepared_final_step_or_abandon_it_for_own_path
+  intended_direction: inherit_will_and_results_but_not_predecessor_conclusion
