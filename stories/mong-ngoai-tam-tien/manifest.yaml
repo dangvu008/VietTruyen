@@ -1,21 +1,42 @@
-schema_version: 1
+schema_version: 2
 story_id: mong-ngoai-tam-tien
 title: Mộng Ngoại Tầm Tiên
 status: migration
 framework_status: canon_candidate
 latest_accepted_chapter: 0
 next_chapter: 1
-draft_archive_through_chapter: 5
-draft_archive_status: non_canon_pipeline_bypassed
+draft_archive_through_chapter: 6
+draft_archive_status: non_canon_hold_for_revision
 current_volume: V01
 current_arc: ARC01
 default_batch_size: 5
 max_batch_size: 10
+
+memory:
+  engine: scripts/story-memory.py
+  database: memory/story.db
+  policy: config/story-os/long-horizon-memory.yaml
+  status: bootstrap_required
+  raw_accepted_prose_is_authority: true
+  per_story_namespace: true
+  retrieval_modes:
+    - lexical_fts5
+    - temporal_state
+    - graph_neighbors
+    - knowledge_layers
+    - open_threads
+  vector_rag: optional_non_authoritative
+  real_dream_separation: required
+
 milestone_audits:
-- 25
-- 100
-- 500
-- 1000
+  baseline_drift_every: 25
+  major_1_1000_every: 100
+  major_1001_1500_every: 75
+  major_1501_3000_every: 50
+  major_above_3000_every: 25
+  deep_integrity_from: 1000
+  deep_integrity_every: 500
+
 required_ledgers:
 - event_log
 - current_state
@@ -26,6 +47,10 @@ required_ledgers:
 - cross_world_relations
 - arc_fingerprint
 - reward_history
+- graph
+- memory_health
+- checkpoint_chain
+
 authority_order:
 - canon_static
 - canon_dynamic
