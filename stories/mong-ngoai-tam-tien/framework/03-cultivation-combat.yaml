@@ -1,0 +1,22 @@
+schema_version: 1
+status: CANON_CANDIDATE
+cultivation_path:
+  early_stages: [Dan_Khi, Luyen_Khi_1_9, Truc_Co, Tu_Phu, Kim_Dan, Nguyen_Anh]
+  later_stages: PLANNED_NOT_LOCKED
+initial_method:
+  name: Thanh_Nguyen_Duong_Khi_Quyet
+  quality: ordinary
+  development: improved_gradually_from_experience_in_both_worlds
+combat_identity:
+  Tang_Tuc: hide_presence_and_reduce_enemy_information
+  Quan_Phap: observe_patterns_and_find_weaknesses
+  Doan_Mach: planned_precision_attack_seed
+rules:
+  - no_single_combo_solves_all_fights
+  - main_can_misread_enemy
+  - techniques_need_training_cost_and_context
+  - breakthrough_requires_accumulation
+  - dream_experience_can_supply_knowledge_not_free_cultivation
+artifacts:
+  philosophy: few_long_lived_items_with_history_over_constant_loot_replacement
+  signature_artifact: PLANNED_NOT_LOCKED
