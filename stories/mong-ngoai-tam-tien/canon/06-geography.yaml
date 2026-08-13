@@ -1,0 +1,18 @@
+schema_version: 1
+status: CANON
+places:
+  Thanh_Khe:
+    type: county_town
+    traits: [medicinal_trade, near_Du_Son, Lac_Thuy_route]
+  Ha_Ha:
+    type: dream_world_village
+    traits: [independent_history, roadside_settlement]
+  Te_Ha_Phuong:
+    type: cultivation_market
+    status: PLANNED
+  Du_Son:
+    type: mountain_region
+    status: CANON_CANDIDATE
+rules:
+  no_location_is_world_center_by_default: true
+  travel_requires_time_cost_and_route: true
