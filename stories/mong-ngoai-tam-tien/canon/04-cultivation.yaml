@@ -1,0 +1,16 @@
+schema_version: 1
+status: PLANNED
+path:
+  - Dan_Khi
+  - Luyen_Khi_1_9
+  - Truc_Co
+  - Tu_Phu
+  - Kim_Dan
+  - Nguyen_Anh
+initial_method:
+  name: Thanh_Nguyen_Duong_Khi_Quyet
+  ordinary_method: true
+rules:
+  no_unearned_breakthrough: true
+  visible_intermediate_steps: true
+  costs_and_limits_required: true
