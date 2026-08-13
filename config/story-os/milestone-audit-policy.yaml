@@ -1,64 +1,123 @@
-schema_version: 1
-milestones:
-  25:
-    name: drift_audit
-    checks:
-      - character_voice_drift
-      - prose_style_drift
-      - arc_progress
-      - unresolved_thread_age
-      - reward_pattern_repetition
-  100:
-    name: full_memory_audit
-    block_next_chapter_on_fail: true
-    checks:
-      - retrieval_recall
-      - temporal_state_accuracy
-      - graph_consistency
-      - knowledge_boundary_accuracy
-      - open_thread_completeness
-      - real_dream_timeline_consistency
-      - inventory_power_state
-      - relationship_state
-      - summary_vs_raw_conflicts
-      - orphan_fact_detection
-      - duplicate_entity_detection
-      - style_memory_drift
-    thresholds:
-      retrieval_recall_at_10_min: 0.95
-      temporal_state_accuracy: 1.0
-      knowledge_leak_errors_max: 0
-      unresolved_thread_coverage_min: 0.99
-      raw_summary_conflicts_max: 0
-  500:
-    name: deep_rebuild_and_benchmark
-    block_next_chapter_on_fail: true
-    actions:
-      - rebuild_projections_from_raw_and_event_log
-      - compare_rebuilt_state_with_live_state
-      - run_retrieval_benchmark
-      - inspect_long_absent_characters
-      - inspect_very_old_open_threads
-      - arc_fingerprint_repetition_scan
-      - provenance_integrity_scan
-  1000:
-    name: archival_integrity_audit
-    block_next_chapter_on_fail: true
-    actions:
-      - full_cold_memory_stress_test
-      - sample_very_old_chapters
-      - verify_provenance_links
-      - verify_cross_world_timeline
-      - verify_checkpoint_chain
-      - verify_rebuildability
-      - verify_archive_hashes
+schema_version: 2
+
+# Audit frequency becomes denser as the story grows.
+# The orchestrator must fail closed when a required audit is missing or not PASS.
+audit_schedule:
+  drift_interval: 25
+  bands:
+    - min_chapter: 1
+      max_chapter: 1000
+      interval: 100
+      name: full_memory_audit
+    - min_chapter: 1001
+      max_chapter: 1500
+      interval: 75
+      name: long_horizon_memory_audit
+    - min_chapter: 1501
+      max_chapter: 2000
+      interval: 50
+      name: long_horizon_memory_audit
+    - min_chapter: 2001
+      max_chapter: 3000
+      interval: 50
+      name: long_horizon_memory_audit
+    - min_chapter: 3001
+      max_chapter: null
+      interval: 25
+      name: long_horizon_memory_audit
+
+  # From chapter 1000 onward, every 500 chapters gets a stronger integrity audit.
+  deep_integrity:
+    start_chapter: 1000
+    interval: 500
+    name: deep_integrity_audit
+
+health_policy:
+  metric: overall
+  normal_min: 0.95
+  degraded_min: 0.90
+  degraded_interval_multiplier: 0.5
+  on_below_degraded: HOLD
+  require_rebuild_on_below_degraded: true
+
+checks:
+  drift_audit:
+    - character_voice_drift
+    - prose_style_drift
+    - arc_progress
+    - unresolved_thread_age
+    - reward_pattern_repetition
+    - dormant_character_scan
+
+  full_memory_audit:
+    - retrieval_recall
+    - temporal_state_accuracy
+    - graph_consistency
+    - knowledge_boundary_accuracy
+    - open_thread_completeness
+    - real_dream_timeline_consistency
+    - inventory_power_state
+    - relationship_state
+    - summary_vs_raw_conflicts
+    - orphan_fact_detection
+    - duplicate_entity_detection
+    - style_memory_drift
+    - cold_reference_sample
+
+  long_horizon_memory_audit:
+    - retrieval_recall
+    - temporal_state_accuracy
+    - graph_consistency
+    - knowledge_boundary_accuracy
+    - open_thread_completeness
+    - real_dream_timeline_consistency
+    - inventory_power_state
+    - relationship_state
+    - summary_vs_raw_conflicts
+    - orphan_fact_detection
+    - duplicate_entity_detection
+    - style_memory_drift
+    - cold_reference_sample
+    - dormant_character_scan
+    - old_mystery_payoff_scan
+    - arc_fingerprint_repetition_scan
+    - provenance_integrity_scan
+    - checkpoint_chain_scan
+
+  deep_integrity_audit:
+    - full_cold_memory_stress_test
+    - rebuild_projections_from_raw_and_event_log
+    - compare_rebuilt_state_with_live_state
+    - run_retrieval_benchmark
+    - replay_temporal_state
+    - rebuild_graph
+    - rebuild_knowledge_projection
+    - inspect_long_absent_characters
+    - inspect_very_old_open_threads
+    - arc_fingerprint_repetition_scan
+    - provenance_integrity_scan
+    - verify_cross_world_timeline
+    - verify_checkpoint_chain
+    - verify_rebuildability
+    - verify_archive_hashes
+    - sample_story_wide_facts
+
+thresholds:
+  retrieval_recall_at_10_min: 0.95
+  temporal_state_accuracy: 1.0
+  knowledge_leak_errors_max: 0
+  unresolved_thread_coverage_min: 0.99
+  raw_summary_conflicts_max: 0
+  graph_consistency_min: 0.99
 
 failure_policy:
+  block_next_chapter_on_required_audit_fail: true
   on_required_audit_fail: HOLD
   repair:
     - rebuild_from_raw_accepted_prose
     - replay_event_log
     - rebuild_graph
     - rebuild_knowledge_projection
-    - rerun_benchmark
+    - rerun_retrieval_benchmark
+    - rerun_memory_audit
   unlock_next_chapter_only_after: PASS
