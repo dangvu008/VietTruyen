@@ -1,0 +1,26 @@
+schema_version: 1
+authority_states:
+  CANON:
+    writable_by: canon_review
+    usable_as_fact: true
+  ACCEPTED_HISTORY:
+    writable_by: accepted_chapter_commit
+    usable_as_fact: true
+    provenance_required: true
+  PLANNED:
+    writable_by: planning_review
+    usable_as_fact: false
+  PROPOSED:
+    writable_by: ideation
+    usable_as_fact: false
+  UNKNOWN:
+    writable_by: author_only
+    usable_as_fact: false
+    agent_may_invent: false
+conflict_priority:
+  - CANON
+  - ACCEPTED_HISTORY
+  - PLANNED
+  - PROPOSED
+unknown_fail_closed: true
+cross_world_similarity_default: UNCONFIRMED_RELATION
