@@ -1,0 +1,40 @@
+schema_version: 1
+status: CANON_CANDIDATE
+principle: protagonist_must_live_inside_current_world_layer_not_future_cosmic_plot
+current_motivation_order:
+  early:
+    - survive
+    - improve_health
+    - obtain_resources
+    - learn_cultivation
+    - survive_enemies
+    - protect_dream_secret
+  middle:
+    - family_and_local_interests
+    - sects_and_cultivation_factions
+    - regions_and_continents
+    - ancient_clans_and_other_realms
+  very_late:
+    - erased_history
+    - purge_cycles
+    - first_dream_master_identity
+    - reason_for_his_failure
+    - heavenly_dao_conflict
+local_stakes_rule:
+  low_level_enemy_can_be_existential_threat: true
+  low_grade_pill_can_matter_more_than_cosmic_secret_now: true
+  same_realm_opponent_can_force_all_current_methods: true
+  small_factions_must_have_own_goals_and_lives: true
+foreshadow_policy:
+  early_cosmic_lore_visibility: minimal
+  allowed_forms:
+    - inexplicable_phenomena
+    - broken_memories
+    - ruins
+    - dream_fragments
+    - apparently_meaningless_details
+  long_payoff_allowed: true
+forbidden:
+  - early_save_the_world_mission
+  - heavenly_dao_exposition_in_low_level_arc
+  - small_antagonists_as_disposable_npcs_waiting_for_main
