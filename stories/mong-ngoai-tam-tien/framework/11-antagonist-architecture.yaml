@@ -1,0 +1,26 @@
+schema_version: 1
+status: CANON_CANDIDATE
+layers:
+  local:
+    examples: [merchant_rivals, clan_pressure, bandits, local_power_holders]
+  cultivation:
+    examples: [loose_cultivator_predators, sect_rivals, resource_conflicts]
+  regional:
+    examples: [state_level_factions, old_lineages, major_sects]
+  ancient:
+    examples: [survivor_interests, keepers_of_old_history, dream_world_power_blocks]
+  cosmic:
+    examples: [forces_aligned_with_heavenly_order, reset_mechanism]
+rules:
+  villains_have_interests: true
+  antagonists_can_be_reasonable_from_their_position: true
+  not_every_conflict_ends_in_death: true
+  recurring_antagonists_can_change_roles: true
+  high_level_enemies_exist_independently_of_main: true
+  no_villain_created_only_to_feed_main_power: true
+main_conflict_progression:
+  - survival_against_stronger_people
+  - competition_for_information_and_resources
+  - ideological_and_faction_conflict
+  - conflict_over_history_and_world_order
+  - endgame_conflict_with_reset_logic_not_single_cartoon_villain
