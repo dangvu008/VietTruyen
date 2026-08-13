@@ -1,0 +1,32 @@
+schema_version: 1
+status: CANON_CANDIDATE
+opening_nodes:
+  Thanh_Khe:
+    world: REAL
+    role: hometown_family_anchor
+  Truc_Cau:
+    world: REAL
+    role: first_field_verification_route
+  Te_Ha_Phuong:
+    world: REAL
+    role: first_cultivator_market_planned
+  Ha_Ha:
+    world: DREAM
+    role: first_independent_continuity_proof
+  Bach_Thach:
+    world: DREAM
+    role: old_route_and_memory_question
+expansion_layers:
+  - county_and_mountain_routes
+  - regional_markets_and_small_sects
+  - multiple_states_and_mid_sects
+  - major_sects_and_old_lineages
+  - forbidden_regions_and_old_civilization_layers
+  - deep_dream_world_regions
+  - world_scale_conflict_zones
+rules:
+  travel_has_time_cost: true
+  regions_have_independent_economies: true
+  regions_have_independent_conflicts: true
+  revisiting_old_maps_with_change_is_encouraged: true
+  every_new_region_is_secret_realm: false
