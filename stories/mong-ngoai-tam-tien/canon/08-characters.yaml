@@ -1,0 +1,21 @@
+schema_version: 1
+status: CANON_CANDIDATE
+characters:
+  Luc_Minh_Son:
+    role: father
+    traits: [practical, understands_mountains, not_hidden_master]
+  Luc_Mother:
+    role: mother
+    traits: [good_with_money, perceptive]
+  Tran_Tam_Cuu:
+    role: old_herb_gatherer
+    traits: [boastful, traveled, partly_reliable]
+  Ton_That:
+    role: dream_world_old_traveler
+    status: DRAFT_CANDIDATE
+  Ky_Tung:
+    role: traveling_swordsman
+    status: DRAFT_CANDIDATE
+rules:
+  side_characters_have_independent_lives: true
+  no_character_exists_only_to_deliver_clues: true
