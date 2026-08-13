@@ -1,0 +1,86 @@
+schema_version: 1
+engine: sqlite_hybrid
+per_story_database: true
+raw_accepted_prose_is_authority: true
+
+layers:
+  - raw_prose
+  - event_log
+  - current_state
+  - knowledge
+  - graph
+  - threads
+  - retrieval
+  - checkpoints
+  - health
+
+knowledge_layers:
+  - objective_truth
+  - reader_knowledge
+  - character_knowledge
+  - belief_or_rumor
+
+retrieval:
+  lexical_fts5: true
+  graph_neighbors: true
+  temporal_state: true
+  open_threads: true
+  recent_chapters: 3
+  default_limit: 12
+  vector_optional: true
+  vector_is_never_authority: true
+
+memory_tiers:
+  hot:
+    include:
+      - current_state
+      - current_arc
+      - open_threads
+      - recent_chapters
+  warm:
+    include:
+      - character_history
+      - relationships
+      - locations
+      - knowledge
+      - dream_real_relations
+  cold:
+    include:
+      - full_accepted_prose
+      - historical_events
+      - dormant_characters
+      - resolved_threads
+
+commit_policy:
+  append_events_before_projection: true
+  rebuild_projection_after_batch: true
+  accepted_evidence_only: true
+  require_provenance: true
+  require_memory_connectivity_receipt: true
+  atomic_batch_commit: true
+
+health:
+  normal_min: 0.95
+  degraded_min: 0.90
+  below_degraded_action: HOLD_REBUILD
+  degraded_interval_multiplier: 0.5
+  metrics:
+    - retrieval_recall_at_10
+    - temporal_state_accuracy
+    - graph_consistency
+    - knowledge_boundary_accuracy
+    - open_thread_coverage
+    - provenance_integrity
+    - checkpoint_integrity
+    - cold_memory_recall
+
+rebuild:
+  source_order:
+    - accepted_prose
+    - accepted_events
+  projections:
+    - current_state
+    - knowledge
+    - graph
+    - threads
+  compare_before_replace: true
