@@ -1,0 +1,30 @@
+schema_version: 1
+batch: 1-6
+status: HOLD
+acceptance_locked: true
+chapters:
+  1:
+    status: FULL_V2_CANDIDATE
+    path: drafts/revision-v2/ch0001.md
+  2:
+    status: HOLD_FOR_FULL_REWRITE
+    path: drafts/revision-v2/ch0002.md
+  3:
+    status: HOLD_FOR_FULL_REWRITE
+  4:
+    status: HOLD_FOR_FULL_REWRITE
+  5:
+    status: HOLD_FOR_FULL_REWRITE
+  6:
+    status: HOLD_FOR_FULL_REWRITE
+blocking_patchset: drafts/revision-v2/PATCHSET-CH01-06.md
+required_before_unlock:
+  - full_text_rewrite_ch02_ch06
+  - chapter_narrative_quality_receipts_pass
+  - batch_narrative_quality_receipt_pass
+  - normal_story_os_chapter_reviews_pass
+  - memory_connectivity_pass
+  - regression_review_pass
+notes:
+  - chapter_5_must_remove_age_conflict_and_prediction_overreach
+  - chapter_6_must_require_real_world_search_cost_and_false_matches
