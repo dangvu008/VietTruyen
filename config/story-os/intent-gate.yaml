@@ -1,0 +1,8 @@
+schema_version: 1
+required:
+  - canon_constraints_respected
+  - accepted_history_consistent
+  - planned_not_treated_as_happened
+  - unknown_not_invented
+  - cross_world_not_overclaimed
+fail_closed: true
