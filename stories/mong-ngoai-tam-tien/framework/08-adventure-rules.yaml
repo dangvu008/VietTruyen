@@ -1,0 +1,31 @@
+schema_version: 1
+status: CANON_CANDIDATE
+modes:
+  - survival
+  - investigation
+  - trade
+  - escort
+  - rescue
+  - mapping
+  - medicinal_problem
+  - faction_politics
+  - historical_research
+  - disaster_aftermath
+  - moral_choice
+  - failed_expedition
+rewards:
+  - knowledge
+  - relationship
+  - map
+  - clue
+  - skill
+  - survival
+  - reputation
+  - obligation
+  - useful_failure
+  - material
+  - cultivation_progress
+rules:
+  max_major_mystery_escalations_per_5_default: 3
+  require_non_mystery_progress_per_5: true
+  forbid_default_secret_realm_fight_loot_breakthrough_loop: true
