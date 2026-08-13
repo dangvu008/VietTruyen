@@ -1,0 +1,85 @@
+schema_version: 1
+fail_closed: true
+
+chapter_semantic_gates:
+  - identity_age_consistency
+  - calendar_and_absolute_timeline
+  - evidence_vs_inference
+  - knowledge_provenance
+  - cross_world_causality
+  - coincidence_budget
+  - clue_density
+  - information_source_diversity
+  - protagonist_fallibility
+  - character_voice_naturalness
+  - world_independence
+  - item_persistence_rules
+
+batch_semantic_gates:
+  - cross_chapter_identity_consistency
+  - cross_chapter_timeline_consistency
+  - mystery_escalation_pacing
+  - clue_source_concentration
+  - repeated_investigation_pattern
+  - coincidence_accumulation
+  - character_state_trajectory
+  - family_and_side_character_presence
+  - real_dream_balance
+  - unresolved_claim_classification
+
+hard_rules:
+  evidence_inference:
+    description: A suspicion, resemblance, coincidence, rumor, or character belief must not be promoted to objective truth without accepted evidence.
+    blocking: true
+  age_timeline:
+    description: Age, elapsed time, calendar year, and relative-time statements must reconcile or be explicitly marked uncertain in-world.
+    blocking: true
+  coincidence:
+    description: A new cross-world clue must normally require character action, cost, search, failure, or an independent causal source; avoid delivering the answer immediately after the question is introduced.
+    blocking: true
+  clue_density:
+    description: Do not escalate the central mystery with a major new clue every chapter by default. Allow chapters whose progress is relational, practical, exploratory, or even unsuccessful.
+    blocking: false
+  source_concentration:
+    description: A single side character should not become a clue dispenser for multiple unrelated mysteries without a causal reason.
+    blocking: true
+  protagonist_fallibility:
+    description: Careful does not mean forensic perfection. The protagonist may miss questions, misread evidence, need to revisit a source, or act before certainty.
+    blocking: false
+  cross_world_similarity:
+    description: Similarities between Real and Dream must be sparse, investigated, and classified as unconfirmed until evidence supports a relation.
+    blocking: true
+
+style_metrics:
+  paragraph_fragmentation:
+    short_paragraph_max_chars: 45
+    consecutive_short_paragraphs_warn: 3
+    consecutive_short_paragraphs_block: 5
+    single_sentence_paragraph_ratio_warn: 0.45
+    single_sentence_paragraph_ratio_block: 0.62
+  rhetorical_patterns:
+    patterns:
+      - "Không phải"
+      - "Mà là"
+      - "Chính vì"
+      - "Đáng sợ nhất"
+    repeated_pattern_warn_per_3000_chars: 3
+    repeated_pattern_block_per_3000_chars: 6
+  cliffhanger:
+    block_repeated_major_mystery_escalation_count: 4
+
+opening_arc_overrides:
+  chapters: "1-10"
+  max_major_mystery_escalations_per_5_chapters: 3
+  require_at_least_one_non_mystery_progress_chapter_per_5: true
+  require_real_world_agency_before_cross_world_confirmation: true
+
+receipt_contract:
+  chapter_path: "receipts/narrative-quality-ch{chapter:04d}.yaml"
+  batch_path: "receipts/narrative-quality-batch.yaml"
+  required_status: PASS
+  semantic_gate_values:
+    - PASS
+    - HOLD
+    - NOT_APPLICABLE
+  not_applicable_requires_reason: true
