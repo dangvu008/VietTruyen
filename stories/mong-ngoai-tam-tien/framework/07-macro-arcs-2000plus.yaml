@@ -1,0 +1,37 @@
+schema_version: 1
+status: PLANNED
+target_chapters: 2000_plus
+macro_arcs:
+  - id: M01
+    range: [1, 100]
+    focus: dream_continuity_real_world_verification_first_steps_into_cultivation
+  - id: M02
+    range: [101, 300]
+    focus: loose_cultivator_survival_first_market_sect_contacts_and_wider_travel
+  - id: M03
+    range: [301, 600]
+    focus: foundation_building_region_conflicts_deeper_dream_geography_and_old_records
+  - id: M04
+    range: [601, 900]
+    focus: multi_region_journey_major_factions_identity_of_dream_walking_begins_to_matter
+  - id: M05
+    range: [901, 1200]
+    focus: old_civilization_layers_history_gaps_and_first_hard_evidence_of_recurring_resets
+  - id: M06
+    range: [1201, 1500]
+    focus: dream_world_crisis_ancient_survivor_interests_and_cost_of_two_world_connection
+  - id: M07
+    range: [1501, 1800]
+    focus: heavenly_order_pressure_inheritance_fragments_and_rejection_of_predecessor_limits
+  - id: M08
+    range: [1801, 2100]
+    focus: build_new_path_alliances_losses_and_direct_conflict_with_reset_mechanism
+  - id: M09
+    range: [2101, 2400]
+    focus: endgame_can_expand_based_on_story_growth_without_forcing_exact_chapter_count
+rules:
+  - ranges_are_guides_not_fixed_scene_counts
+  - every_100_chapters_requires_arc_health_review
+  - every_macro_arc_must_change_main_worldview_relationships_and_capabilities
+  - dream_mystery_must_not_replace_cultivation_adventure_or_human_stories
+  - no_arc_exists_only_to_deliver_one_power_up
