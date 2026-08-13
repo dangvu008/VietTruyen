@@ -1,0 +1,38 @@
+schema_version: 1
+status: CANON_CANDIDATE
+name: Luc_Tram
+opening_age: 16
+origin: Thanh_Khe
+family: medicinal_herb_household
+starting_state: mortal
+spirit_root: PLANNED_four_spirit_root
+personality:
+  cautious: true
+  calculates_risk: true
+  decisive_when_kill_is_required: true
+  omniscient: false
+  may_be_wrong: true
+  may_miss_questions: true
+  values_family_and_debts: true
+humor_sources:
+  - family_life
+  - supporting_characters
+  - mundane_contrast
+  - reasonable_misunderstandings
+initial_goals:
+  - understand_dream_walking
+  - protect_self_and_family
+  - explore_world_beyond_Thanh_Khe
+  - find_cultivation_path
+long_arc:
+  - mortal_explorer
+  - survival_cultivator
+  - independent_path_seeker
+  - discoverer_of_historical_cycles
+  - inheritor_who_improves_predecessor_path
+  - challenger_of_old_limitations
+hard_rules:
+  - no_unearned_power
+  - no_enemy_stupidity_for_main_win
+  - no_perfect_investigator_behavior
+  - no_main_only_world_causality
