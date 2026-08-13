@@ -9,18 +9,96 @@ This story project is the repository-backed source of truth for future story ses
 Before planning or writing:
 1. `manifest.yaml`
 2. `canon/story-framework.md`
-3. `state/current-state.yaml`
-4. `ledgers/open-threads.yaml`
-5. `ledgers/knowledge.yaml`
-6. current arc planning
-7. recent accepted chapters
-8. retrieval results for entities/threads referenced by the chapter contract
+3. run `python scripts/story-memory.py init` if memory DB is absent
+4. retrieve story memory for the target chapter
+5. `state/current-state.yaml`
+6. `ledgers/open-threads.yaml`
+7. `ledgers/knowledge.yaml`
+8. current arc planning
+9. recent accepted chapters
+10. retrieval results for entities/threads referenced by the chapter contract
 
 ## Current migration state
 
 The framework is `CANON_CANDIDATE`.
-The archived Chapters 1–5 are `DRAFT / NON_CANON / PIPELINE_BYPASSED`.
+The archived/revised Chapters 1–6 are `DRAFT / NON_CANON / HOLD_FOR_REVISION` until all gates pass.
 They are evidence of prior drafting only and MUST NOT be ingested as accepted narrative state until they pass the proper pipeline.
+
+## Long-horizon memory — mandatory
+
+Every story has its own memory namespace and SQLite database. For this story:
+
+```text
+stories/mong-ngoai-tam-tien/memory/story.db
+```
+
+The memory engine is:
+
+```bash
+python scripts/story-memory.py
+```
+
+Raw accepted prose is the highest narrative evidence. Event/state/knowledge/graph data are projections and must retain provenance.
+
+Before drafting a new chapter/batch, retrieve relevant memory rather than relying on chat context:
+
+```bash
+python scripts/story-memory.py retrieve \
+  --target-chapter <N> \
+  --query "<chapter/arc goal and relevant entities>" \
+  --entity <entity-id> \
+  --output <context-file>
+```
+
+After a chapter is accepted, and only after acceptance:
+
+```text
+accepted prose
+→ memory ingest
+→ accepted events
+→ current-state projection
+→ knowledge layers
+→ graph edges
+→ open-thread synchronization
+```
+
+After each accepted batch:
+
+```bash
+python scripts/story-memory.py rebuild
+python scripts/story-memory.py checkpoint --chapter <last-accepted-chapter>
+```
+
+The memory connectivity receipt must verify that accepted evidence only was ingested, knowledge layers were preserved, timelines are complete, graph edges have provenance, and rebuilt state matches events. Missing or inconsistent memory evidence = HOLD.
+
+### Memory knowledge layers
+
+Never merge these layers:
+- `objective_truth`
+- `reader_knowledge`
+- `character_knowledge`
+- `belief_or_rumor`
+
+The protagonist's suspicion, resemblance, rumor, dream interpretation, or cross-world similarity is not objective truth.
+
+### Dream/Reality memory
+
+Track separately:
+- `REAL_TIMELINE`
+- `DREAM_TIMELINE`
+- `CROSS_WORLD_RELATIONS`
+
+Cross-world relations remain `UNCONFIRMED_RELATION` until independently supported by accepted evidence.
+
+### Memory health
+
+Major/deep audits must record memory health. Use `story-memory.py health` after benchmark/audit results are available.
+
+- overall `>= 0.95`: normal cadence
+- `0.90–0.95`: degraded; halve the next major-audit interval
+- `< 0.90`: HOLD; rebuild and rerun audit
+
+At deep milestones, cold-memory tests must deliberately retrieve facts from the whole story, including very early chapters, dormant characters, old items, old promises, and long-resolved/long-open threads.
 
 ## Prose hard rules
 
@@ -46,10 +124,6 @@ Track separately: `REAL_TIMELINE`, `DREAM_TIMELINE`, `CROSS_WORLD_RELATIONS`.
 No fixed Real/Dream time ratio may be invented without accepted evidence.
 Cross-world similarities remain `UNCONFIRMED_RELATION` until independently supported.
 A newly introduced Dream clue should not normally be answered immediately in Reality. Require search, cost, failed attempts, delay, or an independent causal source unless an approved exception exists.
-
-## Knowledge authority
-
-Store separately: objective_truth, reader_knowledge, character_knowledge, belief_or_rumor. The protagonist's suspicion is not objective truth.
 
 ## Batch entrypoint — mandatory
 
@@ -97,13 +171,5 @@ Baseline review still applies every 25 chapters, but major memory audits become 
 - From chapter 1000 onward, every 500 chapters (1000, 1500, 2000, 2500, 3000, ...) is a deep integrity audit.
 
 Deep integrity audits must include cold-memory stress testing, projection rebuild/replay, graph and knowledge rebuild checks, long-absent character checks, old-thread/payoff scans, provenance verification, checkpoint-chain verification, and story-wide fact sampling.
-
-## Memory health adaptation
-
-Every major/deep audit records `metrics.overall` as a memory health score.
-
-- `>= 0.95`: normal cadence.
-- `0.90–0.95`: next major audit interval is reduced by 50%.
-- `< 0.90`: HOLD; rebuild memory projections/graph/knowledge and rerun the audit before continuing.
 
 A required audit that is missing, FAIL, HOLD, or below the health threshold blocks the next chapter.
