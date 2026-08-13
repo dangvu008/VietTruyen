@@ -30,11 +30,22 @@ They are evidence of prior drafting only and MUST NOT be ingested as accepted na
 - Dialogue may be short, but long ping-pong sequences must be balanced with action, observation, or narration.
 - Use ancient/fantasy calendar language consistently; avoid modern shorthand such as `Thừa Bình 14`.
 - Mystery may stay unclear; scene orientation may not.
+- Repeated rhetorical templates such as `Không phải X / Mà là Y` are monitored by the rolling narrative-quality gate.
+
+## Identity / time / evidence hard rules
+
+- Age, relative time, calendar year, and elapsed-time claims must reconcile before acceptance.
+- `approximately`, `looks about`, or uncertain records must be explicitly treated as uncertain evidence, never silently used to repair an author inconsistency.
+- A suspicion, resemblance, rumor, coincidence, or protagonist belief MUST NOT be promoted to objective truth without accepted evidence.
+- Careful protagonist behavior must remain fallible: he may ask the wrong question, miss a fact, misread evidence, revisit a source, or act before certainty.
+- A single side character must not become a multi-purpose clue dispenser without a causal reason.
 
 ## Dream/Reality
 
 Track separately: `REAL_TIMELINE`, `DREAM_TIMELINE`, `CROSS_WORLD_RELATIONS`.
 No fixed Real/Dream time ratio may be invented without accepted evidence.
+Cross-world similarities remain `UNCONFIRMED_RELATION` until independently supported.
+A newly introduced Dream clue should not normally be answered immediately in Reality. Require search, cost, failed attempts, delay, or an independent causal source unless an approved exception exists.
 
 ## Knowledge authority
 
@@ -51,11 +62,29 @@ python scripts/storyctl.py begin --count <5|10>
 
 If the adaptive audit gate returns HOLD, DO NOT draft the next chapter. Complete/repair the required memory audit first.
 
+## Per-chapter quality gate — mandatory
+
+After chapter candidate + editorial re-review, create/update the chapter narrative-quality receipt and run the batch quality gate before acceptance:
+
+```bash
+python scripts/narrative-quality-gate.py templates --batch <batch-name>
+python scripts/narrative-quality-gate.py check --batch <batch-name>
+```
+
+The semantic receipt must explicitly evaluate identity/age, calendar/timeline, evidence-vs-inference, knowledge provenance, cross-world causality, coincidence budget, clue density, source concentration, protagonist fallibility, world independence, and item-persistence rules.
+
+A `NOT_APPLICABLE` result requires a written reason. Missing receipt = HOLD.
+
 ## Batch behavior
 
-5 chapters: plan all five; each chapter gets prewrite/review/edit/re-review; use temporary deltas; run batch continuity/repetition/logic audit; run memory connectivity audit; only then accept and save.
+5 chapters: plan all five; each chapter gets prewrite/review/edit/re-review; use temporary deltas; run batch continuity/repetition/logic audit; run narrative-quality batch audit; run memory connectivity audit; only then accept and save.
 
 10 chapters: same as 5 + 5; mini-batch audit after each five; full 10-chapter audit before acceptance.
+
+For Chapters 1–10 specifically:
+- no more than 3 major central-mystery escalations per 5 chapters unless explicitly approved;
+- at least one chapter per 5 must progress through ordinary life, relationship, practical investigation, exploration, failure, or preparation rather than escalating the central mystery;
+- cross-world confirmation requires real-world agency before being treated as meaningful evidence.
 
 ## Adaptive long-horizon gates
 
