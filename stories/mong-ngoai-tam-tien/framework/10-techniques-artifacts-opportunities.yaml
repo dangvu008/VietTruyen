@@ -1,0 +1,38 @@
+schema_version: 1
+status: CANON_CANDIDATE
+initial_cultivation_method:
+  name: Thanh_Nguyen_Duong_Khi_Quyet
+  class: ordinary_foundation_method
+  growth: gradually_revised_from_real_and_dream_experience
+signature_technique_seeds:
+  Tang_Tuc:
+    role: concealment_and_information_denial
+  Quan_Phap:
+    role: observe_patterns_weaknesses_and_spell_structure
+  Doan_Mach:
+    role: precision_disruption_seed
+    status: PLANNED
+future_dream_path:
+  principle: experience_and_knowledge_first_not_free_power
+  possible_growth:
+    - controlled_dream_entry
+    - memory_retention_training
+    - perception_across_dream_layers
+    - limited_interference_after_costly_mastery
+artifact_philosophy:
+  - few_signature_items_with_long_history
+  - repair_upgrade_and_reinterpretation_over_constant_replacement
+  - artifacts_need_origin_cost_limit_and_counterplay
+opportunity_types:
+  - incomplete_manual
+  - damaged_artifact
+  - teacher_with_conditions
+  - dangerous_information
+  - map_or_route
+  - craft_or_medicine_knowledge
+  - debt_based_opportunity
+  - failed_opportunity_with_later_value
+forbidden:
+  - instant_heavenly_manual_that_solves_all_problems
+  - dream_world_as_free_loot_storage
+  - artifact_without_cost_or_limit
