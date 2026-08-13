@@ -40,17 +40,41 @@ No fixed Real/Dream time ratio may be invented without accepted evidence.
 
 Store separately: objective_truth, reader_knowledge, character_knowledge, belief_or_rumor. The protagonist's suspicion is not objective truth.
 
+## Batch entrypoint — mandatory
+
+Before opening any new 5/10 chapter batch, run:
+
+```bash
+python scripts/adaptive-audit-gate.py
+python scripts/storyctl.py begin --count <5|10>
+```
+
+If the adaptive audit gate returns HOLD, DO NOT draft the next chapter. Complete/repair the required memory audit first.
+
 ## Batch behavior
 
 5 chapters: plan all five; each chapter gets prewrite/review/edit/re-review; use temporary deltas; run batch continuity/repetition/logic audit; run memory connectivity audit; only then accept and save.
 
 10 chapters: same as 5 + 5; mini-batch audit after each five; full 10-chapter audit before acceptance.
 
-## Long-horizon gates
+## Adaptive long-horizon gates
 
-- 25: drift audit
-- 100: full memory audit
-- 500: deep rebuild + benchmark
-- 1000: archival integrity audit
+Baseline review still applies every 25 chapters, but major memory audits become denser as story length grows:
 
-Fail => next chapter blocked.
+- Chapters 1–1000: major audit every 100 chapters.
+- Chapters 1001–1500: major audit every 75 chapters.
+- Chapters 1501–3000: major audit every 50 chapters.
+- Above 3000: major audit every 25 chapters.
+- From chapter 1000 onward, every 500 chapters (1000, 1500, 2000, 2500, 3000, ...) is a deep integrity audit.
+
+Deep integrity audits must include cold-memory stress testing, projection rebuild/replay, graph and knowledge rebuild checks, long-absent character checks, old-thread/payoff scans, provenance verification, checkpoint-chain verification, and story-wide fact sampling.
+
+## Memory health adaptation
+
+Every major/deep audit records `metrics.overall` as a memory health score.
+
+- `>= 0.95`: normal cadence.
+- `0.90–0.95`: next major audit interval is reduced by 50%.
+- `< 0.90`: HOLD; rebuild memory projections/graph/knowledge and rerun the audit before continuing.
+
+A required audit that is missing, FAIL, HOLD, or below the health threshold blocks the next chapter.
