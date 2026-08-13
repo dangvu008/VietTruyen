@@ -14,10 +14,17 @@ max_batch_size: 10
 
 memory:
   engine: scripts/story-memory.py
+  durable_writer: scripts/memory-ledger.py
   database: memory/story.db
+  durable_ledgers:
+    - memory/events.jsonl
+    - memory/knowledge.jsonl
+    - memory/edges.jsonl
+    - memory/threads.jsonl
   policy: config/story-os/long-horizon-memory.yaml
   status: bootstrap_required
   raw_accepted_prose_is_authority: true
+  sqlite_is_derived_cache: true
   per_story_namespace: true
   retrieval_modes:
     - lexical_fts5
