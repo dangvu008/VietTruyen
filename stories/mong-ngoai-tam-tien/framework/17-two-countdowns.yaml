@@ -1,0 +1,20 @@
+schema_version: 1
+status: CANON_CANDIDATE
+dream_world_countdown:
+  cause: residual_origin_of_first_dream_master_is_being_exhausted
+  early_symptoms:
+    - village_or_small_area_disappears
+    - road_or_landmark_vanishes_and_memories_shift
+    - white_mist_consumes_unstable_zones
+    - sleepers_fail_to_wake
+  advanced_symptom: existence_traces_themselves_can_disappear
+  reveal_timing: slow_long_horizon
+real_world_countdown:
+  cause: next_heavenly_dao_epoch_purge_is_approaching
+  early_visibility: none_or_ambiguous
+  mid_visibility: abnormal_era_patterns_and_historical_evidence
+  late_visibility: direct_systemic_pressure
+narrative_rule:
+  protagonist_does_not_know_either_countdown_early: true
+  countdowns_must_not_create_early_save_world_motivation: true
+  immediate_survival_and_current_arc_stakes_take_priority: true
