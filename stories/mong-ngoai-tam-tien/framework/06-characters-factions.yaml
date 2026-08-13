@@ -1,0 +1,34 @@
+schema_version: 1
+status: CANON_CANDIDATE
+supporting_character_rules:
+  - each_recurring_character_needs_personal_goal
+  - no_character_exists_only_to_explain_lore
+  - allies_can_disagree_with_main
+  - mentors_are_limited_not_omniscient
+  - comic_relief_keeps_real_stakes
+opening_characters:
+  Luc_Minh_Son:
+    role: father
+    function: family_anchor_and_practical_worldview
+  Luc_Mother:
+    role: mother
+    function: family_anchor_and_mundane_humor
+  Ton_That:
+    role: dream_world_old_traveler
+    function: imperfect_witness_not_clue_machine
+  Ky_Tung:
+    role: wandering_swordsman_contact
+    function: independent_thread_and_external_world_link
+faction_layers:
+  - mortal_merchants_villages_and_local_clans
+  - loose_cultivators_and_small_markets
+  - small_and_mid_sects
+  - state_level_cultivation_powers
+  - major_sects_and_old_lineages
+  - ancient_survivor_interests
+  - forces_related_to_heavenly_order
+antagonist_rules:
+  - villains_need_interests_not_evil_labels
+  - some_conflicts_end_without_killing
+  - recurring_antagonists_can_evolve
+  - high_level_enemies_must_exist_independently_of_main
