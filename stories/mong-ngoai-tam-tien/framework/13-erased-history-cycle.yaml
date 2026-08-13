@@ -1,0 +1,22 @@
+schema_version: 1
+status: CANON_CANDIDATE
+mystery:
+  visible_pattern:
+    - sect_histories_span_tens_of_thousands_of_years
+    - holy_lands_reach_hundreds_of_thousands
+    - ancient_clans_approach_one_million_years
+    - records_before_that_boundary_become_abruptly_ambiguous
+  public_explanation: records_decay_because_time_is_too_long
+  hidden_truth: history_has_been_erased_multiple_times_by_recurrent_epoch_purges
+  current_civilization_epoch_number:
+    status: UNKNOWN
+    allowed_examples: [7, 12, 19]
+    exact_value_locked: false
+reveal_policy:
+  early_story: only_gaps_anomalies_and_inconsistent_archaeology
+  mid_story: evidence_of_multiple_erased_civilizations
+  late_story: connect_gaps_to_heavenly_dao_purge_cycle
+  exact_cycle_count: do_not_reveal_until_author_lock
+forbidden_agent_actions:
+  - give_exact_epoch_number_without_authority
+  - make_every_ancient_ruin_directly_about_the_same_reset
