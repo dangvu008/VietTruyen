@@ -1,0 +1,10 @@
+schema_version: 1
+status: PLANNED
+unknowns:
+  - dream_seed_true_nature
+  - dream_world_true_nature
+  - tang_tien_relation
+  - death_in_dream_consequence
+  - prior_dream_walkers
+agent_rule: do_not_invent_unknown_answers
+cross_world_similarity_default: UNCONFIRMED_RELATION
