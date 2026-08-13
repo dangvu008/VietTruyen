@@ -1,0 +1,16 @@
+schema_version: 1
+status: CANON_CANDIDATE
+prose:
+  cohesive_paragraphs: true
+  avoid_camera_cut_fragmentation: true
+  avoid_one_sentence_paragraph_chains: true
+  avoid_repeated_not_x_but_y_template: true
+dialogue:
+  character_specific: true
+  break_long_ping_pong_with_action_or_observation: true
+philosophy:
+  arise_from_scene_and_consequence: true
+  avoid_quote_like_aphorism_spam: true
+calendar:
+  ancient_form_required: true
+  modern_shorthand_forbidden: true
