@@ -1,0 +1,18 @@
+schema_version: 1
+status: CANON
+name: Luc_Tram
+age_opening: 16
+origin: Thanh_Khe
+family_trade: medicinal_materials
+traits:
+  cautious: high
+  practical: high
+  decisive_when_needed: true
+  curiosity: high
+  humor: light
+limits:
+  omniscient: false
+  perfect_reasoning: false
+  may_forget_or_miss_questions: true
+  may_be_deceived: true
+  may_revisit_sources: true
