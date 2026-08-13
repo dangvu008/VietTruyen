@@ -1,0 +1,62 @@
+schema_version: 1
+name: TRUYEN_PREPRODUCTION_PIPELINE
+purpose: research_market_and_genre_then_develop_and_validate_original_long_form_story_concepts_before_story_bible
+modes:
+  A_EXISTING_IDEA:
+    flow: [idea_intake, concept_validation, story_dna, story_bible, long_term_outline, arc_volume, chapter_pipeline]
+  B_DISCOVERY:
+    flow: [market_intelligence, genre_research, reference_analysis, idea_mining, concept_generation, concept_evaluation, red_team, shortlist, longevity_stress_test, approval, story_dna, story_bible, long_term_outline, arc_volume, chapter_pipeline]
+stages:
+  market_intelligence:
+    output: preproduction/market_profile.yaml
+    current_web_required: true
+    rule: infer_reader_needs_and_patterns_not_copy_current_hits
+  genre_research:
+    output_dir: preproduction/genre/
+    required_outputs: [genre_definition.md, reader_expectations.md, genre_conventions.md, common_tropes.md, plot_structures.md, pacing_patterns.md, character_archetypes.md, worldbuilding_requirements.md, common_failures.md, terminology.md, reference_works.md]
+    classify: [genre_invariants, breakable_conventions, saturated_cliches]
+  reference_analysis:
+    output: preproduction/reference_patterns.yaml
+    abstraction_only: true
+    forbid_plot_copying: true
+  idea_mining:
+    output: preproduction/idea_pool.yaml
+    default_seed_count: 50
+  concept_generation:
+    output: preproduction/concepts.yaml
+    required_fields: [who, want, problem, hook, mechanism, escalation, longevity, differentiation]
+  concept_evaluation:
+    output: preproduction/concept_scores.yaml
+    weighted_score:
+      hook: 15
+      market_fit: 15
+      differentiation: 10
+      character_potential: 10
+      world_potential: 10
+      escalation: 15
+      longevity: 15
+      conflict: 5
+      climax: 5
+  red_team:
+    output: preproduction/red_team.yaml
+    purpose: actively_search_for_failure_modes_not_praise
+  shortlist:
+    output: preproduction/shortlist.yaml
+    target_count: [3, 5]
+    auto_select_top1: false
+  longevity_stress_test:
+    output: preproduction/longform_stress_test.yaml
+    checkpoints: [1, 10, 30, 100, 300, 500, 1000]
+    questions: [current_goal, world_expansion, new_conflict_source, remaining_mechanic_fuel, reader_reason_to_continue]
+  approval:
+    user_or_explicit_agent_approval_required: true
+  story_dna:
+    output: preproduction/story_dna.yaml
+    required_fields: [core_fantasy, reader_promise, emotional_engine, progression_engine, novelty, avoid]
+gates:
+  no_story_bible_before_concept_pass: true
+  no_outline_before_story_dna: true
+  no_auto_writing_after_shortlist: true
+  red_team_required: true
+  longevity_test_required_for_long_form: true
+  reference_patterns_must_be_abstract: true
