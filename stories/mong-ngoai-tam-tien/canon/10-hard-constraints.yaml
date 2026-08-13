@@ -1,0 +1,28 @@
+schema_version: 1
+constraints:
+  dream:
+    independent_world: true
+    fixed_time_ratio: false
+    system_interface: false
+    direct_power_grant: false
+    cross_world_similarity_is_proof: false
+  protagonist:
+    omniscient: false
+    may_miss_questions: true
+    may_reason_incorrectly: true
+    must_verify_major_inferences: true
+  adventure:
+    forbid_default_loop: secret_realm_fight_loot_breakthrough
+    rewards_may_include: [knowledge, relationship, map, survival, failure, clue, skill, perspective]
+  prose:
+    one_paragraph_one_progression_unit: true
+    avoid_camera_cut_prose: true
+    avoid_one_sentence_paragraph_chains: true
+    avoid_dialogue_ping_pong: true
+    avoid_modern_calendar_shorthand: true
+  memory:
+    separate_real_timeline: true
+    separate_dream_timeline: true
+    separate_cross_world_relations: true
+    separate_objective_reader_character_belief_knowledge: true
+    raw_accepted_prose_is_highest_history_evidence: true
