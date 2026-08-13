@@ -1,0 +1,34 @@
+schema_version: 1
+story_id: mong-ngoai-tam-tien
+title: Mộng Ngoại Tầm Tiên
+status: migration
+framework_status: canon_candidate
+latest_accepted_chapter: 0
+next_chapter: 1
+draft_archive_through_chapter: 5
+draft_archive_status: non_canon_pipeline_bypassed
+current_volume: V01
+current_arc: ARC01
+default_batch_size: 5
+max_batch_size: 10
+milestone_audits:
+- 25
+- 100
+- 500
+- 1000
+required_ledgers:
+- event_log
+- current_state
+- knowledge
+- open_threads
+- real_timeline
+- dream_timeline
+- cross_world_relations
+- arc_fingerprint
+- reward_history
+authority_order:
+- canon_static
+- canon_dynamic
+- published_evidence
+- planning
+- derived_runtime

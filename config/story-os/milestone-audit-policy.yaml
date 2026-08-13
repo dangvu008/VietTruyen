@@ -1,0 +1,64 @@
+schema_version: 1
+milestones:
+  25:
+    name: drift_audit
+    checks:
+      - character_voice_drift
+      - prose_style_drift
+      - arc_progress
+      - unresolved_thread_age
+      - reward_pattern_repetition
+  100:
+    name: full_memory_audit
+    block_next_chapter_on_fail: true
+    checks:
+      - retrieval_recall
+      - temporal_state_accuracy
+      - graph_consistency
+      - knowledge_boundary_accuracy
+      - open_thread_completeness
+      - real_dream_timeline_consistency
+      - inventory_power_state
+      - relationship_state
+      - summary_vs_raw_conflicts
+      - orphan_fact_detection
+      - duplicate_entity_detection
+      - style_memory_drift
+    thresholds:
+      retrieval_recall_at_10_min: 0.95
+      temporal_state_accuracy: 1.0
+      knowledge_leak_errors_max: 0
+      unresolved_thread_coverage_min: 0.99
+      raw_summary_conflicts_max: 0
+  500:
+    name: deep_rebuild_and_benchmark
+    block_next_chapter_on_fail: true
+    actions:
+      - rebuild_projections_from_raw_and_event_log
+      - compare_rebuilt_state_with_live_state
+      - run_retrieval_benchmark
+      - inspect_long_absent_characters
+      - inspect_very_old_open_threads
+      - arc_fingerprint_repetition_scan
+      - provenance_integrity_scan
+  1000:
+    name: archival_integrity_audit
+    block_next_chapter_on_fail: true
+    actions:
+      - full_cold_memory_stress_test
+      - sample_very_old_chapters
+      - verify_provenance_links
+      - verify_cross_world_timeline
+      - verify_checkpoint_chain
+      - verify_rebuildability
+      - verify_archive_hashes
+
+failure_policy:
+  on_required_audit_fail: HOLD
+  repair:
+    - rebuild_from_raw_accepted_prose
+    - replay_event_log
+    - rebuild_graph
+    - rebuild_knowledge_projection
+    - rerun_benchmark
+  unlock_next_chapter_only_after: PASS

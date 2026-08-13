@@ -1,0 +1,17 @@
+schema_version: 1
+story_id: mong-ngoai-tam-tien
+authority: canon_dynamic
+threads: []
+migration_candidates:
+- id: ha_ha_time_gap
+  status: proposal_from_noncanon_draft
+  note: Hạ Hà appears to have elapsed decades between dream visits.
+- id: missing_dream_memory
+  status: proposal_from_noncanon_draft
+  note: Possible missing Dream experiences; do not promote without accepted evidence.
+- id: wooden_token
+  status: proposal_from_noncanon_draft
+  note: Three/five-mark wooden token motif from draft chapters.
+- id: silver_moss
+  status: proposal_from_noncanon_draft
+  note: Cross-world silver-gray moss candidate from revised draft direction.

@@ -1,0 +1,14 @@
+schema_version: 1
+active_story: mong-ngoai-tam-tien
+engine:
+  name: VietTruyenAI
+  repository: dangvu008/VietTruyenAI
+  branch: main
+  local_path: .engine/VietTruyenAI
+story_os:
+  default_batch_size: 5
+  max_batch_size: 10
+  auto_review: true
+  auto_edit: true
+  auto_memory_commit_after_pass: true
+  fail_closed: true

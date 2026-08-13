@@ -1,0 +1,17 @@
+schema_version: 1
+story_id: mong-ngoai-tam-tien
+as_of_accepted_chapter: 0
+status: EMPTY_ACCEPTED_STATE
+note: No chat-written chapter has passed the repository pipeline yet.
+protagonist:
+  name: Lục Trầm
+  age_opening: 16
+  current_location: null
+  realm: phàm nhân
+  inventory: []
+  injuries: []
+timeline:
+  real:
+    status: not_initialized_from_accepted_prose
+  dream:
+    status: not_initialized_from_accepted_prose

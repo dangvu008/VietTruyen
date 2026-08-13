@@ -1,0 +1,53 @@
+schema_version: 1
+defaults:
+  batch_size: 5
+  max_batch_size: 10
+  fail_closed: true
+  auto_edit_before_output: true
+  auto_rereview_after_edit: true
+  auto_commit_after_all_gates_pass: true
+
+chapter_pipeline:
+  - load_context
+  - prewrite_contract
+  - draft
+  - deterministic_checks
+  - editorial_review
+  - edit
+  - re_review
+  - chapter_candidate
+  - extract_temp_delta
+
+chapter_gates:
+  - canon_consistency
+  - timeline_continuity
+  - knowledge_boundary
+  - character_state
+  - inventory_and_resources
+  - power_progression
+  - prose_flow
+  - paragraph_fragmentation
+  - reader_orientation
+  - dream_continuity
+  - main_fallibility
+
+batch_5_pipeline:
+  - cross_chapter_continuity
+  - causality_audit
+  - character_trajectory_audit
+  - arc_progress_audit
+  - mystery_management_audit
+  - repetition_and_motif_audit
+  - prose_style_audit
+  - memory_connectivity_audit
+  - regression_review
+  - atomic_accept
+  - checkpoint
+
+batch_10_pipeline:
+  first: chapters_1_to_5
+  middle_gate: mini_batch_review
+  second: chapters_6_to_10
+  second_gate: mini_batch_review
+  final_gate: full_10_chapter_review
+  commit: atomic_only_after_final_pass
