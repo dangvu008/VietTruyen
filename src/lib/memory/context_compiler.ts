@@ -65,16 +65,24 @@ function decorate(
  * Important: retrieval evidence is not equivalent to prose instructions.
  * The compiler prevents the writer from literalizing every retrieved trait/lore
  * item merely to demonstrate that it remembers the story.
+ *
+ * Character knowledge shares the existing state-pack transport, but remains a
+ * distinct semantic namespace via sourceType=character_knowledge. High-confidence
+ * epistemic boundaries are MUST KNOW; low-confidence beliefs are DO NOT FORCE so
+ * retrieval can never silently upgrade suspicion/rumor into certain knowledge.
  */
 export function compileStoryContext(
   memory: HybridMemoryResult,
   options: ContextCompilerOptions = {}
 ): CompiledStoryContext {
   const limits = { ...DEFAULTS, ...options };
+  const objectiveState = memory.statePack.filter((item) => item.sourceType !== 'character_knowledge');
+  const characterKnowledge = memory.statePack.filter((item) => item.sourceType === 'character_knowledge');
 
   const mustKnowSource = dedupe([
     ...memory.canonPack,
-    ...memory.statePack,
+    ...objectiveState,
+    ...characterKnowledge.filter((item) => item.score >= 0.8),
     ...memory.hookPack.filter((item) => item.score >= 0.85),
   ]);
 
@@ -91,12 +99,21 @@ export function compileStoryContext(
   const doNotForceSource = dedupe([
     ...memory.semanticPack.filter((item) => item.score < 0.65),
     ...memory.graphPack.filter((item) => item.score < 0.7),
+    ...characterKnowledge.filter((item) => item.score < 0.8),
     ...memory.hookPack.filter((item) => item.score < 0.85),
   ]);
 
   const mustKnow = rank(mustKnowSource)
     .slice(0, limits.maxMustKnow)
-    .map((item) => decorate(item, 'must_know', 'Canon/current state or high-priority active hook.'));
+    .map((item) =>
+      decorate(
+        item,
+        'must_know',
+        item.sourceType === 'character_knowledge'
+          ? 'Character epistemic boundary: preserve what this character knows or believes separately from objective world truth.'
+          : 'Canon/current state or high-priority active hook.'
+      )
+    );
 
   const forbidden = rank(forbiddenSource)
     .slice(0, limits.maxForbidden)
@@ -118,7 +135,9 @@ export function compileStoryContext(
       decorate(
         item,
         'do_not_force',
-        'Valid background context, but do not mention or act it out solely because it was retrieved.'
+        item.sourceType === 'character_knowledge'
+          ? 'Low-certainty epistemic context. Never upgrade it into certain knowledge merely because it was retrieved.'
+          : 'Valid background context, but do not mention or act it out solely because it was retrieved.'
       )
     );
 
