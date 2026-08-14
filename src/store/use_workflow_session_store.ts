@@ -58,6 +58,9 @@ export const useWorkflowSessionStore = create<WorkflowSessionState>((set, get) =
             artifacts: {
               hasPlanningResult: Boolean(nextSession.artifacts.planningResult),
               hasChapterWriteResult: Boolean(nextSession.artifacts.chapterWriteResult),
+              hasGroundedProseGate: Boolean(nextSession.artifacts.groundedProseGate),
+              groundedProseDecision: nextSession.artifacts.groundedProseGate?.decision,
+              groundedProseBlockers: nextSession.artifacts.groundedProseGate?.blockers,
               draftChars: nextSession.artifacts.draftText?.length ?? 0,
               chapterContentChars: nextSession.artifacts.chapterWriteResult?.content.length ?? 0,
             },
@@ -88,9 +91,18 @@ export const useWorkflowSessionStore = create<WorkflowSessionState>((set, get) =
         chapterId: intent.chapterId,
         step: session.step,
         error: session.error,
+        groundedProseDecision: session.artifacts.groundedProseGate?.decision,
+        groundedProseBlockers: session.artifacts.groundedProseGate?.blockers,
         metrics: session.metrics,
       },
     });
+
+    // Fail closed for the grounded prose gate. StoryWorkspace persistence paths
+    // already treat rejected promises as failed/partial generation and therefore
+    // do not mark the chapter generation as successfully completed.
+    if (session.step === 'failed' && session.error?.code === 'grounded_prose_gate_failed') {
+      throw new Error(session.error.message);
+    }
 
     return session;
   },
