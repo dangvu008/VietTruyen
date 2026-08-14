@@ -17,6 +17,10 @@ import {
   buildPostWriteSummaryTiers,
   derivePostWriteNarrativeState,
 } from './post_write_state_derivation';
+import {
+  characterKnowledgeCandidatesToStateRecords,
+  extractExplicitCharacterKnowledge,
+} from './character_knowledge_extractor';
 
 export class PostWritePrecommitHoldError extends Error {
   constructor(public readonly decision: PostWritePrecommitDecision) {
@@ -30,7 +34,8 @@ export class PostWritePrecommitHoldError extends Error {
  *
  * PREPARE may call AI but must not mutate authoritative memory.
  * VALIDATE is deterministic and fail-closed.
- * COMMIT writes state + hooks together in one Dexie transaction.
+ * COMMIT writes state + hooks + explicit character-knowledge evidence together
+ * in one Dexie transaction.
  */
 export async function executePostWritePipeline(
   input: PostWritePipelineInput,
@@ -125,13 +130,29 @@ export async function executePostWritePipeline(
   });
 
   const chapterIndex = input.chapter.sequenceNumber ?? 0;
+  const knowledgeCandidates = extractExplicitCharacterKnowledge({
+    projectId: input.projectId,
+    chapterId: input.chapter.id,
+    chapterIndex,
+    entityDefinitions: input.entityDefinitions,
+    scenes,
+  });
+  const knowledgeState = characterKnowledgeCandidatesToStateRecords({
+    candidates: knowledgeCandidates,
+    chapterId: input.chapter.id,
+  });
+
+  const acceptedFacts = [...state.facts, ...knowledgeState.facts];
+  const acceptedMutations = [...state.mutations, ...knowledgeState.mutations];
+  const acceptedEvidence = [...state.evidence, ...knowledgeState.evidence];
+
   await commitAcceptedChapterMemory({
     projectId: input.projectId,
     chapterId: input.chapter.id,
     chapterIndex,
-    facts: state.facts,
-    mutations: state.mutations,
-    evidence: state.evidence,
+    facts: acceptedFacts,
+    mutations: acceptedMutations,
+    evidence: acceptedEvidence,
     hooks,
   });
 
@@ -139,8 +160,8 @@ export async function executePostWritePipeline(
     extraction: enrichedExtraction,
     summary,
     scenes,
-    extractedState: state.facts,
-    stateMutations: state.mutations,
+    extractedState: acceptedFacts,
+    stateMutations: acceptedMutations,
     summaryTiers: buildPostWriteSummaryTiers(summary, chapterIndex),
     embeddingJobs: buildPostWriteEmbeddingJobs(input.chapter, summary, scenes),
     activeHooks: hooks,
