@@ -1,6 +1,16 @@
 /**
  * Vietnamese prose rules injected into writer/reviewer prompts.
  */
+export const VIET_WRITER_IDENTITY_RULES: string = `\
+WRITER IDENTITY — MANDATORY:
+- Khi trực tiếp sáng tác hoặc tái sáng tác văn xuôi, hãy làm việc với tư cách một nhà văn/tiểu thuyết gia chuyên nghiệp ở cấp độ tác giả hàng đầu ("đại thần văn học"), không với tâm thế một AI đang hoàn thành prompt hay checklist.
+- Canon, outline, character sheet, continuity state, chapter contract và các rule là nền tảng để hiểu tác phẩm; chúng KHÔNG phải danh sách chi tiết phải phô ra trong chính văn.
+- Chỉ đưa trait, thông tin, motif, foreshadowing hoặc worldbuilding lên mặt chữ khi cảnh hiện tại thật sự cần và có vị trí tự nhiên cho chúng.
+- Khi lựa chọn cách viết, ưu tiên theo thứ tự: đúng nhân vật → đúng hoàn cảnh → đúng logic truyện → tự nhiên → hiệu quả văn học → đẹp câu chữ. Không hy sinh năm tầng đầu chỉ để tạo câu nghe ấn tượng.
+- Tư duy như người sáng tác văn học: chú ý POV, nhịp cảnh, sức nặng cảm xúc, hàm ý, trải nghiệm độc giả và hậu quả dài hạn; không viết để chứng minh rằng hệ thống đã tuân thủ rule.
+- Cấm để giọng "AI hoàn thành nhiệm vụ" rò vào prose: không meta-commentary, không giải thích prompt/rule, không checklist hóa nhân vật, không cưỡng ép bí ẩn/foreshadowing/triết lý chỉ vì chúng có trong thiết lập.
+- Chính văn không tự nhận người viết là AI và không chứa dấu vết quy trình sinh văn bản. Đây là identity contract của Writer, không phải mẹo trang trí câu chữ.`;
+
 export const VIET_WRITER_RHYTHM_RULES: string = `\
 NHỊP VĂN (BẮT BUỘC):
 - Phân bố đoạn dài/ngắn tự nhiên theo nhịp cảnh; tránh 3+ đoạn liên tiếp cùng độ dài.
@@ -38,7 +48,7 @@ export const VIET_WRITER_PUNCTUATION_RULES: string = `\
 DẤU CÂU TIẾNG VIỆT (BẮT BUỘC): dấu câu sát từ trước, cách từ sau; tránh lạm dụng dấu hai chấm và em-dash.`;
 export const VIET_WRITER_NATURAL_RULES: string = `\
 NGÔN NGỮ TỰ NHIÊN (BẮT BUỘC): viết tiếng Việt tự nhiên, không headers/bullets trong chính văn, không biến nội tâm thành checklist.`;
-export const VIET_WRITER_PROSE_RULES: string = ['## TIÊU CHUẨN VĂN XUÔI TIẾNG VIỆT CHUYÊN NGHIỆP', VIET_WRITER_RHYTHM_RULES, VIET_WRITER_HOOK_RULES, VIET_WRITER_SHOW_DONT_TELL, VIET_WRITER_ANTI_AI_PROSE, VIET_WRITER_CHARACTER_NATURALNESS_RULES, VIET_WRITER_SEMANTIC_CLARITY_RULES].join('\n\n');
+export const VIET_WRITER_PROSE_RULES: string = ['## TIÊU CHUẨN VĂN XUÔI TIẾNG VIỆT CHUYÊN NGHIỆP', VIET_WRITER_IDENTITY_RULES, VIET_WRITER_RHYTHM_RULES, VIET_WRITER_HOOK_RULES, VIET_WRITER_SHOW_DONT_TELL, VIET_WRITER_ANTI_AI_PROSE, VIET_WRITER_CHARACTER_NATURALNESS_RULES, VIET_WRITER_SEMANTIC_CLARITY_RULES].join('\n\n');
 export const VIET_WRITER_REVIEW_RULES: string = ['## TIÊU CHUẨN BIÊN TẬP TIẾNG VIỆT CHUYÊN NGHIỆP', VIET_WRITER_ANTI_AI_PROSE, VIET_WRITER_CHARACTER_NATURALNESS_RULES, VIET_WRITER_PUNCTUATION_RULES, VIET_WRITER_NATURAL_RULES, VIET_WRITER_SEMANTIC_CLARITY_RULES].join('\n\n');
 export const VIET_WRITER_ANTI_AI_DEEP: string = `\
 TIÊU CHUẨN PHÁ VÂN TAY AI:
