@@ -10,6 +10,7 @@ import { enrichChapterMemoryWithAi } from './memory_ai_enricher';
 import { generateChapterSummary } from './chapter_summary_generator';
 import { chunkChapterIntoScenes } from './scene_chunker';
 import { detectPendingHooks } from './pending_hooks_detector';
+import { getOpenHooksForProject } from './pending_hooks_repository';
 import { evaluatePostWritePrecommit, type PostWritePrecommitDecision } from './post_write_precommit_gate';
 import { commitAcceptedChapterMemory } from './accepted_memory_transaction';
 import {
@@ -21,6 +22,7 @@ import {
   characterKnowledgeCandidatesToStateRecords,
   extractExplicitCharacterKnowledge,
 } from './character_knowledge_extractor';
+import { recordAcceptedChapterEntropy } from './narrative_entropy_runtime';
 
 export class PostWritePrecommitHoldError extends Error {
   constructor(public readonly decision: PostWritePrecommitDecision) {
@@ -36,6 +38,8 @@ export class PostWritePrecommitHoldError extends Error {
  * VALIDATE is deterministic and fail-closed.
  * COMMIT writes state + hooks + explicit character-knowledge evidence together
  * in one Dexie transaction.
+ * POST-COMMIT records cheap entropy samples; expensive long-range audit only
+ * runs periodically and is never allowed to invalidate an already committed chapter.
  */
 export async function executePostWritePipeline(
   input: PostWritePipelineInput,
@@ -155,6 +159,21 @@ export async function executePostWritePipeline(
     evidence: acceptedEvidence,
     hooks,
   });
+
+  // Operational/offline audit cache only. Failure here must never corrupt or
+  // roll back authoritative accepted memory that has already committed.
+  try {
+    const openHooks = await getOpenHooksForProject(input.projectId);
+    recordAcceptedChapterEntropy({
+      projectId: input.projectId,
+      chapter: input.chapter,
+      summary,
+      scenes,
+      unresolvedHookCount: openHooks.length,
+    });
+  } catch (error) {
+    console.warn('[SafePostWrite] Narrative entropy sampling skipped:', error);
+  }
 
   return {
     extraction: enrichedExtraction,
