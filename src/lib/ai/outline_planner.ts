@@ -12,7 +12,7 @@
  * Flow: Gather project context → Build prompt for tier → AI generates → Parse JSON → Return
  * Refusal rule: Missing logline or genre → throw with guidance
  * Edge Cases: AI returns fewer volumes/chapters than requested → pad with placeholders
- * Domain Map Ref: OUTLINE-PLANNER-v1
+ * Domain Map Ref: OUTLINE-PLANNER-v2-COMPLEXITY-GOVERNED
  */
 
 import type {
@@ -39,6 +39,7 @@ const MASTER_OUTLINE_SYSTEM = buildJsonObjectSystem(
     'Each volume needs premise, escalation, climax, and exit state.',
     'Define act boundaries for a 3-act structure.',
     'Maintain continuous arc progression.',
+    'Do not multiply factions, secrets, systems, prophecies, or long-term mysteries unless the story premise actually needs them.',
   ],
 );
 
@@ -46,9 +47,11 @@ const VOLUME_OUTLINE_SYSTEM = buildJsonObjectSystem(
   'Webnovel volume planner',
   'Break one volume into chapter-level beats',
   [
-    'Each chapter needs a clear goal, conflict, and hook.',
-    'Escalation should rise steadily toward the climax.',
-    'Chapter endings should pull the reader into the next chapter.',
+    'Each chapter needs a clear narrative function and concrete change/progress. Conflict is optional when the chapter role does not need it.',
+    'Escalation should breathe rather than rise mechanically every chapter; quiet, recovery, relationship, travel, setup, and transition chapters are allowed.',
+    'Hooks and cliffhangers are optional. A chapter may end by closing a scene, settling an emotion, recording a decision, or carrying quiet momentum.',
+    'Do not invent mystery, danger, twist, foreshadowing, new lore, or side complications solely to make every chapter look eventful.',
+    'Prefer the simplest chapter plan that accomplishes the current arc function with the least new canon debt.',
   ],
 );
 
@@ -56,8 +59,11 @@ const CHAPTER_OUTLINE_SYSTEM = buildJsonObjectSystem(
   'Scene director for webnovels',
   'Create a detailed beat outline for one chapter',
   [
-    'Structure the chapter as opening, development, turning point, and cliffhanger.',
+    'Use only as many beats as the chapter needs. Opening and closing are useful anchors; development or turning point beats are optional when not required.',
+    'A cliffhanger is not mandatory. Use one only when the existing chapter plan naturally produces it.',
     'Track on-stage characters, emotional state, and power level where relevant.',
+    'Do not create an extra twist, hidden motive, clue, mystery, lore rule, or new entity merely to make the chapter feel deeper.',
+    'Prefer direct causal progression over unnecessary intermediate complications.',
   ],
 );
 
@@ -111,6 +117,8 @@ THẾ GIỚI:
 ${quickTruncate(project.worldSetting || project.world?.geography || '', 200)}
 
 ${buildOutlineCharacterGuardrails(project, 'master', `Chương 1-${project.targetChapters || 100}`)}
+
+Nguyên tắc complexity: mỗi lớp lore/faction/mystery mới tạo ra canon debt dài hạn. Chỉ tạo khi cần cho premise/arc; không dùng độ phức tạp làm thước đo chất lượng.
 
 Trả về JSON:
 {
@@ -204,6 +212,13 @@ ${project.characters.slice(0, 5).map(c => `- ${c.name}: ${quickTruncate(c.traits
 
 ${buildOutlineCharacterGuardrails(project, 'volume', `Chương ${chStart}-${chEnd}`)}
 
+QUY TẮC LẬP CHƯƠNG:
+- Không ép mỗi chương phải có xung đột, twist hoặc cliffhanger.
+- hooks có thể là [] nếu chapter role không cần hook rõ ràng.
+- Chương lắng/di chuyển/hồi phục/quan hệ/setup hợp lệ nếu tạo thay đổi hoặc tiến triển cụ thể.
+- Không thêm bí ẩn/manh mối/foreshadow/lore mới chỉ để lấp trường hooks.
+- Hãy xen kẽ cường độ tự nhiên để tránh nhịp truyện luôn bị kéo căng.
+
 Trả về JSON:
 {
   "chapters": [
@@ -211,9 +226,9 @@ Trả về JSON:
       "chapterNumber": ${chStart},
       "title": "Tên chương",
       "summary": "Tóm tắt nội dung chương (2-3 câu)",
-      "conflict": "Xung đột chính",
+      "conflict": "Xung đột nếu có; để trống nếu không cần",
       "focus": "Nhân vật trọng tâm",
-      "hooks": ["Hook cuối chương"],
+      "hooks": [],
       "wordCountTarget": 3000
     }
   ]
@@ -245,7 +260,6 @@ Tạo đủ ${chapterCount} chương, từ chương ${chStart} đến ${chEnd}.`
     wordCountTarget: ch.wordCountTarget || 3000,
   }));
 
-  // Pad if AI returned fewer chapters
   while (chapters.length < chapterCount) {
     const nextNum = chStart + chapters.length;
     chapters.push({
@@ -270,7 +284,7 @@ Tạo đủ ${chapterCount} chương, từ chương ${chStart} đến ${chEnd}.`
 
 export interface DetailedChapterOutline extends ChapterOutline {
   beats: {
-    type: 'opening' | 'development' | 'turning_point' | 'cliffhanger';
+    type: 'opening' | 'development' | 'turning_point' | 'closing' | 'cliffhanger';
     description: string;
     emotion: string;
   }[];
@@ -291,22 +305,28 @@ TRUYỆN: ${project.title} (${project.genre})
 QUYỂN: "${volumeContext.title}"
 CHƯƠNG ${chapterOutline.chapterNumber}: "${chapterOutline.title}"
 - Tóm tắt: ${chapterOutline.summary}
-- Xung đột: ${chapterOutline.conflict}
+- Xung đột: ${chapterOutline.conflict || 'Không bắt buộc'}
 - Trọng tâm: ${chapterOutline.focus}
-- Hooks: ${chapterOutline.hooks.join(', ') || 'Chưa có'}
+- Hooks đã được lên kế hoạch: ${chapterOutline.hooks.join(', ') || 'Không có'}
 
 NHÂN VẬT:
 ${project.characters.slice(0, 5).map(c => `- ${c.name} (${c.role})`).join('\n')}
 
 ${buildOutlineCharacterGuardrails(project, 'chapter', `Chương ${chapterOutline.chapterNumber}`)}
 
+QUY TẮC:
+- Dùng số beat tối thiểu đủ để chương vận hành tự nhiên; không cần nhét đủ công thức opening → development → turning point → cliffhanger.
+- Nếu hooks đã lên kế hoạch là "Không có", không tự phát minh hook/mystery/twist ở bước chi tiết hóa.
+- closing là beat kết mặc định. Chỉ dùng cliffhanger nếu dữ liệu chương hiện có thật sự yêu cầu nó.
+- turning_point là tùy chọn. Một thay đổi nhỏ, quyết định, cuộc trò chuyện, nghỉ ngơi hoặc hoàn tất việc đang làm có thể là đủ.
+- Không tự tạo lore, NPC quan trọng, phe phái, sức mạnh, bí mật, manh mối hoặc biểu tượng mới để tăng độ phức tạp.
+
 Trả về JSON:
 {
   "beats": [
-    { "type": "opening", "description": "Mở đầu: ...", "emotion": "tò mò" },
-    { "type": "development", "description": "Phát triển: ...", "emotion": "hồi hộp" },
-    { "type": "turning_point", "description": "Bước ngoặt: ...", "emotion": "sốc" },
-    { "type": "cliffhanger", "description": "Kết thúc treo: ...", "emotion": "khao khát" }
+    { "type": "opening", "description": "Mở cảnh bằng tình huống đang diễn ra", "emotion": "phù hợp cảnh" },
+    { "type": "development", "description": "Phát triển việc chính cần xảy ra", "emotion": "thay đổi tự nhiên" },
+    { "type": "closing", "description": "Khép nhịp hiện tại hoặc để lại động lượng tự nhiên", "emotion": "đọng lại" }
   ],
   "charactersOnStage": ["Tên nhân vật 1", "Tên nhân vật 2"],
   "estimatedPacing": "medium"
@@ -324,11 +344,12 @@ Trả về JSON:
   });
 
   const parsed = JSON.parse(cleanJson(response));
+  const allowedBeatTypes = new Set(['opening', 'development', 'turning_point', 'closing', 'cliffhanger']);
 
   return {
     ...chapterOutline,
     beats: (parsed.beats || []).map((b: any) => ({
-      type: b.type || 'development',
+      type: allowedBeatTypes.has(b.type) ? b.type : 'development',
       description: String(b.description || ''),
       emotion: String(b.emotion || ''),
     })),
