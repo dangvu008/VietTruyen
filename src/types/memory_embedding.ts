@@ -52,6 +52,8 @@ export interface RetrievalPackItem {
 export interface HybridMemoryResult {
   canonPack: RetrievalPackItem[];
   statePack: RetrievalPackItem[];
+  /** Character-specific epistemic state. Kept separate from objective world truth. */
+  knowledgePack?: RetrievalPackItem[];
   hookPack: RetrievalPackItem[];
   graphPack: RetrievalPackItem[];
   semanticPack: RetrievalPackItem[];
