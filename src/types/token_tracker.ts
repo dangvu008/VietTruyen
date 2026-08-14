@@ -12,7 +12,6 @@ export type PipelineStepLabel =
   | 'plan_branches'
   | 'write_chapter'
   | 'pre_save_quality_gate'
-  | 'narrative_value_gate'
   | 'review_checkers'
   | 'style_analysis'
   | 'data_extraction'
