@@ -5,6 +5,11 @@ import {
   GROUNDED_PROSE_LINE_AUDIT_SCHEMA,
   type GroundedProseRuntimeGateArtifact,
 } from '../../types/grounded_prose';
+import {
+  deleteGroundedProseReceiptFromCloud,
+  fetchGroundedProseReceiptFromCloud,
+  mirrorGroundedProseReceiptToCloud,
+} from './grounded_prose_receipt_cloud';
 
 const STORAGE_KEY = 'viettruyen:grounded-prose-receipts:v1';
 const MAX_RECEIPTS = 500;
@@ -157,6 +162,13 @@ function assertGateStructure(
   }
 }
 
+function cacheReceipt(record: GroundedProseGateReceiptRecord): GroundedProseGateReceiptRecord {
+  const records = readAll();
+  records[receiptKey(record.projectId, record.chapterNumber)] = record;
+  writeAll(prune(records));
+  return record;
+}
+
 export function saveGroundedProseGateReceipt(
   projectId: string,
   chapterNumber: number,
@@ -172,9 +184,15 @@ export function saveGroundedProseGateReceipt(
     savedAt: new Date().toISOString(),
   };
 
-  const records = readAll();
-  records[receiptKey(projectId, chapterNumber)] = record;
-  writeAll(prune(records));
+  cacheReceipt(record);
+
+  // Local persistence remains the immediate synchronous safety boundary. Cloud is
+  // a durable cross-device mirror; an unavailable network must not erase a valid
+  // local PASS, but release on another device will fail closed until the mirror exists.
+  void mirrorGroundedProseReceiptToCloud(record).catch((error) => {
+    console.warn('[GroundedProseReceiptStore] Cloud receipt mirror failed:', error);
+  });
+
   return record;
 }
 
@@ -191,9 +209,14 @@ export function invalidateGroundedProseGateReceipt(
 ): void {
   const records = readAll();
   const key = receiptKey(projectId, chapterNumber);
-  if (!records[key]) return;
-  delete records[key];
-  writeAll(records);
+  if (records[key]) {
+    delete records[key];
+    writeAll(records);
+  }
+
+  void deleteGroundedProseReceiptFromCloud(projectId, chapterNumber).catch((error) => {
+    console.warn('[GroundedProseReceiptStore] Cloud receipt invalidation failed:', error);
+  });
 }
 
 export function assertGroundedProseGateReceipt(
@@ -226,4 +249,46 @@ export function assertGroundedProseGateReceiptForContent(
     chapterNumber,
     hashGroundedProseContent(content),
   );
+}
+
+/**
+ * Resolve a receipt across devices. Local cache is checked first; if missing or
+ * stale, the canonical cloud mirror is fetched, structurally revalidated, then
+ * cached locally. This function is the preferred release check for async edges.
+ */
+export async function ensureGroundedProseGateReceiptForContent(
+  projectId: string,
+  chapterNumber: number,
+  content: string,
+): Promise<GroundedProseRuntimeGateArtifact> {
+  const proseHash = hashGroundedProseContent(content);
+
+  try {
+    return assertGroundedProseGateReceipt(projectId, chapterNumber, proseHash);
+  } catch (localError) {
+    let cloudReceipt;
+    try {
+      cloudReceipt = await fetchGroundedProseReceiptFromCloud(projectId, chapterNumber);
+    } catch (cloudError) {
+      const localMessage = localError instanceof Error ? localError.message : 'local receipt unavailable';
+      const cloudMessage = cloudError instanceof Error ? cloudError.message : 'cloud receipt unavailable';
+      throw new Error(
+        `Chapter ${chapterNumber} has no usable Grounded Prose release receipt (${localMessage}; cloud: ${cloudMessage}).`,
+      );
+    }
+
+    if (!cloudReceipt) {
+      throw localError;
+    }
+    if (cloudReceipt.projectId !== projectId || cloudReceipt.chapterNumber !== chapterNumber) {
+      throw new Error(`Chapter ${chapterNumber} cloud Grounded Prose receipt identity is invalid.`);
+    }
+    if (cloudReceipt.proseHash !== proseHash) {
+      throw new Error(`Chapter ${chapterNumber} cloud Grounded Prose receipt is stale for the current prose.`);
+    }
+
+    assertGateStructure(cloudReceipt.gate, chapterNumber, proseHash);
+    cacheReceipt(cloudReceipt);
+    return cloudReceipt.gate;
+  }
 }
