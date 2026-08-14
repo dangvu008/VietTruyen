@@ -19,6 +19,19 @@ function receiptKey(projectId: string, chapterNumber: number): string {
   return `${projectId}::${chapterNumber}`;
 }
 
+function hashString(input: string): string {
+  let hash = 2166136261;
+  for (let index = 0; index < input.length; index += 1) {
+    hash ^= input.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(16);
+}
+
+export function hashGroundedProseContent(content: string): string {
+  return hashString(String(content || '').replace(/\r\n/g, '\n').trim());
+}
+
 function readAll(): ReceiptMap {
   if (typeof localStorage === 'undefined') return memoryFallback;
   try {
@@ -123,4 +136,16 @@ export function assertGroundedProseGateReceipt(
     throw new Error(`Chapter ${chapterNumber} Grounded Prose receipt is missing required artifacts.`);
   }
   return receipt.gate;
+}
+
+export function assertGroundedProseGateReceiptForContent(
+  projectId: string,
+  chapterNumber: number,
+  content: string,
+): GroundedProseRuntimeGateArtifact {
+  return assertGroundedProseGateReceipt(
+    projectId,
+    chapterNumber,
+    hashGroundedProseContent(content),
+  );
 }
