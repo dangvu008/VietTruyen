@@ -17,7 +17,12 @@ interface PreSaveQualityModel {
 }
 
 export interface PreSaveQualityIssue {
-  type: 'ai_tone' | 'previous_continuity' | 'chapter_cohesion';
+  type:
+    | 'ai_tone'
+    | 'previous_continuity'
+    | 'chapter_cohesion'
+    | 'trait_literalization'
+    | 'character_context_mismatch';
   severity: 'low' | 'medium' | 'high';
   description: string;
   fix: string;
@@ -108,6 +113,11 @@ function buildPreSaveSystemPrompt(): string {
     '1. Remove obvious AI tone: generic summaries, repeated sentence rhythm, over-explaining, sterile transitions, slogan-like phrasing.',
     '2. Previous-chapter continuity: the opening must connect naturally to the previous chapter state.',
     '3. Whole-chapter cohesion: each paragraph must support the chapter intent, with no contradiction, dangling transition, or abrupt motivation shift.',
+    '4. Character behavior must be context-resolved. A profile trait is a tendency, not a performance requirement. Do not force every listed trait into every scene, line of dialogue, gesture, or internal thought.',
+    '5. Detect trait literalization / over-expression: e.g. a mildly humorous character joking in every scene; a cautious character interrogating everyone; an intelligent character constantly producing checklist-like analysis; a cold character suppressing all emotion regardless of stakes.',
+    '6. For each meaningful scene, judge behavior from current goal, stakes, relationship, emotional/physical state, knowledge, social setting, and immediate danger. Traits may be active, secondary, suppressed, or irrelevant.',
+    '7. Do not mark a character OOC merely because a trait is absent in a scene. Absence is valid when the context suppresses or does not activate that trait.',
+    '8. If a trait is contextually over-expressed, revise only the affected spans. Preserve character identity while reducing forced performance.',
     'Return JSON only.',
   ].join('\n');
 }
@@ -132,6 +142,9 @@ function buildPreSaveUserPrompt(opts: PreSaveQualityGateOptions): string {
       ? `Chapter intent: ${[chapterIntent.title, chapterIntent.summary, chapterIntent.focus].filter(Boolean).join(' | ')}`
       : '',
     '',
+    'Character behavior audit rule:',
+    'Treat character traits as latent tendencies. For each scene infer which traits are ACTIVE, SECONDARY, SUPPRESSED, or IRRELEVANT from scene context. Flag trait_literalization when prose repeatedly performs a trait without contextual need. Flag character_context_mismatch when behavior ignores current stakes/state/relationship even if the behavior technically matches the static profile.',
+    '',
     'Previous chapter tail/summary:',
     '"""',
     clampTail(previousSource || 'No previous chapter.', MAX_PREVIOUS_CHAPTER_CHARS),
@@ -154,7 +167,7 @@ function buildPreSaveUserPrompt(opts: PreSaveQualityGateOptions): string {
       revisedScore: 0,
       issues: [
         {
-          type: 'ai_tone',
+          type: 'trait_literalization',
           severity: 'medium',
           description: 'short issue',
           fix: 'short fix',
@@ -212,7 +225,12 @@ function normalizeIssues(value: unknown): PreSaveQualityIssue[] {
 }
 
 function normalizeIssueType(value: unknown): PreSaveQualityIssue['type'] {
-  if (value === 'previous_continuity' || value === 'chapter_cohesion') return value;
+  if (
+    value === 'previous_continuity'
+    || value === 'chapter_cohesion'
+    || value === 'trait_literalization'
+    || value === 'character_context_mismatch'
+  ) return value;
   return 'ai_tone';
 }
 
