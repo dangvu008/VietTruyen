@@ -49,6 +49,8 @@ export interface PipelineAcceptanceInput {
   reviewReportPresent: boolean;
   reviewPassed: boolean;
   continuityPassed: boolean;
+  narrativeValueRequired?: boolean;
+  narrativeValuePassed?: boolean;
   literaryPassed?: boolean;
   coldReaderPassed?: boolean;
   fatalError?: boolean;
@@ -109,6 +111,10 @@ export function evaluatePipelineAcceptance(input: PipelineAcceptanceInput): Pipe
   if (input.reviewRequired) {
     if (!input.reviewReportPresent) reasons.push('Required review report is missing.');
     else if (!input.reviewPassed) reasons.push('Required review did not pass.');
+  }
+
+  if (input.narrativeValueRequired && input.narrativeValuePassed !== true) {
+    reasons.push('Narrative-value gate did not pass or evidence is missing.');
   }
 
   if (input.qualityMode === 'quality') {
