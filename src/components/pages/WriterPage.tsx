@@ -8,7 +8,7 @@
 import React, { useCallback } from 'react';
 import type { Project, Chapter } from '../../types/story';
 import { useProjectStore } from '../../store/use_project_store';
-import { assertGroundedProseGateReceiptForContent } from '../../lib/workflow/grounded_prose_receipt_store';
+import { ensureGroundedProseGateReceiptForContent } from '../../lib/workflow/grounded_prose_receipt_store';
 import StoryWorkspace from '../story-editor/StoryWorkspace';
 import type { EditorMode } from '../story-editor/editor_types';
 
@@ -50,7 +50,7 @@ const WriterPage: React.FC<WriterPageProps> = ({
     if (nextStatus === 'final' || nextStatus === 'published') {
       const chapterNumber = chapter.sequenceNumber ?? currentProject.chapters.indexOf(chapter) + 1;
       const nextContent = patch.content ?? chapter.content;
-      assertGroundedProseGateReceiptForContent(projectId, chapterNumber, nextContent);
+      await ensureGroundedProseGateReceiptForContent(projectId, chapterNumber, nextContent);
     }
 
     await updateChapter(projectId, chapterId, patch);
