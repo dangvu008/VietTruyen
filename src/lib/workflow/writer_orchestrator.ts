@@ -141,16 +141,34 @@ export async function executeWorkflowIntent(
           payload,
         );
 
+        session = emitSession(
+          session,
+          {
+            step: 'reviewing',
+            statusMessage: 'Đang chạy Grounded Prose Runtime Gate...',
+          },
+          options.onUpdate,
+        );
+
+        const groundedProseGate = await runGroundedProseRuntimeGate({
+          project: payload.project,
+          targetChapterIndex: payload.targetChapterIndex,
+          chapterTitle: chapterWriteResult.title,
+          chapterContent: chapterWriteResult.content,
+        });
+        assertGroundedProseRuntimeGate(groundedProseGate);
+
         return emitSession(
           session,
           {
             step: 'completed',
-            statusMessage: 'Đã viết xong chương.',
+            statusMessage: 'Đã viết xong chương và Grounded Prose Gate đã PASS.',
             artifacts: {
               chapterWriteResult,
               draftText: chapterWriteResult.content,
               selectedBranchId: payload.branch.id,
               divergenceReport: chapterWriteResult.divergence,
+              groundedProseGate,
             },
             metrics: {
               startedAt: session.metrics.startedAt,
