@@ -8,13 +8,14 @@
 import type { CheckerReport } from './checker_types';
 
 const SYSTEM_PROMPT = `Bạn là biên tập viên kiểm soát tính nhất quán (Consistency Checker) của thế giới truyện.
-Nhiệm vụ: Đối chiếu diễn biến với thiết lập (Hệ thống sức mạnh, Địa điểm, Thời gian). Cấm chế tác lỗi toán học thời gian hay hổng logic quyền hạn sức mạnh.
+Nhiệm vụ: Đối chiếu diễn biến với thiết lập, trạng thái và bằng chứng đã biết trước chương. Đặc biệt phải phân biệt WORLD TRUTH với CHARACTER KNOWLEDGE: một sự thật tồn tại trong Canon không có nghĩa nhân vật tự động biết nó.
+Cấm chế tác lỗi toán học thời gian, hổng logic quyền hạn sức mạnh, dịch chuyển vô cớ hoặc cho nhân vật biết thông tin chưa có đường truyền/bằng chứng.
 Trả về JSON hợp lệ, không giải thích, không dùng \`\`\` (code blocks).`;
 
 export function buildConsistencyCheckerPrompt(
   chapterText: string,
   chapterNumber: number,
-  systemStateContext: string, // JSON string of state (power level, location, time, entities)
+  systemStateContext: string,
   opts?: {
     continuityWarnings?: string[];
     activeHooks?: string[];
@@ -30,23 +31,26 @@ export function buildConsistencyCheckerPrompt(
   const storyStateBlock = opts?.storyStateFacts?.length
     ? `\nSnapshot trạng thái đã biết trước chương này:\n- ${opts.storyStateFacts.join('\n- ')}\n`
     : '';
-  const userPrompt = `Dựa trên nội dung chương ${chapterNumber} và Dữ liệu trạng thái hệ thống, bạn hãy tìm ra các mâu thuẫn (nếu có).
+  const userPrompt = `Dựa trên nội dung chương ${chapterNumber} và dữ liệu trạng thái trước chương, hãy tìm mâu thuẫn có bằng chứng.
 
-Dữ liệu trạng thái hệ thống hiện tại (bối cảnh trước khi vào chương):
+Dữ liệu trạng thái hệ thống hiện tại:
 ---
 ${systemStateContext || '{}'}
 ---
 ${storyStateBlock}${hookBlock}${continuityBlock}
+
+Lưu ý về fact dạng character_knowledge:<id>: value JSON chứa proposition, worldTruth và belief. Đây là tri thức/niềm tin của riêng subjectId. Không được suy từ worldTruth sang belief nếu ledger không ghi như vậy.
 
 Nội dung chương:
 ---
 ${chapterText}
 ---
 
-Kiểm tra 3 lớp:
-1. Sức mạnh (Power): Có xài chiêu thức vượt cấp không? Có giảm cấp không lý do không?
-2. Địa điểm (Location): Có dịch chuyển tức thời không giải thích không?
-3. Thời gian (Timeline): Dòng thời gian có bị lỗi logic không (đang đếm ngược 5 ngày mà nhảy vọt lên 2 ngày bỏ qua 3 ngày, tuổi tác sai lệch...)?
+Kiểm tra 4 lớp:
+1. Sức mạnh (Power): dùng năng lực vượt trạng thái đã có, tăng/giảm cấp không nguyên nhân.
+2. Địa điểm (Location): xuất hiện/dịch chuyển không có cầu nối hợp lý.
+3. Thời gian (Timeline): chronology, duration, tuổi tác hoặc countdown mâu thuẫn. Không tự bịa mốc thời gian để kết tội khi dữ liệu chỉ mơ hồ.
+4. Tri thức nhân vật (Knowledge): nhân vật có nói, suy luận chắc chắn hoặc hành động dựa trên thông tin mà ledger cho thấy họ chưa biết/chỉ nghi ngờ/đã quên hay không. Phân biệt độc giả biết, thế giới đúng và nhân vật biết.
 
 Trả về JSON có định dạng sau:
 {
@@ -58,18 +62,19 @@ Trả về JSON có định dạng sau:
     {
       "id": "consist-1",
       "severity": "critical",
-      "description": "Lỗi đếm ngược: Hôm qua bảo còn 3 ngày, hôm nay lại nói 1 tuần sau.",
-      "suggestion": "Thống nhất dùng mốc '3 ngày'."
+      "description": "Nhân vật hành động như đã biết bí mật X nhưng ledger chỉ ghi belief=unknown.",
+      "suggestion": "Bổ sung đường truyền thông tin hợp lệ hoặc sửa phản ứng về mức chưa biết/nghi ngờ."
     }
   ],
   "metrics": {
     "power_conflicts": 0,
     "location_errors": 0,
-    "timeline_issues": 1,
+    "timeline_issues": 0,
+    "knowledge_leaks": 1,
     "active_hook_regressions": 0,
-    "new_entities": ["Tông Môn Mới"]
+    "new_entities": []
   },
-  "summary": "Nhất quán về phép thuật và không gian, nhưng dòng thời gian bị lệch nhẹ."
+  "summary": "Không có lỗi power/location; phát hiện một knowledge leak."
 }
 `;
 
