@@ -2,7 +2,7 @@
  * File: full_write_pipeline.ts
  * Purpose: Chain các module thành pipeline viết chương tự động.
  * Layer: Application (Workflow)
- * Domain: Workflow → [context → draft → review → grounded prose → acceptance → data → sync → report]
+ * Domain: Workflow → [context → draft → review → grounded prose → narrative value → acceptance → data → sync → report]
  *
  * Data Contract:
  * - Input:  FullWritePipelinePayload (project, chapter config, options)
@@ -24,6 +24,7 @@ import type { ChapterWriteResult } from '../../types/surprise';
 import type { QualityMode } from '../../types/workflow';
 import type { GroundedProseRuntimeGateArtifact } from '../../types/grounded_prose';
 import type { PipelineAcceptanceDecision } from '../memory/authoritative_promotion';
+import type { NarrativeValueRuntimeArtifact } from './narrative_value_runtime_gate';
 
 import { buildTemporalWritingContext } from '../ai/context_builder';
 import { planChapterBranches, writeChapterFromBranch } from '../ai/chapter_writer_ai';
@@ -46,6 +47,7 @@ import { getOpenHooksForProject } from '../memory/pending_hooks_repository';
 import { decidePipelineAcceptance } from './pipeline_acceptance_adapter';
 import { runGroundedProseRuntimeGate } from './grounded_prose_runtime_gate';
 import { saveGroundedProseGateReceipt } from './grounded_prose_receipt_store';
+import { runNarrativeValueRuntimeGate } from './narrative_value_runtime_gate';
 
 // ─── Types ──────────────────────────────────────────────
 
@@ -68,6 +70,8 @@ export interface FullPipelineResult {
   preSaveReport: PreSaveQualityReport | null;
   /** Grounded prose hard-gate artifact. Null only in fast/candidate-only mode. */
   groundedProseGate: GroundedProseRuntimeGateArtifact | null;
+  /** Reviewer-side scene-necessity/value artifact. */
+  narrativeValueGate: NarrativeValueRuntimeArtifact | null;
   /** Canonical PASS/HOLD/FAIL decision controlling authoritative mutation. */
   acceptanceDecision: PipelineAcceptanceDecision;
   /** Non-null only when accepted data extraction actually ran. */
@@ -102,6 +106,7 @@ interface QualityStepPlan {
   runReview: boolean;
   runPolish: boolean;
   runGroundedProseGate: boolean;
+  runNarrativeValueGate: boolean;
   runDataAgent: boolean;
   runMemorySync: boolean;
 }
@@ -117,6 +122,7 @@ function buildQualityStepPlan(
       runReview: false,
       runPolish: false,
       runGroundedProseGate: false,
+      runNarrativeValueGate: false,
       runDataAgent: false,
       runMemorySync: false,
     };
@@ -128,6 +134,7 @@ function buildQualityStepPlan(
       runReview: false,
       runPolish: !skipPolish,
       runGroundedProseGate: true,
+      runNarrativeValueGate: true,
       runDataAgent: true,
       runMemorySync: true,
     };
@@ -138,6 +145,7 @@ function buildQualityStepPlan(
     runReview: !skipReview,
     runPolish: !skipPolish,
     runGroundedProseGate: true,
+    runNarrativeValueGate: true,
     runDataAgent: true,
     runMemorySync: true,
   };
@@ -502,7 +510,7 @@ export async function executeFullWritePipeline(opts: PipelineOptions): Promise<F
     emitProgress(3, 'Kiểm tra chất lượng (bỏ qua)', 'skipped');
   }
 
-  // ── STEP 4: Style + Grounded Prose hard gate ──────
+  // ── STEP 4: Style + reviewer hard gates ────────────
   let styleAnalysis: StyleAnalysisResult | null = null;
   if (stepPlan.runPolish) {
     emitProgress(4, 'Phân tích văn phong', 'running');
@@ -538,6 +546,23 @@ export async function executeFullWritePipeline(opts: PipelineOptions): Promise<F
     stepTimings['grounded_prose_gate'] = Date.now() - groundedStart;
   }
 
+  let narrativeValueGate: NarrativeValueRuntimeArtifact | null = null;
+  if (stepPlan.runNarrativeValueGate) {
+    const narrativeValueStart = Date.now();
+    try {
+      narrativeValueGate = await runNarrativeValueRuntimeGate({
+        project,
+        targetChapterIndex,
+        chapterTitle: writeResult.title,
+        chapterContent: writeResult.content,
+        pipelineSessionId,
+      });
+    } catch (error) {
+      console.error('[FullPipeline] Narrative value runtime gate failed:', error);
+    }
+    stepTimings['narrative_value_gate'] = Date.now() - narrativeValueStart;
+  }
+
   const continuityWarnings = qualityMode === 'fast'
     ? []
     : await getContinuityWarnings(project.id, Math.max(1, targetChapterIndex)).catch(() => null);
@@ -555,6 +580,8 @@ export async function executeFullWritePipeline(opts: PipelineOptions): Promise<F
     // required evidence absent and therefore HOLD rather than silently PASS.
     reviewRequired: qualityMode === 'quality',
     reviewReport,
+    narrativeValueRequired: qualityMode !== 'fast',
+    narrativeValuePassed: narrativeValueGate?.verdict === 'PASS',
     literaryPassed: groundedProseGate?.decision === 'PASS',
     coldReaderPassed: groundedProseGate?.coldReader?.pass === true,
     fatalError: qualityMode !== 'fast' && groundedProseGate?.decision !== 'PASS',
@@ -569,7 +596,9 @@ export async function executeFullWritePipeline(opts: PipelineOptions): Promise<F
       ? 'Quality hard gates (candidate-only mode)'
       : `Quality hard gates → ${acceptanceDecision.verdict}`,
     step4Status,
-    (stepTimings['style_polish'] || 0) + (stepTimings['grounded_prose_gate'] || 0),
+    (stepTimings['style_polish'] || 0)
+      + (stepTimings['grounded_prose_gate'] || 0)
+      + (stepTimings['narrative_value_gate'] || 0),
   );
 
   // From this line onward, authoritative/canonical mutation is guarded by
@@ -703,6 +732,7 @@ export async function executeFullWritePipeline(opts: PipelineOptions): Promise<F
     styleAnalysis,
     preSaveReport,
     groundedProseGate,
+    narrativeValueGate,
     acceptanceDecision,
     dataResult,
     stepTimings,
