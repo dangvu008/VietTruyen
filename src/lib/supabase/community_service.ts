@@ -32,7 +32,7 @@ export async function publishStory(userId: string, input: PublishStoryInput) {
   if (!project) {
     throw new Error('Grounded Prose publish gate cannot resolve the source project.');
   }
-  assertPublishStoryGroundedProseReceipts(input.project_id, project.chapters, input);
+  await assertPublishStoryGroundedProseReceipts(input.project_id, project.chapters, input);
 
   const wordCount = input.chapters.reduce((sum, ch) => sum + ch.content.split(/\s+/).length, 0);
 
