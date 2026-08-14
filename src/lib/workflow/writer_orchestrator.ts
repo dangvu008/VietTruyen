@@ -190,7 +190,6 @@ export async function executeWorkflowIntent(
       case 'full_write_pipeline': {
         const payload = intent.payload;
 
-        // Map pipeline step labels to workflow steps
         const stepToWorkflowStep: Record<number, WorkflowSession['step']> = {
           1: 'context_building',
           2: 'drafting',
@@ -228,47 +227,72 @@ export async function executeWorkflowIntent(
           },
         });
 
-        session = emitSession(
-          session,
-          {
-            step: 'reviewing',
-            statusMessage: 'Đang chạy Grounded Prose Runtime Gate (causality → blind reader → line audit)...',
-          },
-          options.onUpdate,
-        );
+        const artifacts = {
+          chapterWriteResult: pipelineResult.writeResult,
+          draftText: pipelineResult.content,
+          selectedBranchId: pipelineResult.selectedBranch.id,
+          divergenceReport: pipelineResult.writeResult.divergence,
+          reviewReport: pipelineResult.reviewReport ?? undefined,
+          styleAnalysis: pipelineResult.styleAnalysis ?? undefined,
+          pipelineStepTimings: pipelineResult.stepTimings,
+          groundedProseGate: pipelineResult.groundedProseGate ?? undefined,
+          acceptanceDecision: pipelineResult.acceptanceDecision,
+        };
 
-        const groundedProseGate = await runGroundedProseRuntimeGate({
-          project: payload.project,
-          targetChapterIndex: payload.targetChapterIndex,
-          chapterTitle: pipelineResult.title,
-          chapterContent: pipelineResult.content,
-        });
+        // Fast mode is intentionally candidate-only. It may complete as a
+        // drafting workflow, but never mutates accepted state or memory.
+        const effectiveQualityMode = payload.qualityMode ?? 'quality';
+        if (effectiveQualityMode === 'fast') {
+          return emitSession(
+            session,
+            {
+              step: 'completed',
+              statusMessage: `Candidate-only hoàn tất trong ${Math.round(pipelineResult.totalDurationMs / 1000)}s; không promote memory.`,
+              artifacts,
+              metrics: {
+                startedAt: session.metrics.startedAt,
+                finishedAt: new Date().toISOString(),
+                latencyMs: Date.now() - startedAtMs,
+              },
+              error: undefined,
+            },
+            options.onUpdate,
+          );
+        }
 
-        // Deterministic fail-closed decision. No successful workflow result is
-        // exposed downstream unless every required artifact exists, matches the
-        // same prose hash, and contains no unresolved blocking verdict.
-        assertGroundedProseRuntimeGate(groundedProseGate);
-        saveGroundedProseGateReceipt(
-          payload.project.id,
-          payload.targetChapterIndex + 1,
-          groundedProseGate,
-        );
+        // For balanced/quality modes, HOLD/FAIL is a workflow-level block.
+        // Candidate prose remains available for revision, but downstream code
+        // must not mistake it for an accepted/persistable result.
+        if (pipelineResult.acceptanceDecision.verdict !== 'PASS') {
+          return emitSession(
+            session,
+            {
+              step: 'failed',
+              statusMessage: `Pipeline ${pipelineResult.acceptanceDecision.verdict}: candidate được giữ lại nhưng không promote.`,
+              artifacts,
+              error: {
+                code: pipelineResult.acceptanceDecision.verdict === 'FAIL'
+                  ? 'pipeline_acceptance_failed'
+                  : 'pipeline_acceptance_hold',
+                message: pipelineResult.acceptanceDecision.reasons.join(' | ') || 'Acceptance evidence incomplete.',
+                retryable: true,
+              },
+              metrics: {
+                startedAt: session.metrics.startedAt,
+                finishedAt: new Date().toISOString(),
+                latencyMs: Date.now() - startedAtMs,
+              },
+            },
+            options.onUpdate,
+          );
+        }
 
         return emitSession(
           session,
           {
             step: 'completed',
-            statusMessage: `Pipeline + Grounded Prose Gate hoàn tất trong ${Math.round(pipelineResult.totalDurationMs / 1000)}s.`,
-            artifacts: {
-              chapterWriteResult: pipelineResult.writeResult,
-              draftText: pipelineResult.content,
-              selectedBranchId: pipelineResult.selectedBranch.id,
-              divergenceReport: pipelineResult.writeResult.divergence,
-              reviewReport: pipelineResult.reviewReport ?? undefined,
-              styleAnalysis: pipelineResult.styleAnalysis ?? undefined,
-              pipelineStepTimings: pipelineResult.stepTimings,
-              groundedProseGate,
-            },
+            statusMessage: `Pipeline PASS và accepted memory đã được phép cập nhật trong ${Math.round(pipelineResult.totalDurationMs / 1000)}s.`,
+            artifacts,
             metrics: {
               startedAt: session.metrics.startedAt,
               finishedAt: new Date().toISOString(),
@@ -304,6 +328,5 @@ export async function executeWorkflowIntent(
     );
   }
 
-  // Unreachable — all cases return above
   return session;
 }
