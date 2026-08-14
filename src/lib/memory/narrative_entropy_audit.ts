@@ -14,8 +14,36 @@ export interface NarrativeEntropyIssue {
   message: string;
 }
 
+export interface EntropyAuditCadence {
+  /** Normal long-range audit interval. */
+  everyAcceptedChapters: number;
+  /** Run earlier when open-hook inventory becomes risky. */
+  hookPressureThreshold: number;
+}
+
+export const DEFAULT_ENTROPY_AUDIT_CADENCE: EntropyAuditCadence = {
+  everyAcceptedChapters: 25,
+  hookPressureThreshold: 15,
+};
+
 function normalized(value?: string): string {
   return (value || '').trim().toLowerCase();
+}
+
+/**
+ * Narrative entropy is a periodic/offline audit, not a per-chapter Writer gate.
+ * This keeps the drafting path lean while still catching long-range drift.
+ */
+export function shouldRunNarrativeEntropyAudit(input: {
+  acceptedChapterIndex: number;
+  lastAuditChapterIndex?: number;
+  unresolvedHookCount?: number;
+  cadence?: EntropyAuditCadence;
+}): boolean {
+  const cadence = input.cadence ?? DEFAULT_ENTROPY_AUDIT_CADENCE;
+  const last = input.lastAuditChapterIndex ?? 0;
+  if ((input.unresolvedHookCount ?? 0) >= cadence.hookPressureThreshold) return true;
+  return input.acceptedChapterIndex - last >= cadence.everyAcceptedChapters;
 }
 
 export function auditNarrativeEntropy(samples: EntropyChapterSample[]): NarrativeEntropyIssue[] {
@@ -23,6 +51,7 @@ export function auditNarrativeEntropy(samples: EntropyChapterSample[]): Narrativ
   const sorted = [...samples].sort((a, b) => a.chapterIndex - b.chapterIndex);
   const recentPlots: string[] = [];
   const recentProse: string[] = [];
+  let previousPowerSample: EntropyChapterSample | undefined;
 
   for (const sample of sorted) {
     const plot = normalized(sample.plotSignature);
@@ -42,9 +71,20 @@ export function auditNarrativeEntropy(samples: EntropyChapterSample[]): Narrativ
       issues.push({ type: 'voice_convergence', severity: 'warning', chapterIndex: sample.chapterIndex, message: 'Multiple characters share the same dialogue voice signature.' });
     }
 
-    const previous = sorted.find((item) => item.chapterIndex < sample.chapterIndex && item.powerLevel != null);
-    if (sample.powerLevel != null && previous?.powerLevel != null && sample.powerLevel > previous.powerLevel * 2) {
-      issues.push({ type: 'power_creep', severity: 'warning', chapterIndex: sample.chapterIndex, message: 'Power level jumps by more than 2x without an explicit audit exception.' });
+    if (sample.powerLevel != null) {
+      if (
+        previousPowerSample?.powerLevel != null &&
+        previousPowerSample.powerLevel > 0 &&
+        sample.powerLevel > previousPowerSample.powerLevel * 2
+      ) {
+        issues.push({
+          type: 'power_creep',
+          severity: 'warning',
+          chapterIndex: sample.chapterIndex,
+          message: `Power level jumps by more than 2x from the nearest prior sampled state (Ch.${previousPowerSample.chapterIndex}).`,
+        });
+      }
+      previousPowerSample = sample;
     }
 
     if ((sample.unresolvedHookCount ?? 0) >= 20) {
