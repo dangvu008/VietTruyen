@@ -9,8 +9,11 @@ import type { CheckerReport } from './checker_types';
 import type { GenreProfile } from '../../types/genre_profile';
 
 const SYSTEM_PROMPT = `Bạn là chuyên gia về Sức hút theo dõi (Reader Pull) của truyện chữ.
-Nhiệm vụ: Phân tích các yếu tố giữ chân độc giả như Hook (câu nhử) và Micro-payoff (vi phần thưởng).
-Cung cấp JSON hợp lệ, không giải thích, không dùng \`\`\` (code blocks).`;
+Nhiệm vụ: đánh giá lý do tự nhiên khiến độc giả muốn đọc tiếp.
+Hook/cliffhanger chỉ là MỘT công cụ, không phải yêu cầu bắt buộc cho mọi chương.
+Một chương kết yên, khép cảnh, hoàn tất nhịp cảm xúc hoặc để lại chuyển động tự nhiên vẫn có thể có reader pull tốt.
+Không được đề xuất thêm bí ẩn, nguy hiểm, twist, foreshadowing hoặc sự kiện mới chỉ để tạo hook.
+Cung cấp JSON hợp lệ, không giải thích, không dùng code blocks.`;
 
 export function buildReaderPullCheckerPrompt(
   chapterText: string,
@@ -21,19 +24,21 @@ export function buildReaderPullCheckerPrompt(
   if (genreProfile) {
     genreContext = `
 Dữ liệu Thể loại (${genreProfile.name}):
-- Số Micro-payoff tối thiểu/chương: ${genreProfile.microPayoffConfig.minPerChapter}
-- Mức độ chấp nhận chuyển tiếp: Chương này có thể hạ chuẩn nếu tính nhịp độ của thể loại cho phép.
+- Micro-payoff guideline/chương: ${genreProfile.microPayoffConfig.minPerChapter}
+- Đây là guideline retention, KHÔNG phải quota cứng. Quiet/transition chapters có thể thấp hơn nếu chức năng cảnh vẫn hoàn chỉnh.
 `;
   }
 
   const userPrompt = `Phân tích chương ${chapterNumber} để đánh giá "Lực giữ chân độc giả" (Reader Pull).
 
 Các yếu tố cần kiểm tra:
-1. Hook (Câu nhử) cuối chương: Có không? Thuộc loại nào (Crisis, Mystery, Emotion, Choice, Desire)? Cường độ (weak, medium, strong)? 
-2. Micro-payoff (Vi phần thưởng) trong chương: Số lượng bao nhiêu? Gồm những loại nào (Thông tin, Quan hệ, Điểm kỹ năng, Tài nguyên, Cảm xúc...)?
-3. Phân biệt Hard Violations (Lỗi nghiêm trọng) và Soft Suggestions (Lỗi nhẹ/Đề xuất).
-   - Hard: Đọc không hiểu gì, mất phương hướng hoàn toàn, cốt truyện ngưng trệ vô lý.
-   - Soft: Hook yếu, Micro-payoff không đạt chỉ tiêu thể loại.
+1. Ending pull: cuối chương có tạo lý do tự nhiên để đọc tiếp không? Có thể là Crisis, Mystery, Emotion, Choice, Desire, Progress, Relationship, hoặc đơn giản là momentum của hành trình. KHÔNG bắt buộc phải có hook rõ ràng.
+2. Micro-payoff trong chương: có thay đổi/thông tin/cảm xúc/quyết định/quan hệ nào tạo cảm giác tiến triển không? Không yêu cầu đủ quota nếu chapter role là cầu nối hoặc lắng nhịp.
+3. Phân biệt Hard Violations và Soft Suggestions.
+   - Hard: đọc không hiểu, mất phương hướng hoàn toàn, cốt truyện ngưng trệ vô lý, kết chương đột ngột vì thiếu scene logic.
+   - Soft: ending pull yếu hoặc tiến triển mỏng. Soft suggestion chỉ được đề xuất làm rõ/tăng lực từ vật liệu ĐÃ CÓ; không phát minh mystery/twist/nguy hiểm mới.
+4. Nếu chương kết yên nhưng hoàn thành chức năng và vẫn có động lượng tự nhiên, KHÔNG coi thiếu cliffhanger là lỗi.
+5. Không thưởng cho "hook mạnh" nếu hook đó trông cưỡng ép, bịa thêm biến cố hoặc nâng chi tiết bình thường thành manh mối.
 
 Nội dung chương:
 ---
@@ -47,23 +52,16 @@ Yêu cầu trả về JSON có định dạng sau:
   "chapter": ${chapterNumber},
   "overall_score": 88,
   "pass": true,
-  "issues": [
-    {
-      "id": "rp-1",
-      "severity": "high",
-      "description": "Không có câu nhử chuyển bộ ở cuối chương.",
-      "suggestion": "Bổ sung một tình huống đe dọa hoặc một câu hỏi chưa lời đáp ở câu cuối."
-    }
-  ],
+  "issues": [],
   "metrics": {
-    "hook_present": true,
-    "hook_type": "Crisis Hook",
+    "hook_present": false,
+    "hook_type": "quiet_momentum",
     "hook_strength": "medium",
-    "micropayoffs": ["Tài nguyên", "Thông tin"],
+    "micropayoffs": ["Quan hệ", "Thông tin"],
     "micropayoff_count": 2,
-    "next_chapter_reason": "Độc giả muốn xem nam chính giải quyết khủng hoảng thế nào"
+    "next_chapter_reason": "Độc giả muốn theo dõi hệ quả tự nhiên của quyết định vừa xảy ra"
   },
-  "summary": "Chương có sức hút khá tốt nhờ 2 khoản micropayoff rải rác nhưng hook cuối còn hơi yếu."
+  "summary": "Chương không cần cliffhanger nhưng vẫn giữ lực đọc nhờ tiến triển rõ và kết cảnh tự nhiên."
 }
 `;
 
