@@ -1,6 +1,7 @@
 import type { MemorySearchHit, RetrievalPackItem } from '../../types/memory_embedding';
 import type { RelevantNarrativeCommunity } from './memory_query';
 import type { NarrativeStateFact, PendingHook, PropagationTask } from '../../types/narrative_memory';
+import { stateFactToCharacterKnowledge } from './character_knowledge_state';
 
 function truncateText(text: string, maxLength: number): string {
   const trimmed = text.trim();
@@ -57,8 +58,20 @@ export function buildStatePack(
 ): RetrievalPackItem[] {
   return facts
     .slice(0, limit)
-    .map((fact, index) =>
-      createPackItem(
+    .map((fact, index) => {
+      const knowledge = stateFactToCharacterKnowledge(fact);
+      if (knowledge) {
+        return createPackItem(
+          `knowledge:${knowledge.characterId}:${knowledge.propositionId}:${index}`,
+          `${knowledge.characterId} · character knowledge`,
+          `- ${knowledge.characterId}: ${truncateText(knowledge.proposition, 150)} | belief=${knowledge.belief} | worldTruth=${knowledge.worldTruth} (từ Ch.${knowledge.learnedAtChapter ?? fact.validFromChapter})`,
+          Math.max(0.72, Math.min(1, fact.confidence)),
+          'character_knowledge',
+          { chapterIndex: fact.validFromChapter },
+        );
+      }
+
+      return createPackItem(
         `state:${fact.subjectId}:${fact.predicate}:${index}`,
         `${fact.subjectId} · ${fact.predicate}`,
         `- ${fact.subjectId}: ${fact.predicate} = ${truncateText(fact.value, 140)} (từ Ch.${fact.validFromChapter})`,
@@ -67,8 +80,8 @@ export function buildStatePack(
         {
           chapterIndex: fact.validFromChapter,
         }
-      )
-    );
+      );
+    });
 }
 
 export function buildHookPack(
