@@ -14,6 +14,8 @@ export interface PipelineAcceptanceEvidence {
   preSaveReport: PreSaveQualityReport | null;
   reviewRequired: boolean;
   reviewReport: CombinedReviewReport | null;
+  narrativeValueRequired?: boolean;
+  narrativeValuePassed?: boolean;
   /** Optional dedicated literary/cold-reader results when available. */
   literaryPassed?: boolean;
   coldReaderPassed?: boolean;
@@ -37,6 +39,8 @@ export function decidePipelineAcceptance(
     reviewReportPresent: evidence.reviewReport !== null,
     reviewPassed: evidence.reviewReport?.pass === true,
     continuityPassed: evidence.continuityPassed,
+    narrativeValueRequired: evidence.narrativeValueRequired,
+    narrativeValuePassed: evidence.narrativeValuePassed,
     literaryPassed: evidence.literaryPassed,
     coldReaderPassed: evidence.coldReaderPassed,
     fatalError: evidence.fatalError,
