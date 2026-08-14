@@ -88,6 +88,39 @@ describe('authoritative promotion', () => {
     expect(failed.maySyncAcceptedMemory).toBe(false);
   });
 
+  it('holds when narrative value is required but missing or failed', () => {
+    const missing = evaluatePipelineAcceptance({
+      qualityMode: 'balanced',
+      contextValidationPassed: true,
+      preSaveGateRequired: true,
+      preSaveReportPresent: true,
+      preSaveApproved: true,
+      reviewRequired: false,
+      reviewReportPresent: false,
+      reviewPassed: false,
+      continuityPassed: true,
+      narrativeValueRequired: true,
+    });
+
+    const failed = evaluatePipelineAcceptance({
+      qualityMode: 'balanced',
+      contextValidationPassed: true,
+      preSaveGateRequired: true,
+      preSaveReportPresent: true,
+      preSaveApproved: true,
+      reviewRequired: false,
+      reviewReportPresent: false,
+      reviewPassed: false,
+      continuityPassed: true,
+      narrativeValueRequired: true,
+      narrativeValuePassed: false,
+    });
+
+    expect(missing.verdict).toBe('HOLD');
+    expect(failed.verdict).toBe('HOLD');
+    expect(missing.reasons.some((reason) => reason.includes('Narrative-value'))).toBe(true);
+  });
+
   it('passes only when all required evidence passes', () => {
     const decision = evaluatePipelineAcceptance({
       qualityMode: 'quality',
@@ -99,6 +132,8 @@ describe('authoritative promotion', () => {
       reviewReportPresent: true,
       reviewPassed: true,
       continuityPassed: true,
+      narrativeValueRequired: true,
+      narrativeValuePassed: true,
       literaryPassed: true,
       coldReaderPassed: true,
     });
