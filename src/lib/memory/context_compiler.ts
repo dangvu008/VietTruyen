@@ -71,10 +71,12 @@ export function compileStoryContext(
   options: ContextCompilerOptions = {}
 ): CompiledStoryContext {
   const limits = { ...DEFAULTS, ...options };
+  const knowledgePack = memory.knowledgePack ?? [];
 
   const mustKnowSource = dedupe([
     ...memory.canonPack,
     ...memory.statePack,
+    ...knowledgePack.filter((item) => item.score >= 0.8),
     ...memory.hookPack.filter((item) => item.score >= 0.85),
   ]);
 
@@ -91,12 +93,21 @@ export function compileStoryContext(
   const doNotForceSource = dedupe([
     ...memory.semanticPack.filter((item) => item.score < 0.65),
     ...memory.graphPack.filter((item) => item.score < 0.7),
+    ...knowledgePack.filter((item) => item.score < 0.8),
     ...memory.hookPack.filter((item) => item.score < 0.85),
   ]);
 
   const mustKnow = rank(mustKnowSource)
     .slice(0, limits.maxMustKnow)
-    .map((item) => decorate(item, 'must_know', 'Canon/current state or high-priority active hook.'));
+    .map((item) =>
+      decorate(
+        item,
+        'must_know',
+        item.sourceType === 'character_knowledge'
+          ? 'Character epistemic boundary: preserve what this character knows/believes separately from objective truth.'
+          : 'Canon/current state or high-priority active hook.'
+      )
+    );
 
   const forbidden = rank(forbiddenSource)
     .slice(0, limits.maxForbidden)
@@ -118,7 +129,9 @@ export function compileStoryContext(
       decorate(
         item,
         'do_not_force',
-        'Valid background context, but do not mention or act it out solely because it was retrieved.'
+        item.sourceType === 'character_knowledge'
+          ? 'Low-certainty epistemic context. Never upgrade it into certain knowledge merely because it was retrieved.'
+          : 'Valid background context, but do not mention or act it out solely because it was retrieved.'
       )
     );
 
