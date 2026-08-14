@@ -7,11 +7,12 @@
  * Data Contract:
  * - Input:  PublishStoryInput, comment content
  * - Output: SharedStory[], StoryComment[]
- * - Allowed Deps: supabase_client, community types ONLY
  */
 
 import { supabase } from './supabase_client';
 import { parseStoryCommentPayload, serializeStoryCommentPayload } from '../community/comment_codec';
+import { assertPublishStoryGroundedProseReceipts } from '../community/publish_grounded_prose_gate';
+import { getProjectSnapshot } from '../../store/use_project_store';
 import type {
   SharedStory,
   StoryComment,
@@ -24,6 +25,15 @@ import type {
 // ── Publish ──
 
 export async function publishStory(userId: string, input: PublishStoryInput) {
+  // [Grounded Prose Runtime Gate] Fail closed at the final infrastructure write.
+  // This is intentionally duplicated below the higher-level publish pipeline so
+  // direct callers cannot bypass the release receipt check.
+  const project = await getProjectSnapshot(input.project_id);
+  if (!project) {
+    throw new Error('Grounded Prose publish gate cannot resolve the source project.');
+  }
+  assertPublishStoryGroundedProseReceipts(input.project_id, project.chapters, input);
+
   const wordCount = input.chapters.reduce((sum, ch) => sum + ch.content.split(/\s+/).length, 0);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -115,7 +125,7 @@ export async function fetchComments(storyId: string): Promise<StoryComment[]> {
     .from('story_comments')
     .select(`
       *,
-      profiles!story_comments_user_id_fkey ( full_name, avatar_url )
+      profiles!shared_stories_user_id_fkey ( full_name, avatar_url )
     `)
     .eq('story_id', storyId)
     .order('created_at', { ascending: true });
