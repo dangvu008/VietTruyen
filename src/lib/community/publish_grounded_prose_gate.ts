@@ -1,7 +1,7 @@
 import type { PublishStoryInput } from '../../types/community';
 import type { Chapter } from '../../types/story';
 import {
-  assertGroundedProseGateReceiptForContent,
+  ensureGroundedProseGateReceiptForContent,
   hashGroundedProseContent,
 } from '../workflow/grounded_prose_receipt_store';
 
@@ -14,11 +14,11 @@ export class GroundedProsePublishGateError extends Error {
   }
 }
 
-export function assertPublishStoryGroundedProseReceipts(
+export async function assertPublishStoryGroundedProseReceipts(
   projectId: string,
   projectChapters: Chapter[],
   input: Pick<PublishStoryInput, 'chapters'>,
-): void {
+): Promise<void> {
   if (input.chapters.length === 0) {
     throw new GroundedProsePublishGateError('Cannot publish a story without chapters.');
   }
@@ -48,7 +48,7 @@ export function assertPublishStoryGroundedProseReceipts(
 
     const chapterNumber = matched.sequenceNumber ?? projectChapters.indexOf(matched) + 1;
     try {
-      assertGroundedProseGateReceiptForContent(projectId, chapterNumber, sharedChapter.content);
+      await ensureGroundedProseGateReceiptForContent(projectId, chapterNumber, sharedChapter.content);
     } catch (error) {
       throw new GroundedProsePublishGateError(
         error instanceof Error
