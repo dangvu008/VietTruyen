@@ -1,5 +1,6 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
+import './lib/workflow/install_grounded_prose_store_guard';
 import App from './App';
 import { applyAppearanceToDocument, useAppearanceStore } from './store/use_appearance_store';
 import './index.css';
