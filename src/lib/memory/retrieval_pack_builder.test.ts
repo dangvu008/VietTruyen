@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { buildGraphPack, buildRiskPack, buildSemanticPack, renderPackSection } from './retrieval_pack_builder';
+import { buildGraphPack, buildRiskPack, buildSemanticPack, buildStatePack, renderPackSection } from './retrieval_pack_builder';
 import type { RelevantNarrativeCommunity } from './memory_query';
 import type { MemorySearchHit } from '../../types/memory_embedding';
-import type { PropagationTask } from '../../types/narrative_memory';
+import type { NarrativeStateFact, PropagationTask } from '../../types/narrative_memory';
 
 describe('retrieval_pack_builder', () => {
   it('builds graph and risk packs with structured titles and bodies', () => {
@@ -80,5 +80,34 @@ describe('retrieval_pack_builder', () => {
     expect(semanticPack[0]?.body).toContain('[scene]');
     expect(section).toContain('## TRÍCH ĐOẠN');
     expect(section.length).toBeLessThan(90);
+  });
+
+  it('renders character knowledge as belief separate from world truth', () => {
+    const fact: NarrativeStateFact = {
+      id: 'knowledge-fact',
+      projectId: 'project-1',
+      subjectId: 'char-main',
+      subjectType: 'character',
+      predicate: 'character_knowledge:secret-x',
+      value: JSON.stringify({
+        proposition: 'Người áo đen từng đến Thanh Khê',
+        worldTruth: 'unknown',
+        belief: 'suspects',
+        learnedAtChapter: 12,
+      }),
+      valueType: 'string',
+      status: 'active',
+      validFromChapter: 12,
+      confidence: 0.8,
+      evidenceIds: [],
+      mutationIds: [],
+      updatedAt: '2026-08-15T00:00:00.000Z',
+    };
+
+    const pack = buildStatePack([fact], 4);
+    expect(pack).toHaveLength(1);
+    expect(pack[0]?.sourceType).toBe('character_knowledge');
+    expect(pack[0]?.body).toContain('belief=suspects');
+    expect(pack[0]?.body).toContain('worldTruth=unknown');
   });
 });
