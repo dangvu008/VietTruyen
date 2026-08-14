@@ -1,6 +1,7 @@
 import type { MemorySearchHit, RetrievalPackItem } from '../../types/memory_embedding';
 import type { RelevantNarrativeCommunity } from './memory_query';
 import type { NarrativeStateFact, PendingHook, PropagationTask } from '../../types/narrative_memory';
+import { stateFactToCharacterKnowledge } from './character_knowledge_state';
 
 function truncateText(text: string, maxLength: number): string {
   const trimmed = text.trim();
@@ -69,6 +70,59 @@ export function buildStatePack(
         }
       )
     );
+}
+
+/**
+ * Character knowledge is an epistemic constraint, not objective canon.
+ * Keep belief and world truth side-by-side so the writer can reason about both
+ * without silently upgrading suspicion/belief into knowledge.
+ */
+export function buildKnowledgePack(
+  facts: NarrativeStateFact[],
+  targetChapterIndex: number,
+  limit = 6
+): RetrievalPackItem[] {
+  return facts
+    .map(stateFactToCharacterKnowledge)
+    .filter((entry): entry is NonNullable<ReturnType<typeof stateFactToCharacterKnowledge>> => entry !== null)
+    .filter((entry) => (entry.learnedAtChapter ?? 0) <= targetChapterIndex)
+    .filter((entry) => entry.forgottenAtChapter == null || entry.forgottenAtChapter > targetChapterIndex)
+    .sort((left, right) => {
+      const leftChapter = left.lastConfirmedAtChapter ?? left.learnedAtChapter ?? 0;
+      const rightChapter = right.lastConfirmedAtChapter ?? right.learnedAtChapter ?? 0;
+      if (rightChapter !== leftChapter) return rightChapter - leftChapter;
+      return right.confidence - left.confidence;
+    })
+    .slice(0, limit)
+    .map((entry) => {
+      const learnedAt = entry.learnedAtChapter != null ? `Ch.${entry.learnedAtChapter}` : 'chưa xác định';
+      const confirmedAt = entry.lastConfirmedAtChapter != null ? `; xác nhận gần nhất Ch.${entry.lastConfirmedAtChapter}` : '';
+      const scoreByBelief = {
+        knows: 1,
+        believes: 0.9,
+        suspects: 0.84,
+        disbelieves: 0.88,
+        unknown: 0.6,
+      } as const;
+      const score = Math.max(0.6, Math.min(1, Math.min(entry.confidence, scoreByBelief[entry.belief])));
+      const body = [
+        `- Mệnh đề: ${truncateText(entry.proposition, 180)}`,
+        `- Nhận thức của nhân vật: ${entry.belief}; sự thật thế giới: ${entry.worldTruth}`,
+        `- Có hiệu lực từ ${learnedAt}${confirmedAt}.`,
+        '- RÀNG BUỘC: hành vi/lời thoại của nhân vật phải theo nhận thức của nhân vật, không theo sự thật thế giới nếu hai lớp khác nhau.',
+      ].join('\n');
+
+      return createPackItem(
+        `knowledge:${entry.characterId}:${entry.propositionId}`,
+        `${entry.characterId} · knowledge · ${entry.propositionId}`,
+        body,
+        score,
+        'character_knowledge',
+        {
+          chapterIndex: entry.learnedAtChapter ?? entry.lastConfirmedAtChapter,
+        }
+      );
+    });
 }
 
 export function buildHookPack(
