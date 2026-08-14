@@ -28,6 +28,7 @@ const STEP_LABELS: Record<PipelineStepLabel, string> = {
   plan_branches:  'Lập nhánh',
   write_chapter:  'Viết chương',
   pre_save_quality_gate: 'Soát trước lưu',
+  narrative_value_gate: 'Giá trị tự sự',
   review_checkers:'Review',
   style_analysis: 'Văn phong',
   data_extraction:'Trích xuất',
@@ -45,6 +46,7 @@ const STEP_COLORS: Record<PipelineStepLabel, string> = {
   plan_branches:  'bg-accent-amber/60',
   write_chapter:  'bg-accent-amber/90',
   pre_save_quality_gate: 'bg-sky-400/45',
+  narrative_value_gate: 'bg-cyan-400/45',
   review_checkers:'bg-accent-rose/50',
   style_analysis: 'bg-purple-400/50',
   data_extraction:'bg-accent-teal/30',
@@ -92,19 +94,16 @@ const TokenDashboard: React.FC = () => {
     );
   }
 
-  // Task type breakdown for visual bar
   const taskEntries = Object.entries(stats.byTaskType)
     .sort((a, b) => b[1].tokens - a[1].tokens);
   const maxTaskTokens = taskEntries[0]?.[1]?.tokens || 1;
 
-  // Model breakdown
   const modelEntries = Object.entries(stats.byModel)
     .sort((a, b) => b[1].tokens - a[1].tokens);
   const maxModelTokens = modelEntries[0]?.[1]?.tokens || 1;
 
   return (
     <div className="card border-accent-teal/15">
-      {/* Header */}
       <div className="flex items-center justify-between mb-5">
         <h3 className="text-base font-display font-semibold text-text-primary flex items-center gap-2">
           <BarChart3 size={16} className="text-accent-teal" />
@@ -118,7 +117,6 @@ const TokenDashboard: React.FC = () => {
         </button>
       </div>
 
-      {/* Quick Stats Grid */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
         <StatCard
           icon={<Zap size={14} />}
@@ -159,7 +157,6 @@ const TokenDashboard: React.FC = () => {
         )}
       </div>
 
-      {/* Input vs Output */}
       <div className="grid grid-cols-2 gap-3 mb-5">
         <div className="p-3 rounded-xl bg-bg-elevated bg-surface-container-low">
           <div className="flex items-center gap-2 mb-2">
@@ -198,7 +195,6 @@ const TokenDashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* By Task Type */}
       {taskEntries.length > 0 && (
         <div className="mb-5">
           <h4 className="text-[11px] font-semibold text-text-secondary uppercase tracking-wider mb-2 flex items-center gap-1.5">
@@ -228,7 +224,6 @@ const TokenDashboard: React.FC = () => {
         </div>
       )}
 
-      {/* Pipeline Sessions */}
       {pipelineSessions.length > 0 && (
         <div>
           <h4 className="text-[11px] font-semibold text-text-secondary uppercase tracking-wider mb-2 flex items-center gap-1.5">
@@ -251,7 +246,6 @@ const TokenDashboard: React.FC = () => {
         </div>
       )}
 
-      {/* By Model */}
       {modelEntries.length > 0 && (
         <div>
           <h4 className="text-[11px] font-semibold text-text-secondary uppercase tracking-wider mb-2 flex items-center gap-1.5">
@@ -283,8 +277,6 @@ const TokenDashboard: React.FC = () => {
     </div>
   );
 };
-
-// ─── Sub Components ─────────────────────────────────────
 
 const StatCard: React.FC<{
   icon: React.ReactNode;
@@ -335,7 +327,6 @@ const PipelineSessionRow: React.FC<{
 
   return (
     <div className="rounded-lg overflow-hidden border border-border-subtle/30">
-      {/* Row header */}
       <button
         onClick={onToggle}
         className="w-full flex items-center gap-2 px-3 py-2 bg-bg-surface hover:bg-bg-elevated transition-colors text-left"
@@ -344,7 +335,6 @@ const PipelineSessionRow: React.FC<{
           {expanded ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
         </span>
 
-        {/* Project + chapter */}
         <span className="flex-1 min-w-0">
           <span className="text-[11px] font-medium text-text-primary truncate block">
             {session.projectTitle}
@@ -354,7 +344,6 @@ const PipelineSessionRow: React.FC<{
           </span>
         </span>
 
-        {/* Mini stacked bar */}
         <div className="flex gap-px h-3 w-20 rounded overflow-hidden shrink-0">
           {steps.filter(([, d]) => d.tokens > 0).map(([step, d]) => (
             <div
@@ -366,7 +355,6 @@ const PipelineSessionRow: React.FC<{
           ))}
         </div>
 
-        {/* Cost + tokens */}
         <div className="text-right shrink-0">
           <div className="text-[11px] font-semibold text-accent-amber">
             {formatTokens(session.totalTokens)}
@@ -377,7 +365,6 @@ const PipelineSessionRow: React.FC<{
         </div>
       </button>
 
-      {/* Step breakdown (expanded) */}
       {expanded && (
         <div className="px-3 py-2 bg-bg-deep/40 space-y-1.5 border-t border-border-subtle/20">
           {steps.filter(([, d]) => d.tokens > 0).map(([step, d]) => (
