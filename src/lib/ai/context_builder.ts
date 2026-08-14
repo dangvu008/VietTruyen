@@ -178,7 +178,15 @@ export async function buildTemporalWritingContext(
     .slice(0, 5)
     .map((warning) => `- Ch.${warning.chapterIndex}: ${warning.recommendedAction}`)
     .join('\n')}`;
-  return finalizeContext([warningSection, ...context.sections]);
+  const temporal = finalizeContext([warningSection, ...context.sections], getContextMaxChars(temporalProject));
+  temporal.validationPass = context.validationPass;
+  temporal.sceneType = context.sceneType;
+  temporal.warnings = Array.from(new Set([
+    ...context.warnings,
+    ...temporal.warnings,
+    ...warnings.slice(0, 5).map((warning) => `Continuity Ch.${warning.chapterIndex}: ${warning.recommendedAction}`),
+  ]));
+  return temporal;
 }
 
 export async function buildSurpriseContext(
