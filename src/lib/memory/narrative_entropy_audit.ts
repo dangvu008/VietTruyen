@@ -19,11 +19,14 @@ export interface EntropyAuditCadence {
   everyAcceptedChapters: number;
   /** Run earlier when open-hook inventory becomes risky. */
   hookPressureThreshold: number;
+  /** Avoid an expensive audit on every chapter while hook pressure stays high. */
+  hookPressureMinSpacing: number;
 }
 
 export const DEFAULT_ENTROPY_AUDIT_CADENCE: EntropyAuditCadence = {
   everyAcceptedChapters: 25,
   hookPressureThreshold: 15,
+  hookPressureMinSpacing: 5,
 };
 
 function normalized(value?: string): string {
@@ -42,8 +45,14 @@ export function shouldRunNarrativeEntropyAudit(input: {
 }): boolean {
   const cadence = input.cadence ?? DEFAULT_ENTROPY_AUDIT_CADENCE;
   const last = input.lastAuditChapterIndex ?? 0;
-  if ((input.unresolvedHookCount ?? 0) >= cadence.hookPressureThreshold) return true;
-  return input.acceptedChapterIndex - last >= cadence.everyAcceptedChapters;
+  const distance = input.acceptedChapterIndex - last;
+  if (
+    (input.unresolvedHookCount ?? 0) >= cadence.hookPressureThreshold &&
+    distance >= cadence.hookPressureMinSpacing
+  ) {
+    return true;
+  }
+  return distance >= cadence.everyAcceptedChapters;
 }
 
 export function auditNarrativeEntropy(samples: EntropyChapterSample[]): NarrativeEntropyIssue[] {
