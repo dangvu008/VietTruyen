@@ -11,35 +11,25 @@
  *
  * Flow: Build prompt with reading_power taxonomy → AI evaluates → Parse JSON → Return
  * Refusal rule: Chapter < 200 chars → skip
- * Domain Map Ref: GOLDEN-THREE-v1
+ * Domain Map Ref: GOLDEN-THREE-v2-CONTEXTUAL
  */
 
 import type { CheckerReport } from './checker_types';
 import type { GenreProfile } from '../../types/genre_profile';
 
 const SYSTEM_PROMPT = `Bạn là chuyên gia đánh giá "Tam Giác Vàng" (Golden Three) cho tiểu thuyết mạng.
-Tam Giác Vàng gồm 3 yếu tố bắt buộc trong MỖI chương:
+Golden Three là BỘ CÔNG CỤ retention, không phải checklist bắt buộc trong mọi chương.
 
-1. HOOK (钩子): Yếu tố kéo đọc giả đọc tiếp. Các loại:
-   - question_hook: Câu hỏi chưa được trả lời
-   - danger_hook: Nhân vật đang trong nguy hiểm
-   - revelation_hook: Sắp lộ bí mật lớn
-   - emotional_hook: Đỉnh điểm cảm xúc
-   - reversal_hook: Tình thế đảo ngược
+1. HOOK: yếu tố tạo lực kéo đọc tiếp. Có thể mạnh, nhẹ hoặc không cần nếu chương kết tự nhiên và vẫn có momentum.
+2. COOLPOINT: khoảnh khắc thỏa mãn. Không phải chương nào cũng cần; chương lắng, chuyển tiếp, xây quan hệ hoặc setup có thể không có.
+3. MICROPAYOFF: phần thưởng/tiến triển nhỏ. Có thể là thông tin, quan hệ, quyết định, cảm xúc, tiến độ mục tiêu; không cần ép thành clue hay power-up.
 
-2. COOLPOINT (爽点): Khoảnh khắc thỏa mãn đọc giả. Các mô thức:
-   - face_slap: Tát mặt kẻ coi thường
-   - level_up: Nâng cấp, đột phá
-   - treasure: Phát hiện kho báu, bí kíp
-   - revenge: Báo thù thành công
-   - recognition: Được thừa nhận thực lực
-
-3. MICROPAYOFF (微兑现): Phần thưởng nhỏ xuyên suốt để duy trì retention:
-   - skill_reveal: Lộ kỹ năng/bài mới
-   - mystery_clue: Manh mối bí ẩn
-   - relationship_shift: Thay đổi quan hệ
-   - world_expansion: Mở rộng thế giới quan
-   - foreshadow_payoff: Thu hoạch mầm mối đã gieo
+NGUYÊN TẮC:
+- Đánh giá mức độ PHÙ HỢP với chức năng chương, không chấm theo quota máy móc.
+- Không coi thiếu hook/cliffhanger, coolpoint hoặc mystery clue là lỗi chỉ vì chúng vắng mặt.
+- Không đề xuất thêm twist, nguy hiểm, bí ẩn, power-up, treasure, world expansion hay foreshadowing nếu nội dung hiện tại không cần.
+- Nếu retention yếu, ưu tiên sửa nhịp, làm rõ stakes/decision/progress từ vật liệu đã có trước khi nghĩ đến plot device mới.
+- Quiet ending hợp lệ. Atmospheric detail không phải manh mối mặc định.
 
 LUÔN trả về JSON hợp lệ. Không giải thích. Không markdown code blocks.`;
 
@@ -49,10 +39,10 @@ export function buildGoldenThreeCheckerPrompt(
   genreProfile?: GenreProfile,
 ): { system: string; user: string } {
   const genreContext = genreProfile
-    ? `\nThể loại: ${genreProfile.name}\nYêu cầu Hook: mỗi chương (allowance: ${genreProfile.hookConfig?.transitionAllowance ?? 1})\nYêu cầu Coolpoint: mỗi ${genreProfile.coolPointConfig?.comboInterval ?? 3} chương`
+    ? `\nThể loại: ${genreProfile.name}\nHook guideline allowance: ${genreProfile.hookConfig?.transitionAllowance ?? 1}\nCoolpoint guideline interval: khoảng ${genreProfile.coolPointConfig?.comboInterval ?? 3} chương. Các số này là guideline, không phải luật bắt buộc.`
     : '';
 
-  const userPrompt = `Phân tích chương ${chapterNumber} theo Tam Giác Vàng:
+  const userPrompt = `Phân tích chương ${chapterNumber} theo Golden Three theo hướng BỐI CẢNH, không checklist:
 ${genreContext}
 
 Nội dung chương:
@@ -64,34 +54,29 @@ ${chapterText}
 {
   "agent": "golden_three",
   "chapter": ${chapterNumber},
-  "overall_score": 75,
+  "overall_score": 82,
   "pass": true,
-  "issues": [
-    {
-      "id": "gt-1",
-      "severity": "high",
-      "description": "Thiếu Hook cuối chương — không có lý do để đọc tiếp",
-      "suggestion": "Thêm question_hook hoặc danger_hook ở 2 đoạn cuối"
-    }
-  ],
+  "issues": [],
   "metrics": {
-    "hooks_found": [{ "type": "question_hook", "location": "cuối chương", "strength": 8 }],
-    "hooks_count": 1,
-    "hooks_score": 80,
-    "coolpoints_found": [{ "type": "level_up", "location": "giữa chương", "strength": 7 }],
-    "coolpoints_count": 1,
+    "hooks_found": [],
+    "hooks_count": 0,
+    "hooks_score": 70,
+    "coolpoints_found": [],
+    "coolpoints_count": 0,
     "coolpoints_score": 70,
-    "micropayoffs_found": [{ "type": "skill_reveal", "location": "đầu chương", "strength": 6 }],
+    "micropayoffs_found": [{ "type": "relationship_shift", "location": "giữa chương", "strength": 6 }],
     "micropayoffs_count": 1,
-    "micropayoffs_score": 65,
+    "micropayoffs_score": 75,
     "golden_triangle_balance": "good",
     "retention_prediction": "medium"
   },
-  "summary": "Chương có coolpoint tốt nhưng hook cuối yếu, cần cải thiện."
+  "summary": "Chương không dùng hook/coolpoint rõ nhưng vẫn phù hợp nhờ tiến triển quan hệ và kết cảnh tự nhiên."
 }
 
 golden_triangle_balance: "excellent" | "good" | "weak" | "broken"
-retention_prediction: "high" | "medium" | "low"`;
+retention_prediction: "high" | "medium" | "low"
+
+Chỉ tạo issue khi có vấn đề reader-pull thực sự. Không tạo issue kiểu "thiếu Hook cuối chương" nếu chương vẫn hoàn thành chức năng và có động lượng tự nhiên.`;
 
   return { system: SYSTEM_PROMPT, user: userPrompt };
 }
