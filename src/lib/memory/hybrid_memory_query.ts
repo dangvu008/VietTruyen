@@ -23,15 +23,39 @@ function applyRagDedupRules(
   return hits.map(hit => {
     if (hit.chapterIndex === undefined) return hit;
     const distance = currentChapterIndex - hit.chapterIndex;
-    
+
     // Skip content that is too recent (e.g. from the last 2 chapters) to prevent AI looping
-    if (distance <= 2 && distance > 0) return null;       
-    
+    if (distance <= 2 && distance > 0) return null;
+
     // Mark slightly older content to reduce its weight/priority in the prompt
-    if (distance <= 5 && distance > 0) return { ...hit, body: `[MOD40%] ${hit.body}` }; 
-    
+    if (distance <= 5 && distance > 0) return { ...hit, body: `[MOD40%] ${hit.body}` };
+
     return hit;
   }).filter(Boolean) as RetrievalPackItem[];
+}
+
+/**
+ * Defense-in-depth isolation at the retrieval boundary.
+ *
+ * Storage/vector adapters are expected to scope by projectId, but a long-form
+ * Story OS must not trust that assumption alone. A malformed/stale index must
+ * never be able to inject another story into the writer context.
+ */
+function isolateSemanticCandidates<T extends { record: { projectId: string; chapterIndex?: number } }>(
+  candidates: T[],
+  projectId: string,
+  targetChapterIndex: number,
+): { accepted: T[]; rejectedCount: number } {
+  const accepted = candidates.filter((candidate) => {
+    if (candidate.record.projectId !== projectId) return false;
+    const chapterIndex = candidate.record.chapterIndex ?? 0;
+    // Never expose future-story evidence while writing an earlier chapter.
+    return chapterIndex <= 0 || chapterIndex <= targetChapterIndex;
+  });
+  return {
+    accepted,
+    rejectedCount: candidates.length - accepted.length,
+  };
 }
 
 async function retrieveHybridMemory(
@@ -40,6 +64,8 @@ async function retrieveHybridMemory(
   query: string,
   intent: MemoryRetrievalIntent
 ): Promise<HybridMemoryResult> {
+  if (!project.id) throw new Error('project.id is required for isolated memory retrieval');
+
   const profile = buildMemoryRetrievalProfile(intent, project, query);
 
   const [definitions, continuityWarnings, communities, semanticCandidates, activeStateFacts, openHooks] = await Promise.all([
@@ -55,7 +81,8 @@ async function retrieveHybridMemory(
     getOpenHooksForProject(project.id).catch(() => []),
   ]);
 
-  const semanticHits = rerankMemorySearchHits(project, query, semanticCandidates, {
+  const isolated = isolateSemanticCandidates(semanticCandidates, project.id, targetChapterIndex);
+  const semanticHits = rerankMemorySearchHits(project, query, isolated.accepted, {
     limit: profile.finalLimit,
   });
 
@@ -76,6 +103,9 @@ async function retrieveHybridMemory(
       return leftUrgency - rightUrgency;
     });
   const warnings = [
+    ...(isolated.rejectedCount > 0
+      ? [`Retrieval isolation rejected ${isolated.rejectedCount} cross-project/future memory candidate(s).`]
+      : []),
     ...riskPack.map((item) => item.body),
     ...relevantHooks
       .filter((hook) => hook.expectedPayoffBy != null && hook.expectedPayoffBy <= targetChapterIndex + 2)
@@ -93,9 +123,7 @@ async function retrieveHybridMemory(
           formatSnapshotLine(definition.canonicalName, snapshot.attributes),
           1,
           'entity_snapshot',
-          {
-            chapterIndex: snapshot.chapterIndex,
-          }
+          { chapterIndex: snapshot.chapterIndex }
         )
       );
     } else {
@@ -115,8 +143,7 @@ async function retrieveHybridMemory(
   const statePack = buildStatePack(relevantStateFacts, 4);
   const hookPack = buildHookPack(relevantHooks, 4);
   let semanticPack = buildSemanticPack(semanticHits, profile.finalLimit);
-  
-  // Apply RAG dedup rules (P3a) to prevent AI from repeating recently generated content
+
   semanticPack = applyRagDedupRules(semanticPack, targetChapterIndex);
 
   return {
