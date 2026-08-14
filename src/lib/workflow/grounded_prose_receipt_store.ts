@@ -1,4 +1,10 @@
-import type { GroundedProseRuntimeGateArtifact } from '../../types/grounded_prose';
+import {
+  GROUNDED_PROSE_CAUSALITY_SCHEMA,
+  GROUNDED_PROSE_COLD_READER_SCHEMA,
+  GROUNDED_PROSE_GATE_SCHEMA,
+  GROUNDED_PROSE_LINE_AUDIT_SCHEMA,
+  type GroundedProseRuntimeGateArtifact,
+} from '../../types/grounded_prose';
 
 const STORAGE_KEY = 'viettruyen:grounded-prose-receipts:v1';
 const MAX_RECEIPTS = 500;
@@ -67,23 +73,96 @@ function prune(records: ReceiptMap): ReceiptMap {
   return Object.fromEntries(entries.slice(0, MAX_RECEIPTS));
 }
 
+function assertGateStructure(
+  gate: GroundedProseRuntimeGateArtifact,
+  chapterNumber: number,
+  proseHash: string,
+): void {
+  if (gate.schemaVersion !== GROUNDED_PROSE_GATE_SCHEMA) {
+    throw new Error(`Chapter ${chapterNumber} Grounded Prose receipt has an invalid gate schema.`);
+  }
+  if (gate.chapterNumber !== chapterNumber || gate.proseHash !== proseHash) {
+    throw new Error(`Chapter ${chapterNumber} Grounded Prose receipt identity does not match current prose.`);
+  }
+  if (gate.decision !== 'PASS' || gate.blockers.length > 0) {
+    throw new Error(`Chapter ${chapterNumber} Grounded Prose receipt is not a clean PASS.`);
+  }
+
+  const causality = gate.causalitySkeleton;
+  const coldReader = gate.coldReader;
+  const lineAudit = gate.lineAudit;
+
+  if (!causality || !coldReader || !lineAudit) {
+    throw new Error(`Chapter ${chapterNumber} Grounded Prose receipt is missing required artifacts.`);
+  }
+
+  if (
+    causality.schemaVersion !== GROUNDED_PROSE_CAUSALITY_SCHEMA ||
+    causality.chapterNumber !== chapterNumber ||
+    causality.proseHash !== proseHash ||
+    !causality.pass ||
+    causality.blockers.length > 0 ||
+    causality.beats.length === 0
+  ) {
+    throw new Error(`Chapter ${chapterNumber} causality artifact is not a clean PASS for current prose.`);
+  }
+
+  for (const beat of causality.beats) {
+    if (!beat.id?.trim() || !beat.stimulus?.trim() || !beat.perception?.trim() || !beat.response?.trim() || !beat.consequence?.trim()) {
+      throw new Error(`Chapter ${chapterNumber} causality artifact contains an incomplete beat.`);
+    }
+  }
+
+  if (
+    coldReader.schemaVersion !== GROUNDED_PROSE_COLD_READER_SCHEMA ||
+    coldReader.chapterNumber !== chapterNumber ||
+    coldReader.proseHash !== proseHash ||
+    !coldReader.pass ||
+    coldReader.blockers.length > 0 ||
+    coldReader.findings.some((finding) => finding.severity === 'high')
+  ) {
+    throw new Error(`Chapter ${chapterNumber} cold-reader artifact is not a clean PASS for current prose.`);
+  }
+
+  if (
+    lineAudit.schemaVersion !== GROUNDED_PROSE_LINE_AUDIT_SCHEMA ||
+    lineAudit.chapterNumber !== chapterNumber ||
+    lineAudit.proseHash !== proseHash ||
+    !lineAudit.pass ||
+    lineAudit.blockers.length > 0 ||
+    lineAudit.verdicts.some((verdict) => verdict.action === 'DELETE' || verdict.action === 'REWRITE')
+  ) {
+    throw new Error(`Chapter ${chapterNumber} line-audit artifact is not a clean PASS for current prose.`);
+  }
+
+  const findingIds = new Set(coldReader.findings.map((finding) => finding.id));
+  const verdictCounts = new Map<string, number>();
+  for (const verdict of lineAudit.verdicts) {
+    if (!findingIds.has(verdict.findingId)) {
+      throw new Error(`Chapter ${chapterNumber} line audit references an unknown cold-reader finding.`);
+    }
+    verdictCounts.set(verdict.findingId, (verdictCounts.get(verdict.findingId) || 0) + 1);
+    if (!verdict.reason?.trim()) {
+      throw new Error(`Chapter ${chapterNumber} line audit contains a verdict without reason.`);
+    }
+    if (verdict.action === 'KEEP_WITH_REASON' && !verdict.sceneFunction?.trim()) {
+      throw new Error(`Chapter ${chapterNumber} line audit keeps a finding without concrete scene function.`);
+    }
+  }
+
+  for (const finding of coldReader.findings) {
+    if ((verdictCounts.get(finding.id) || 0) !== 1) {
+      throw new Error(`Chapter ${chapterNumber} cold-reader finding ${finding.id} lacks exactly one line-audit verdict.`);
+    }
+  }
+}
+
 export function saveGroundedProseGateReceipt(
   projectId: string,
   chapterNumber: number,
   gate: GroundedProseRuntimeGateArtifact,
 ): GroundedProseGateReceiptRecord {
-  if (gate.decision !== 'PASS') {
-    throw new Error('Cannot persist a FAIL grounded-prose gate as a release receipt.');
-  }
-  if (gate.chapterNumber !== chapterNumber) {
-    throw new Error('Grounded-prose gate chapter number does not match receipt target.');
-  }
-  if (!gate.proseHash?.trim()) {
-    throw new Error('Grounded-prose gate receipt is missing prose hash.');
-  }
-  if (!gate.causalitySkeleton || !gate.coldReader || !gate.lineAudit) {
-    throw new Error('Grounded-prose gate receipt is missing required audit artifacts.');
-  }
+  assertGateStructure(gate, chapterNumber, gate.proseHash);
 
   const record: GroundedProseGateReceiptRecord = {
     projectId,
@@ -126,15 +205,14 @@ export function assertGroundedProseGateReceipt(
   if (!receipt) {
     throw new Error(`Chapter ${chapterNumber} has no durable Grounded Prose PASS receipt.`);
   }
-  if (receipt.proseHash !== proseHash || receipt.gate.proseHash !== proseHash) {
+  if (receipt.projectId !== projectId || receipt.chapterNumber !== chapterNumber) {
+    throw new Error(`Chapter ${chapterNumber} Grounded Prose receipt identity is invalid.`);
+  }
+  if (receipt.proseHash !== proseHash) {
     throw new Error(`Chapter ${chapterNumber} Grounded Prose receipt is stale for the current prose.`);
   }
-  if (receipt.gate.decision !== 'PASS') {
-    throw new Error(`Chapter ${chapterNumber} Grounded Prose receipt is not PASS.`);
-  }
-  if (!receipt.gate.causalitySkeleton || !receipt.gate.coldReader || !receipt.gate.lineAudit) {
-    throw new Error(`Chapter ${chapterNumber} Grounded Prose receipt is missing required artifacts.`);
-  }
+
+  assertGateStructure(receipt.gate, chapterNumber, proseHash);
   return receipt.gate;
 }
 
