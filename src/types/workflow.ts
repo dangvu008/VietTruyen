@@ -3,6 +3,7 @@ import type { CombinedReviewReport } from '../core/checkers/checker_types';
 import type { StyleAnalysisResult } from './style_learning';
 import type { Project, WorkflowEngineType } from './story';
 import type { GroundedProseRuntimeGateArtifact } from './grounded_prose';
+import type { PipelineAcceptanceDecision } from '../lib/memory/authoritative_promotion';
 
 export type WorkflowIntentType =
   | 'create_chapter'
@@ -75,11 +76,11 @@ export interface FullWritePipelinePayload {
   notes?: string;
   sourceOverride?: string;
   styleInstruction?: string;
-  /** Skip review step if user wants faster output */
+  /** Skip review step if user wants faster output. In quality mode this yields HOLD. */
   skipReview?: boolean;
-  /** Skip style polish step */
+  /** Skip style analysis step */
   skipPolish?: boolean;
-  /** Controls which expensive post-draft pipeline steps run */
+  /** Controls expensive post-draft pipeline steps and promotion eligibility. */
   qualityMode?: QualityMode;
 }
 
@@ -96,12 +97,13 @@ export interface WorkflowArtifacts {
   draftText?: string;
   selectedBranchId?: string;
   divergenceReport?: DivergenceReport;
-  /** Full pipeline artifacts */
   reviewReport?: CombinedReviewReport;
   styleAnalysis?: StyleAnalysisResult;
   pipelineStepTimings?: Record<string, number>;
-  /** Fail-closed prose artifact bundle required before automated persistence. */
+  /** Fail-closed prose artifact bundle required before automated promotion. */
   groundedProseGate?: GroundedProseRuntimeGateArtifact;
+  /** PASS/HOLD/FAIL contract controlling authoritative state and accepted memory. */
+  acceptanceDecision?: PipelineAcceptanceDecision;
 }
 
 export interface WorkflowSessionError {
