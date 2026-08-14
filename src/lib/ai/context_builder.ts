@@ -16,7 +16,7 @@ import type {
 import { quickTruncate } from './token_estimator';
 import { buildStyleGuideSection } from './style_learner';
 import { getChaptersChronological } from './surprise_engine';
-import { injectTemplateToWriterPrompt } from './template_injector';
+import { injectWriterSafeTemplateGuidance } from './writer_template_policy';
 import {
   buildTemporalProjectView,
   getClusterAwareNarrativeState,
@@ -134,7 +134,7 @@ export async function buildWritingContext(
 
   const genre = project.genre || '';
   const tags = project.subGenre || [];
-  const templateGuidance = injectTemplateToWriterPrompt(genre, tags, targetChapterIndex);
+  const templateGuidance = injectWriterSafeTemplateGuidance(genre, tags, targetChapterIndex);
   if (templateGuidance) sections.push(`## GENRE TEMPLATE GUIDANCE\n${templateGuidance}`);
 
   if (memoryRoute.includeForeshadowing) {
@@ -217,7 +217,7 @@ export async function buildSurpriseContext(
   }
   const genre = project.genre || '';
   const tags = project.subGenre || [];
-  const templateGuidance = injectTemplateToWriterPrompt(genre, tags, targetChapterIndex);
+  const templateGuidance = injectWriterSafeTemplateGuidance(genre, tags, targetChapterIndex);
   if (templateGuidance) sections.push(`## GENRE TEMPLATE GUIDANCE\n${templateGuidance}`);
   const writingContract = buildOutputContract(tensionLevel);
   if (writingContract) sections.push(writingContract);
