@@ -9,6 +9,11 @@ import {
   writeChapterFromBranchWithEngine,
 } from './workflow_engine';
 import { executeFullWritePipeline } from './full_write_pipeline';
+import {
+  GroundedProseGateError,
+  assertGroundedProseRuntimeGate,
+  runGroundedProseRuntimeGate,
+} from './grounded_prose_runtime_gate';
 
 interface ExecuteWorkflowIntentOptions {
   onUpdate?: (session: WorkflowSession) => void;
@@ -19,6 +24,14 @@ interface ExecuteWorkflowIntentOptions {
 }
 
 function buildWorkflowError(error: unknown): WorkflowSessionError {
+  if (error instanceof GroundedProseGateError) {
+    return {
+      code: error.code,
+      message: error.message,
+      retryable: true,
+    };
+  }
+
   return {
     code: 'workflow_execution_failed',
     message: error instanceof Error ? error.message : 'Workflow execution thất bại.',
@@ -191,11 +204,32 @@ export async function executeWorkflowIntent(
           },
         });
 
+        session = emitSession(
+          session,
+          {
+            step: 'reviewing',
+            statusMessage: 'Đang chạy Grounded Prose Runtime Gate (causality → blind reader → line audit)...',
+          },
+          options.onUpdate,
+        );
+
+        const groundedProseGate = await runGroundedProseRuntimeGate({
+          project: payload.project,
+          targetChapterIndex: payload.targetChapterIndex,
+          chapterTitle: pipelineResult.title,
+          chapterContent: pipelineResult.content,
+        });
+
+        // Deterministic fail-closed decision. No successful workflow result is
+        // exposed downstream unless every required artifact exists, matches the
+        // same prose hash, and contains no unresolved blocking verdict.
+        assertGroundedProseRuntimeGate(groundedProseGate);
+
         return emitSession(
           session,
           {
             step: 'completed',
-            statusMessage: `Pipeline hoàn tất trong ${Math.round(pipelineResult.totalDurationMs / 1000)}s.`,
+            statusMessage: `Pipeline + Grounded Prose Gate hoàn tất trong ${Math.round(pipelineResult.totalDurationMs / 1000)}s.`,
             artifacts: {
               chapterWriteResult: pipelineResult.writeResult,
               draftText: pipelineResult.content,
@@ -204,6 +238,7 @@ export async function executeWorkflowIntent(
               reviewReport: pipelineResult.reviewReport ?? undefined,
               styleAnalysis: pipelineResult.styleAnalysis ?? undefined,
               pipelineStepTimings: pipelineResult.stepTimings,
+              groundedProseGate,
             },
             metrics: {
               startedAt: session.metrics.startedAt,
@@ -217,11 +252,18 @@ export async function executeWorkflowIntent(
       }
     }
   } catch (error) {
+    const groundedProseGate = error instanceof GroundedProseGateError
+      ? error.gate
+      : undefined;
+
     return emitSession(
       session,
       {
         step: 'failed',
-        statusMessage: 'Workflow thất bại.',
+        statusMessage: groundedProseGate
+          ? 'Grounded Prose Runtime Gate chặn bản thảo trước khi lưu.'
+          : 'Workflow thất bại.',
+        artifacts: groundedProseGate ? { groundedProseGate } : undefined,
         error: buildWorkflowError(error),
         metrics: {
           startedAt: session.metrics.startedAt,
