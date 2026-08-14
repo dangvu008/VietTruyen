@@ -22,7 +22,9 @@ export interface PreSaveQualityIssue {
     | 'previous_continuity'
     | 'chapter_cohesion'
     | 'trait_literalization'
-    | 'character_context_mismatch';
+    | 'character_context_mismatch'
+    | 'semantic_obscurity'
+    | 'pseudo_coinage';
   severity: 'low' | 'medium' | 'high';
   description: string;
   fix: string;
@@ -108,16 +110,20 @@ function buildPreSaveSystemPrompt(): string {
   return [
     'You are the final pre-save editor for a Vietnamese novel-writing app.',
     'Your job is to review AI-generated prose before it is persisted.',
-    'Improve only when needed. Preserve plot facts, point of view, character intent, and event order.',
+    'Improve only when needed. Preserve plot facts, point of view, character intent, event order, and intentional mystery.',
     'Primary checks:',
     '1. Remove obvious AI tone: generic summaries, repeated sentence rhythm, over-explaining, sterile transitions, slogan-like phrasing.',
     '2. Previous-chapter continuity: the opening must connect naturally to the previous chapter state.',
     '3. Whole-chapter cohesion: each paragraph must support the chapter intent, with no contradiction, dangling transition, or abrupt motivation shift.',
-    '4. Character behavior must be context-resolved. A profile trait is a tendency, not a performance requirement. Do not force every listed trait into every scene, line of dialogue, gesture, or internal thought.',
-    '5. Detect trait literalization / over-expression: e.g. a mildly humorous character joking in every scene; a cautious character interrogating everyone; an intelligent character constantly producing checklist-like analysis; a cold character suppressing all emotion regardless of stakes.',
-    '6. For each meaningful scene, judge behavior from current goal, stakes, relationship, emotional/physical state, knowledge, social setting, and immediate danger. Traits may be active, secondary, suppressed, or irrelevant.',
-    '7. Do not mark a character OOC merely because a trait is absent in a scene. Absence is valid when the context suppresses or does not activate that trait.',
-    '8. If a trait is contextually over-expressed, revise only the affected spans. Preserve character identity while reducing forced performance.',
+    '4. Character behavior must be context-resolved. A profile trait is a tendency, not a performance requirement.',
+    '5. Detect trait literalization / over-expression and character-context mismatch.',
+    '6. Mystery is allowed to hide facts, causes, identities, rules, origins, or deeper meaning; it must NOT hide the basic semantic meaning of the sentence.',
+    '7. Detect semantic_obscurity when a sentence sounds poetic/mysterious but the reader cannot reliably tell what action, sensation, object, relation, or phenomenon is being described.',
+    '8. Detect pseudo_coinage when prose invents or mechanically stacks words, especially Sino-Vietnamese/abstract terms, without a stable contextual meaning or canon-backed worldbuilding purpose.',
+    '9. Apply the Meaning Reconstruction Test to suspicious wording: paraphrase it in plain Vietnamese WITHOUT adding new information. If this cannot be done stably, rewrite the affected span.',
+    '10. Do not punish valid proper nouns or worldbuilding terms merely because they are new. They are acceptable when canon/context defines them or the surrounding prose gives the reader a clear functional foothold.',
+    '11. Preserve intentional ambiguity about WHAT something is or WHY it happens, while making WHAT IS HAPPENING in the sentence understandable.',
+    '12. Revise only affected spans; do not flatten atmosphere, mystery, character voice, or genre register.',
     'Return JSON only.',
   ].join('\n');
 }
@@ -145,6 +151,9 @@ function buildPreSaveUserPrompt(opts: PreSaveQualityGateOptions): string {
     'Character behavior audit rule:',
     'Treat character traits as latent tendencies. For each scene infer which traits are ACTIVE, SECONDARY, SUPPRESSED, or IRRELEVANT from scene context. Flag trait_literalization when prose repeatedly performs a trait without contextual need. Flag character_context_mismatch when behavior ignores current stakes/state/relationship even if the behavior technically matches the static profile.',
     '',
+    'Semantic clarity audit rule:',
+    'Mystery may obscure facts but not sentence meaning. Flag semantic_obscurity when a reader cannot stably reconstruct the basic meaning of a sentence. Flag pseudo_coinage for invented/stacked phrases that sound profound but lack a stable meaning or canon-backed function. Use the Meaning Reconstruction Test: rewrite suspicious wording in plain Vietnamese without adding information. If that cannot be done reliably, the span must be rewritten.',
+    '',
     'Previous chapter tail/summary:',
     '"""',
     clampTail(previousSource || 'No previous chapter.', MAX_PREVIOUS_CHAPTER_CHARS),
@@ -167,7 +176,7 @@ function buildPreSaveUserPrompt(opts: PreSaveQualityGateOptions): string {
       revisedScore: 0,
       issues: [
         {
-          type: 'trait_literalization',
+          type: 'semantic_obscurity',
           severity: 'medium',
           description: 'short issue',
           fix: 'short fix',
@@ -230,6 +239,8 @@ function normalizeIssueType(value: unknown): PreSaveQualityIssue['type'] {
     || value === 'chapter_cohesion'
     || value === 'trait_literalization'
     || value === 'character_context_mismatch'
+    || value === 'semantic_obscurity'
+    || value === 'pseudo_coinage'
   ) return value;
   return 'ai_tone';
 }
