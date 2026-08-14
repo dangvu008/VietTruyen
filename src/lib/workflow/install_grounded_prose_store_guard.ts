@@ -68,11 +68,7 @@ export function installGroundedProseProjectStoreGuard(): void {
     },
 
     insertChapter: async (projectId: string, chapter: Chapter, sequenceNumber: number) => {
-      await assertReleaseChapter(
-        projectId,
-        sequenceNumber,
-        { ...chapter, sequenceNumber },
-      );
+      await assertReleaseChapter(projectId, sequenceNumber, chapter);
       await rawInsertChapter(projectId, chapter, sequenceNumber);
     },
 
