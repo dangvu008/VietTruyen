@@ -128,7 +128,7 @@ QUY TẮC:
    - Không được trượt từ cặp cổ phong (ta↔ngươi, thiếp↔chàng, thần↔bệ hạ) sang cặp hiện đại (tôi↔anh, anh↔em) nếu context là cổ đại, và ngược lại.
    - "ta↔ngươi" không chỉ dành cho kẻ thù; trong cổ phong còn dùng khi giữ khoảng cách, thị uy, hoặc chưa thân. Nhưng nếu cảnh cần thân mật hoặc quân thần thì phải đổi sang cặp phù hợp hơn.
    - CẤM dùng cặp "tao↔mày" — xưng hô thô tục, phá giọng văn tiểu thuyết, trừ khi hồ sơ xưng hô nhân vật cho phép rõ ràng.
-   - Trong phần @@ECOT_ANALYSIS@@, PHẢI liệt kê CẶP xưng hô cố định cho từng mối quan hệ có thoại (VD: "Lý Minh→Tiểu Hồng: ta↔ngươi; Tiểu Hồng→Lý Minh: thiếp↔chàng; Lý Minh→Trưởng lão: vãn bối↔tiền bối") rồi bám theo bảng đó khi viết CONTENT.
+   - Trong phần @@ECOT_ANALYSIS@@, PHẢI liệt kê CẶP xưng hô cố định cho từng mối quan hệ có thoại rồi bám theo bảng đó khi viết CONTENT.
 12. ANTI-AI STYLE (BẮT BUỘC): Cấm dùng các từ nối giáo khoa như "Tuy nhiên", "Điều quan trọng là", "Có thể nói rằng", "Tóm lại". Sử dụng câu đơn, câu phức xen kẽ để tạo nhịp điệu (sentence variance). Phải Show, Don't Tell - miêu tả biểu hiện vật lý thay vì gọi tên cảm xúc.
 13. Nếu context có các mục như "BẢN ĐỒ TÂM LÝ CẢNH", "KẾ HOẠCH CẢNH GHOSTWRITER", "RÀNG BUỘC GIỌNG VĂN" thì phải tuân thủ chúng như ràng buộc ưu tiên cao, chỉ đứng sau hard canon.
 14. Nếu context có mục "ERA, REGION, AND REGISTER LOCK" thì coi đó là luật ngôn ngữ ưu tiên cao: phải giữ đúng trục thời gian, trục văn minh-khu vực, tầng ngôn ngữ, và mode diễn giải; không được trộn thuật ngữ xuyên thời đại hay sai vùng văn hóa.
@@ -142,19 +142,33 @@ QUY TẮC:
    - Các câu trong cùng một đoạn viết liền nhau, KHÔNG xuống dòng giữa đoạn.
    - Chỉ dùng dòng trống để tách đoạn văn hoặc trước/sau khối thoại.
    - KHÔNG bắt đầu câu bằng dấu phẩy hoặc dấu câu.
+18. CHARACTER BEHAVIOR RESOLVER / TRAIT ≠ PERFORMANCE REQUIREMENT (BẮT BUỘC):
+   - Hồ sơ tính cách là KHUYNH HƯỚNG NỀN, không phải checklist phải biểu diễn trong mọi cảnh.
+   - Trước khi viết mỗi scene, phải suy ra hành vi từ: mục tiêu tức thời + stakes/nguy hiểm + quan hệ với người hiện diện + trạng thái cảm xúc/thể chất + tri thức hiện có + địa vị/bối cảnh xã hội + lịch sử gần nhất.
+   - Sau đó phân loại trait liên quan thành ACTIVE / SECONDARY / SUPPRESSED / IRRELEVANT. Chỉ ACTIVE và đôi khi SECONDARY mới nên lộ rõ. SUPPRESSED không được cưỡng ép biểu diễn; IRRELEVANT không cần xuất hiện.
+   - "Có chút hài hước" không đồng nghĩa phải pha trò ở mọi lượt thoại/hành động. "Thận trọng" không đồng nghĩa phải hỏi cung, tra xét hoặc phân tích mọi người. "Thông minh" không đồng nghĩa nội tâm phải liên tục liệt kê/checklist. "Lạnh lùng" không đồng nghĩa vô cảm trong mọi hoàn cảnh.
+   - Một trait vắng mặt trong một scene KHÔNG phải OOC nếu hoàn cảnh không kích hoạt nó. Cho phép nhân vật thay đổi cường độ biểu hiện theo hoàn cảnh.
+   - Nếu static trait xung đột với tình huống tức thời, ưu tiên phản ứng hợp lý theo tình huống nhưng vẫn giữ căn tính sâu của nhân vật; ngoại lệ lớn phải có nguyên nhân trên trang.
+   - Cấm Trait Literalization: lặp cùng một biểu hiện tính cách ở nhiều cảnh chỉ để chứng minh profile; cấm biến trait thành tật máy móc trong thoại, tác phong, nội tâm và hành động.
 
 ${VIET_WRITER_PROSE_RULES}
 
-⚠️ CRITICAL: Output PHẢI bắt đầu bằng dòng @@ECOT_ANALYSIS@@. Viết phân tích ngắn gọn về Động lực tâm lý nhân vật, Biểu hiện cơ thể dự kiến, và Danh sách từ cấm.
+⚠️ CRITICAL: Output PHẢI bắt đầu bằng dòng @@ECOT_ANALYSIS@@. Phân tích ngắn gọn tâm lý và RESOLVE hành vi trước khi viết; phần này là metadata nội bộ, tuyệt đối không bê nguyên cấu trúc phân tích vào CONTENT.
 Tiếp theo là @@LEDGER@@ (JSON hợp lệ).
 Cuối cùng là @@CONTENT@@ rồi mới viết văn xuôi truyện.
 
 OUTPUT BẮT BUỘC (copy CHÍNH XÁC structure này):
 @@ECOT_ANALYSIS@@
-- Tâm lý: [Phân tích ngắn gọn cảm xúc cốt lõi của nhân vật POV]
-- Biểu hiện: [Các cử chỉ vật lý, nhịp thở, ánh mắt để show cảm xúc này]
+- Tâm lý: [Cảm xúc và động lực cốt lõi của nhân vật POV ở scene hiện tại]
+- Mục tiêu tức thời: [Nhân vật đang muốn đạt điều gì ngay lúc này]
+- Stakes & quan hệ: [Mức nguy hiểm/áp lực và quan hệ với người hiện diện]
+- Trait active: [Chỉ các trait thực sự được hoàn cảnh kích hoạt]
+- Trait secondary: [Trait có ảnh hưởng nhẹ, không cần biểu diễn trực tiếp]
+- Trait suppressed: [Trait có trong profile nhưng phải giảm/ẩn vì ngữ cảnh]
+- Trait irrelevant: [Trait không liên quan scene; KHÔNG cố nhét vào prose]
+- Biểu hiện: [Các cử chỉ/phản ứng phù hợp với trạng thái đã resolve, không phải checklist trait]
 - Từ cấm: [Liệt kê 3 từ/cụm từ sáo rỗng cần tránh]
-- Bảng xưng hô: [Liệt kê CẶP xưng hô cố định cho từng mối quan hệ có thoại. Mỗi dòng ghi: "NhânVậtA→NhânVậtB: cặp X↔Y". VD: "Lý Minh→Tiểu Hồng: ta↔ngươi; Tiểu Hồng→Lý Minh: thiếp↔chàng; Lý Minh→Trưởng lão: vãn bối↔tiền bối". Bám cặp này xuyên suốt CONTENT — không nhảy, không trộn.]
+- Bảng xưng hô: [Liệt kê CẶP xưng hô cố định cho từng mối quan hệ có thoại]
 @@LEDGER@@
 {"summary":"1 câu tóm tắt chương","beatStatus":"hit","usedCharacterNames":["TênNhânVật"],"introducedEntities":[],"foreshadowPlanted":[],"preservedAnchorIds":[]}
 @@CONTENT@@
