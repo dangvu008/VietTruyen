@@ -6,7 +6,7 @@ import {
   type CompiledStoryContext,
   type ContextCompilerOptions,
 } from './context_compiler';
-import { retrieveForPlotQa, retrieveForWriting } from './hybrid_memory_query';
+import { retrieveForPlotQaRaw, retrieveForWritingRaw } from './hybrid_memory_raw';
 
 export type StoryMemoryIntent = 'write_chapter' | 'plot_qa';
 
@@ -57,9 +57,10 @@ function countIsolationRejections(warnings: string[]): number {
 /**
  * Canonical agent-facing facade for long-form memory.
  *
- * Character knowledge deliberately remains inside the existing statePack with
- * sourceType=character_knowledge. We do not create a second knowledge pack or
- * a second Canon representation just to satisfy the resolver API.
+ * Objective story state and character knowledge reuse the same project-scoped
+ * NarrativeStateFact store but remain separate semantic namespaces. Character
+ * knowledge is transported with sourceType=character_knowledge and compiled by
+ * an epistemic policy so suspicion/rumor cannot silently become world truth.
  */
 export async function resolveStoryMemory(
   request: StoryMemoryResolveRequest,
@@ -73,8 +74,8 @@ export async function resolveStoryMemory(
   }
 
   const memory = intent === 'plot_qa'
-    ? await retrieveForPlotQa(project, query)
-    : await retrieveForWriting(project, targetChapterIndex, query);
+    ? await retrieveForPlotQaRaw(project, query)
+    : await retrieveForWritingRaw(project, targetChapterIndex, query);
   const compiled = compileStoryContext(memory, request.compilerOptions);
   const promptBlock = renderCompiledStoryContext(compiled);
   const knowledgeCount = memory.statePack.filter((item) => item.sourceType === 'character_knowledge').length;

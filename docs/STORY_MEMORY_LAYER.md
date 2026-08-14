@@ -1,6 +1,6 @@
 # VietTruyen Story Memory Layer
 
-Status: current architecture on `main`.
+Status: current architecture on `main` plus Resolver runtime boundary hardening.
 
 ## Purpose
 
@@ -24,6 +24,10 @@ No inference or retrieval hit becomes Canon solely because an agent found it.
 
 The resolver validates project identity, invokes project/temporal-scoped hybrid retrieval, compiles evidence through MUST KNOW / MAY USE / DO NOT FORCE / FORBIDDEN policies and returns diagnostics.
 
+The raw retrieval engine lives in `hybrid_memory_raw.ts` and is Resolver-internal. `hybrid_memory_query.ts` is only a compatibility facade for older call sites and delegates back through `StoryMemoryResolver`; it no longer owns a parallel retrieval implementation. This makes the Resolver a real runtime boundary rather than a documentation-only convention.
+
+New Writer/Planner/Reviewer code must call `resolveStoryMemory()` or `buildLongFormWritingContext()` instead of importing the raw engine.
+
 Character Knowledge does **not** get a parallel database or a second `knowledgePack`. It lives in the existing `NarrativeStateFact` store under `character_knowledge:<propositionId>` and is rendered in the normal state pack with `sourceType=character_knowledge`. Diagnostics count these records separately without duplicating them.
 
 ## Character epistemic memory
@@ -32,8 +36,11 @@ Character Knowledge does **not** get a parallel database or a second `knowledgeP
 - `character_knowledge_state.ts`
 - `character_knowledge_extractor.ts`
 - `retrieval_pack_builder.ts`
+- `context_compiler.ts`
 
 World truth and character belief are independent. The accepted post-write pipeline conservatively auto-extracts only explicit named-character knowledge statements. Implied/pronoun-only knowledge is not automatically promoted. Consistency review checks knowledge leaks without adding another AI checker pass.
+
+Retrieval reserves bounded context capacity for both objective state and character epistemic state so a busy world-state list cannot crowd character knowledge out entirely. High-confidence epistemic boundaries become MUST KNOW. Low-confidence belief/rumor remains DO NOT FORCE and must never be upgraded into certainty merely because it was retrieved.
 
 ## Accepted-memory transaction
 

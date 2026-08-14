@@ -16,9 +16,9 @@ const memory: HybridMemoryResult = {
   warnings: ['Retrieval isolation rejected 2 cross-project/future memory candidate(s).'],
 };
 
-vi.mock('./hybrid_memory_query', () => ({
-  retrieveForWriting: vi.fn(async () => memory),
-  retrieveForPlotQa: vi.fn(async () => memory),
+vi.mock('./hybrid_memory_raw', () => ({
+  retrieveForWritingRaw: vi.fn(async () => memory),
+  retrieveForPlotQaRaw: vi.fn(async () => memory),
 }));
 
 import { resolveStoryMemory } from './story_memory_resolver';

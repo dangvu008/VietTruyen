@@ -12,12 +12,12 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { createDebouncedPersistStorage } from '../lib/storage/debounced_local_storage';
 import { resolveModelCostRates } from '../lib/ai/token_estimator';
+import { PIPELINE_STEP_CATALOG } from '../types/pipeline_step_catalog';
 import type {
   TokenUsageRecord,
   TokenStats,
   TokenOptimizationTaskStatus,
   PipelineSession,
-  PipelineStepLabel,
 } from '../types/token_tracker';
 
 interface TokenState {
@@ -40,14 +40,10 @@ interface TokenState {
 const MAX_RECORDS = 500;
 const MAX_PIPELINE_SESSIONS = 100;
 
-/** Tạo empty step breakdown */
+/** Tạo empty step breakdown từ taxonomy dùng chung. */
 function emptyStepBreakdown(): PipelineSession['stepBreakdown'] {
-  const steps: PipelineStepLabel[] = [
-    'context_build', 'plan_branches', 'write_chapter',
-    'pre_save_quality_gate', 'review_checkers', 'style_analysis', 'data_extraction', 'memory_sync',
-  ];
   const result: Partial<PipelineSession['stepBreakdown']> = {};
-  for (const step of steps) {
+  for (const step of PIPELINE_STEP_CATALOG) {
     result[step] = { tokens: 0, cost: 0, calls: 0, durationMs: 0 };
   }
   return result as PipelineSession['stepBreakdown'];
