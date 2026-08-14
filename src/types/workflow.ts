@@ -2,6 +2,7 @@ import type { BranchPlanningResult, ChapterWriteResult, DivergenceReport, Surpri
 import type { CombinedReviewReport } from '../core/checkers/checker_types';
 import type { StyleAnalysisResult } from './style_learning';
 import type { Project, WorkflowEngineType } from './story';
+import type { GroundedProseRuntimeGateArtifact } from './grounded_prose';
 
 export type WorkflowIntentType =
   | 'create_chapter'
@@ -99,6 +100,8 @@ export interface WorkflowArtifacts {
   reviewReport?: CombinedReviewReport;
   styleAnalysis?: StyleAnalysisResult;
   pipelineStepTimings?: Record<string, number>;
+  /** Fail-closed prose artifact bundle required before automated persistence. */
+  groundedProseGate?: GroundedProseRuntimeGateArtifact;
 }
 
 export interface WorkflowSessionError {
