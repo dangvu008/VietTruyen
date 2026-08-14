@@ -47,7 +47,6 @@ interface WritingContext {
   sections: string[];
   validationPass: boolean;
   warnings: string[];
-  /** Scene type classification result (if available) */
   sceneType?: SceneTypeResult;
 }
 
@@ -104,9 +103,7 @@ export async function buildWritingContext(
     if (fallbackChars) sections.push(fallbackChars);
   }
 
-  // P0 long-form enforcement: retrieval evidence must pass through the policy
-  // compiler before the Writer sees it. This prevents every retrieved trait,
-  // hook or lore item from becoming an implicit prose instruction.
+  // Retrieval evidence must pass through the policy compiler before Writer sees it.
   const hybridNarrative = await buildRoutedHybridSection(project, targetChapterIndex, memoryRoute, budget.characterChars);
   if (hybridNarrative) sections.push(hybridNarrative);
 
@@ -147,8 +144,6 @@ export async function buildWritingContext(
   const foreshadowReminder = buildForeshadowReminderSection(project, targetChapterIndex);
   if (foreshadowReminder) sections.push(foreshadowReminder);
 
-  // Writer-facing positive objective is deliberately compact. Detailed quality
-  // checklists belong to reviewer/editor passes, not to the drafting model.
   sections.push(`## Board 8: Mục tiêu cảnh/chương
 - Mỗi cảnh phải tạo thay đổi có ý nghĩa: quyết định, quan hệ, thông tin, nguy cơ hoặc trạng thái.
 - Hook/payoff chỉ xuất hiện khi tự nhiên từ diễn biến; không nhét checklist để chứng minh tuân thủ rule.`);
@@ -431,7 +426,7 @@ function buildWorldBrief(project: Project): string {
 }
 
 function buildActiveForeshadowings(items?: Foreshadowing[]): string {
-  const active = (items || []).filter((item) => !item.resolved).slice(0, 6);
+  const active = (items || []).filter((item) => !item.isResolved).slice(0, 6);
   return active.length ? `## FORESHADOWING ĐANG MỞ\n${active.map((item) => `- ${item.description}`).join('\n')}` : '';
 }
 
