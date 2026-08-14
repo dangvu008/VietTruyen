@@ -6,9 +6,10 @@
  */
 import React from 'react';
 import type { ProjectTabId } from '../types/navigation';
-import type { Project } from '../types/story';
+import type { Chapter, Project } from '../types/story';
 import type { ProjectActions } from '../store/selectors';
 import type { AssistantAction } from '../components/shared/AiAssistant';
+import { assertGroundedProseGateReceiptForContent } from '../lib/workflow/grounded_prose_receipt_store';
 import {
   LazyBiblePage,
   LazyCharactersPage,
@@ -32,6 +33,28 @@ export interface ProjectPageRenderProps {
   showAi: () => void;
   assistantActions: AssistantAction[];
   onOpenSettings: () => void;
+}
+
+function buildGatedChapterUpdater(
+  project: Project,
+  updateChapter: ProjectActions['updateChapter'],
+) {
+  return async (projectId: string, chapterId: string, patch: Partial<Chapter>) => {
+    const chapter = project.chapters.find((item) => item.id === chapterId);
+    if (chapter) {
+      const nextStatus = patch.status ?? chapter.status;
+      if (nextStatus === 'final' || nextStatus === 'published') {
+        const chapterNumber = chapter.sequenceNumber ?? project.chapters.indexOf(chapter) + 1;
+        assertGroundedProseGateReceiptForContent(
+          projectId,
+          chapterNumber,
+          patch.content ?? chapter.content,
+        );
+      }
+    }
+
+    await updateChapter(projectId, chapterId, patch);
+  };
 }
 
 export function renderProjectPage({
@@ -111,7 +134,7 @@ export function renderProjectPage({
         <LazyChaptersPage
           chapters={activeProject.chapters || []}
           projectId={activeProject.id}
-          onUpdateChapter={projectActions.updateChapter}
+          onUpdateChapter={buildGatedChapterUpdater(activeProject, projectActions.updateChapter)}
           onRemoveChapter={projectActions.removeChapter}
           onOpenAi={showAi}
           onNavigateToWriter={() => onNavigate('writer')}
