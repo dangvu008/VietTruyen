@@ -31,11 +31,23 @@ describe('narrative entropy audit', () => {
     expect(shouldRunNarrativeEntropyAudit({ acceptedChapterIndex: 30, lastAuditChapterIndex: 25 })).toBe(false);
   });
 
-  it('runs early under hook pressure', () => {
+  it('runs early under hook pressure but throttles repeated audits', () => {
     expect(shouldRunNarrativeEntropyAudit({
       acceptedChapterIndex: 7,
       lastAuditChapterIndex: 0,
       unresolvedHookCount: 15,
+    })).toBe(true);
+
+    expect(shouldRunNarrativeEntropyAudit({
+      acceptedChapterIndex: 9,
+      lastAuditChapterIndex: 7,
+      unresolvedHookCount: 18,
+    })).toBe(false);
+
+    expect(shouldRunNarrativeEntropyAudit({
+      acceptedChapterIndex: 12,
+      lastAuditChapterIndex: 7,
+      unresolvedHookCount: 18,
     })).toBe(true);
   });
 });
