@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { Project } from '../../types/story';
 
-const resolveStoryMemory = vi.fn();
+const { resolveStoryMemory } = vi.hoisted(() => ({
+  resolveStoryMemory: vi.fn(),
+}));
 
 vi.mock('./story_memory_resolver', () => ({
   resolveStoryMemory,
