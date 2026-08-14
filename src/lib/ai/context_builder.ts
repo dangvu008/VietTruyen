@@ -410,14 +410,22 @@ async function buildEntityTimelineSection(project: Project, targetChapterIndex: 
 }
 
 function buildRecentSummaries(project: Project, targetChapterIndex: number, maxChars = 1800): string {
-  const chapters = getChaptersChronological(project).filter((c) => c.index < targetChapterIndex).slice(-3);
+  const chronological = getChaptersChronological(project);
+  const end = Math.min(Math.max(0, targetChapterIndex), chronological.length);
+  const start = Math.max(0, end - 3);
+  const chapters = chronological.slice(start, end);
   if (chapters.length === 0) return '';
   const each = Math.max(180, Math.floor(maxChars / chapters.length));
-  return `## TÓM TẮT GẦN NHẤT\n${chapters.map((c) => `- Ch.${c.index}: ${quickTruncate(c.summary || c.content || '', each)}`).join('\n')}`;
+  return `## TÓM TẮT GẦN NHẤT\n${chapters.map((chapter, offset) => {
+    const chapterNumber = chapter.sequenceNumber ?? (start + offset + 1);
+    return `- Ch.${chapterNumber}: ${quickTruncate(chapter.summary || chapter.content || '', each)}`;
+  }).join('\n')}`;
 }
 
 function buildPreviousChapterTail(project: Project, targetChapterIndex: number, maxChars = 1200): string {
-  const previous = getChaptersChronological(project).filter((c) => c.index < targetChapterIndex).slice(-1)[0];
+  const chronological = getChaptersChronological(project);
+  const end = Math.min(Math.max(0, targetChapterIndex), chronological.length);
+  const previous = chronological.slice(0, end).slice(-1)[0];
   if (!previous?.content) return '';
   const tail = previous.content.slice(-maxChars);
   return `## ĐOẠN CUỐI CHƯƠNG TRƯỚC\n${tail}`;
@@ -447,7 +455,7 @@ function buildExpectationSection(expectation: ExpectationProfile, branch: Surpri
   return `## EXPECTATION / BRANCH\n${quickTruncate(JSON.stringify({ expectation, branch }), 1200)}`;
 }
 
-function buildTensionSection(project: Project, targetChapterIndex: number, tensionLevel: TensionLevel, branch: SurpriseBranch): string {
+function buildTensionSection(_project: Project, targetChapterIndex: number, tensionLevel: TensionLevel, branch: SurpriseBranch): string {
   return `## TENSION\nChapter ${targetChapterIndex}; level=${String(tensionLevel)}; branch=${quickTruncate(JSON.stringify(branch),500)}`;
 }
 
