@@ -14,6 +14,7 @@ import {
   assertGroundedProseRuntimeGate,
   runGroundedProseRuntimeGate,
 } from './grounded_prose_runtime_gate';
+import { saveGroundedProseGateReceipt } from './grounded_prose_receipt_store';
 
 interface ExecuteWorkflowIntentOptions {
   onUpdate?: (session: WorkflowSession) => void;
@@ -157,6 +158,11 @@ export async function executeWorkflowIntent(
           chapterContent: chapterWriteResult.content,
         });
         assertGroundedProseRuntimeGate(groundedProseGate);
+        saveGroundedProseGateReceipt(
+          payload.project.id,
+          payload.targetChapterIndex + 1,
+          groundedProseGate,
+        );
 
         return emitSession(
           session,
@@ -242,6 +248,11 @@ export async function executeWorkflowIntent(
         // exposed downstream unless every required artifact exists, matches the
         // same prose hash, and contains no unresolved blocking verdict.
         assertGroundedProseRuntimeGate(groundedProseGate);
+        saveGroundedProseGateReceipt(
+          payload.project.id,
+          payload.targetChapterIndex + 1,
+          groundedProseGate,
+        );
 
         return emitSession(
           session,
