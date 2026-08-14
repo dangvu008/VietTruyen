@@ -5,7 +5,16 @@ import { getOpenHooksForProject } from './pending_hooks_repository';
 import { getContinuityWarnings, getEntitySnapshotAt, getRelevantNarrativeCommunities, searchMemory } from './memory_query';
 import { buildMemoryRetrievalProfile, type MemoryRetrievalIntent } from './memory_retrieval_profile';
 import { rerankMemorySearchHits } from './memory_reranker';
-import { buildGraphPack, buildHookPack, buildRiskPack, buildSemanticPack, buildStatePack, createPackItem } from './retrieval_pack_builder';
+import { isCharacterKnowledgeFact } from './character_knowledge_state';
+import {
+  buildGraphPack,
+  buildHookPack,
+  buildKnowledgePack,
+  buildRiskPack,
+  buildSemanticPack,
+  buildStatePack,
+  createPackItem,
+} from './retrieval_pack_builder';
 import { searchMemoryEmbeddings } from './vector_query';
 
 function formatSnapshotLine(name: string, attributes: Record<string, string>): string {
@@ -89,13 +98,29 @@ async function retrieveHybridMemory(
   const canonPack: RetrievalPackItem[] = [];
   const riskPack = buildRiskPack(continuityWarnings, 3);
   const seedEntityIds = new Set(definitions.map((definition) => definition.entityId));
-  const relevantStateFacts = activeStateFacts
-    .filter((fact) => seedEntityIds.size === 0 || seedEntityIds.has(fact.subjectId) || query.toLowerCase().includes(fact.subjectId.toLowerCase()))
+  const normalizedQuery = query.trim().toLowerCase();
+
+  // Objective state and character epistemic state are deliberately separated.
+  // The writer may know the world truth; a character may not.
+  const objectiveStateFacts = activeStateFacts.filter((fact) => !isCharacterKnowledgeFact(fact));
+  const knowledgeFacts = activeStateFacts.filter(isCharacterKnowledgeFact);
+
+  const relevantStateFacts = objectiveStateFacts
+    .filter((fact) => seedEntityIds.size === 0 || seedEntityIds.has(fact.subjectId) || normalizedQuery.includes(fact.subjectId.toLowerCase()))
     .sort((left, right) => right.validFromChapter - left.validFromChapter);
+
+  const relevantKnowledgeFacts = knowledgeFacts
+    .filter((fact) => {
+      if (seedEntityIds.has(fact.subjectId)) return true;
+      if (!normalizedQuery) return seedEntityIds.size === 0;
+      return fact.value.toLowerCase().includes(normalizedQuery) || normalizedQuery.includes(fact.subjectId.toLowerCase());
+    })
+    .sort((left, right) => right.validFromChapter - left.validFromChapter);
+
   const relevantHooks = openHooks
     .filter((hook) => {
       if (hook.relatedEntityIds.some((entityId) => seedEntityIds.has(entityId))) return true;
-      return hook.description.toLowerCase().includes(query.toLowerCase()) || hook.plantedChapterIndex >= Math.max(1, targetChapterIndex - 6);
+      return hook.description.toLowerCase().includes(normalizedQuery) || hook.plantedChapterIndex >= Math.max(1, targetChapterIndex - 6);
     })
     .sort((left, right) => {
       const leftUrgency = left.expectedPayoffBy != null ? Math.abs(left.expectedPayoffBy - targetChapterIndex) : 999;
@@ -141,6 +166,7 @@ async function retrieveHybridMemory(
 
   const graphPack = buildGraphPack(communities, 2);
   const statePack = buildStatePack(relevantStateFacts, 4);
+  const knowledgePack = buildKnowledgePack(relevantKnowledgeFacts, targetChapterIndex, 6);
   const hookPack = buildHookPack(relevantHooks, 4);
   let semanticPack = buildSemanticPack(semanticHits, profile.finalLimit);
 
@@ -149,6 +175,7 @@ async function retrieveHybridMemory(
   return {
     canonPack,
     statePack,
+    knowledgePack,
     hookPack,
     graphPack,
     semanticPack,
