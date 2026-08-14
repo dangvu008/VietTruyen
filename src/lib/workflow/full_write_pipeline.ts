@@ -1,18 +1,19 @@
 /**
  * File: full_write_pipeline.ts
- * Purpose: Chain 7 module hiện có thành pipeline viết chương tự động
+ * Purpose: Chain các module thành pipeline viết chương tự động.
  * Layer: Application (Workflow)
- * Domain: Workflow → [full pipeline: context → draft → review → polish → data → sync → report]
+ * Domain: Workflow → [context → draft → review → grounded prose → acceptance → data → sync → report]
  *
  * Data Contract:
  * - Input:  FullWritePipelinePayload (project, chapter config, options)
- * - Output: FullPipelineResult (text, review, style, timing)
+ * - Output: FullPipelineResult (candidate text + acceptance evidence + optional promoted data)
  * - Consumer: writer_orchestrator.ts ONLY
  *
- * Flow: Context Build → AI Draft → Checker Review → Style Polish → Data Extract → Memory Sync → Report
- * Refusal rule: No project/chapters → throw early
- * Edge Cases: Each step can fail independently; pipeline continues with partial results
- * Domain Map Ref: FULL-WRITE-PIPELINE-v1
+ * Authoritative safety invariant:
+ * - Non-authoritative steps may fail and still return a Candidate.
+ * - Data/state/hook/memory mutation MUST NOT run before acceptance PASS.
+ * - Missing required evidence is HOLD, never implicit PASS.
+ * Domain Map Ref: FULL-WRITE-PIPELINE-v2-FAIL-CLOSED
  */
 
 import type { Project, Chapter } from '../../types/story';
@@ -21,6 +22,8 @@ import type { CombinedReviewReport } from '../../core/checkers/checker_types';
 import type { StyleAnalysisResult } from '../../types/style_learning';
 import type { ChapterWriteResult } from '../../types/surprise';
 import type { QualityMode } from '../../types/workflow';
+import type { GroundedProseRuntimeGateArtifact } from '../../types/grounded_prose';
+import type { PipelineAcceptanceDecision } from '../memory/authoritative_promotion';
 
 import { buildTemporalWritingContext } from '../ai/context_builder';
 import { planChapterBranches, writeChapterFromBranch } from '../ai/chapter_writer_ai';
@@ -40,6 +43,9 @@ import { useTokenStore } from '../../store/use_token_store';
 import type { PipelineSession } from '../../types/token_tracker';
 import { getContinuityWarnings } from '../memory/memory_query';
 import { getOpenHooksForProject } from '../memory/pending_hooks_repository';
+import { decidePipelineAcceptance } from './pipeline_acceptance_adapter';
+import { runGroundedProseRuntimeGate } from './grounded_prose_runtime_gate';
+import { saveGroundedProseGateReceipt } from './grounded_prose_receipt_store';
 
 // ─── Types ──────────────────────────────────────────────
 
@@ -52,25 +58,21 @@ export interface PipelineStepProgress {
 }
 
 export interface FullPipelineResult {
-  /** Generated chapter text */
+  /** Generated candidate chapter text. */
   content: string;
-  /** Chapter title */
   title: string;
-  /** Selected surprise branch */
   selectedBranch: SurpriseBranch;
-  /** Full write result from AI */
   writeResult: ChapterWriteResult;
-  /** 6-agent review report (null if skipped) */
   reviewReport: CombinedReviewReport | null;
-  /** Style analysis (null if skipped) */
   styleAnalysis: StyleAnalysisResult | null;
-  /** Final pre-save quality gate report (null if skipped or failed) */
   preSaveReport: PreSaveQualityReport | null;
-  /** Data agent extraction result */
+  /** Grounded prose hard-gate artifact. Null only in fast/candidate-only mode. */
+  groundedProseGate: GroundedProseRuntimeGateArtifact | null;
+  /** Canonical PASS/HOLD/FAIL decision controlling authoritative mutation. */
+  acceptanceDecision: PipelineAcceptanceDecision;
+  /** Non-null only when accepted data extraction actually ran. */
   dataResult: PostWritePipelineResult | null;
-  /** Per-step timing */
   stepTimings: Record<string, number>;
-  /** Total pipeline duration ms */
   totalDurationMs: number;
 }
 
@@ -87,9 +89,7 @@ export interface PipelineOptions {
   skipPolish?: boolean;
   qualityMode?: QualityMode;
   onProgress?: (progress: PipelineStepProgress) => void;
-  /** Real-time streaming chunk callback — when set, write step uses streaming client */
   onChunk?: (chunk: string, accumulated: string) => void;
-  /** AbortSignal to cancel generation mid-stream */
   signal?: AbortSignal;
 }
 
@@ -101,6 +101,7 @@ interface QualityStepPlan {
   runPreSaveGate: boolean;
   runReview: boolean;
   runPolish: boolean;
+  runGroundedProseGate: boolean;
   runDataAgent: boolean;
   runMemorySync: boolean;
 }
@@ -115,6 +116,7 @@ function buildQualityStepPlan(
       runPreSaveGate: false,
       runReview: false,
       runPolish: false,
+      runGroundedProseGate: false,
       runDataAgent: false,
       runMemorySync: false,
     };
@@ -125,6 +127,7 @@ function buildQualityStepPlan(
       runPreSaveGate: true,
       runReview: false,
       runPolish: !skipPolish,
+      runGroundedProseGate: true,
       runDataAgent: true,
       runMemorySync: true,
     };
@@ -134,6 +137,7 @@ function buildQualityStepPlan(
     runPreSaveGate: true,
     runReview: !skipReview,
     runPolish: !skipPolish,
+    runGroundedProseGate: true,
     runDataAgent: true,
     runMemorySync: true,
   };
@@ -250,7 +254,7 @@ function buildRetryFeedbackNotes(reviewReport: CombinedReviewReport): string {
     `Điểm checker hiện tại: ${Math.round(reviewReport.combined_score)}/100.`,
     fixLines.length > 0 ? `Ưu tiên sửa:\n${fixLines.join('\n')}` : '',
     summaryLines.length > 0 ? `Nhận xét tổng quát:\n${summaryLines.join('\n')}` : '',
-    'Giữ hook cuối chương, continuity, và giọng văn đã có. Chỉ sửa các lỗi bị nêu.',
+    'Giữ continuity và giọng văn đã có. Chỉ sửa lỗi bị nêu; không ép hook/payoff nếu cảnh không tạo ra chúng.',
   ].filter(Boolean).join('\n\n');
 }
 
@@ -353,18 +357,14 @@ export async function executeFullWritePipeline(opts: PipelineOptions): Promise<F
   }
 
   // ── STEP 1: Context Build ──────────────────────────
-
   emitProgress(1, 'Xây dựng ngữ cảnh sáng tạo', 'running');
   const step1Start = Date.now();
-
   const styleRules = await getProjectRules(project.id).catch(() => []);
   const writingContext = await buildTemporalWritingContext(project, targetChapterIndex, styleRules);
-
   stepTimings['context_build'] = Date.now() - step1Start;
-  emitProgress(1, 'Xây dựng ngữ cảnh sáng tạo', 'done', stepTimings['context_build']);
+  emitProgress(1, 'Xây dựng ngữ cảnh sáng tạo', writingContext.validationPass ? 'done' : 'failed', stepTimings['context_build']);
 
-  // ── STEP 2: AI Draft (Plan Branches → Pick Best → Write) ──
-
+  // ── STEP 2: AI Draft ───────────────────────────────
   emitProgress(2, 'AI viết nháp chương', 'running');
   const step2Start = Date.now();
 
@@ -418,8 +418,7 @@ export async function executeFullWritePipeline(opts: PipelineOptions): Promise<F
   stepTimings['ai_draft'] = Date.now() - step2Start;
   emitProgress(2, 'AI viết nháp chương', 'done', stepTimings['ai_draft']);
 
-  // ── STEP 3: Checker Review (6 agents) ─────────────
-
+  // ── STEP 3: Checker Review ─────────────────────────
   let reviewReport: CombinedReviewReport | null = null;
 
   if (stepPlan.runReview) {
@@ -438,14 +437,14 @@ export async function executeFullWritePipeline(opts: PipelineOptions): Promise<F
           writingContext.contextText.slice(0, 800),
         );
 
-        const callAi = async (prompt: { system: string; user: string }) => {
+        const callAi = async (reviewPrompt: { system: string; user: string }) => {
           return callAiModelTracked({
             provider: reviewModel.provider,
             modelId: reviewModel.modelId,
             modelName: reviewModel.name,
             baseUrl: reviewModel.baseUrl,
-            systemPrompt: prompt.system,
-            userPrompt: prompt.user,
+            systemPrompt: reviewPrompt.system,
+            userPrompt: reviewPrompt.user,
             taskType: 'write_chapter',
             responseFormat: 'json_object',
             pipelineSessionId,
@@ -503,14 +502,11 @@ export async function executeFullWritePipeline(opts: PipelineOptions): Promise<F
     emitProgress(3, 'Kiểm tra chất lượng (bỏ qua)', 'skipped');
   }
 
-  // ── STEP 4: Style Polish ──────────────────────────
-
+  // ── STEP 4: Style + Grounded Prose hard gate ──────
   let styleAnalysis: StyleAnalysisResult | null = null;
-
   if (stepPlan.runPolish) {
     emitProgress(4, 'Phân tích văn phong', 'running');
     const step4Start = Date.now();
-
     try {
       styleAnalysis = await analyzeChapterStyle({
         chapterContent: writeResult.content,
@@ -521,21 +517,71 @@ export async function executeFullWritePipeline(opts: PipelineOptions): Promise<F
     } catch (error) {
       console.error('[FullPipeline] Style analysis failed:', error);
     }
-
     stepTimings['style_polish'] = Date.now() - step4Start;
-    emitProgress(4, 'Phân tích văn phong', styleAnalysis ? 'done' : 'failed', stepTimings['style_polish']);
-  } else {
-    emitProgress(4, 'Phân tích văn phong (bỏ qua)', 'skipped');
   }
 
-  // ── STEP 5: Data Agent (Entity Extraction + Scene Chunk) ──
+  let groundedProseGate: GroundedProseRuntimeGateArtifact | null = null;
+  if (stepPlan.runGroundedProseGate) {
+    const groundedStart = Date.now();
+    try {
+      groundedProseGate = await runGroundedProseRuntimeGate({
+        project,
+        targetChapterIndex,
+        chapterTitle: writeResult.title,
+        chapterContent: writeResult.content,
+        pipelineSessionId,
+      });
+      saveGroundedProseGateReceipt(project.id, targetChapterIndex + 1, groundedProseGate);
+    } catch (error) {
+      console.error('[FullPipeline] Grounded prose runtime gate failed:', error);
+    }
+    stepTimings['grounded_prose_gate'] = Date.now() - groundedStart;
+  }
 
-  let dataResult: PostWritePipelineResult | null = null;
+  const continuityWarnings = qualityMode === 'fast'
+    ? []
+    : await getContinuityWarnings(project.id, Math.max(1, targetChapterIndex)).catch(() => null);
+  const continuityPassed = qualityMode === 'fast'
+    ? false
+    : continuityWarnings !== null && continuityWarnings.length === 0;
+
+  const acceptanceDecision = decidePipelineAcceptance({
+    qualityMode,
+    contextValidationPassed: writingContext.validationPass,
+    continuityPassed,
+    preSaveGateRequired: qualityMode !== 'fast',
+    preSaveReport,
+    // Quality mode may be configured to skip review, but doing so makes the
+    // required evidence absent and therefore HOLD rather than silently PASS.
+    reviewRequired: qualityMode === 'quality',
+    reviewReport,
+    literaryPassed: groundedProseGate?.decision === 'PASS',
+    coldReaderPassed: groundedProseGate?.coldReader?.pass === true,
+    fatalError: qualityMode !== 'fast' && groundedProseGate?.decision !== 'PASS',
+  });
+
+  const step4Status: PipelineStepProgress['status'] = qualityMode === 'fast'
+    ? 'skipped'
+    : acceptanceDecision.verdict === 'PASS' ? 'done' : 'failed';
+  emitProgress(
+    4,
+    qualityMode === 'fast'
+      ? 'Quality hard gates (candidate-only mode)'
+      : `Quality hard gates → ${acceptanceDecision.verdict}`,
+    step4Status,
+    (stepTimings['style_polish'] || 0) + (stepTimings['grounded_prose_gate'] || 0),
+  );
+
+  // From this line onward, authoritative/canonical mutation is guarded by
+  // acceptanceDecision. Candidate output may still be returned on HOLD/FAIL.
   const draftChapter = buildDraftChapter(project, targetChapterIndex, writeResult);
   const draftProject = mergeDraftChapterIntoProject(project, draftChapter);
 
-  if (stepPlan.runDataAgent) {
-    emitProgress(5, 'Trích xuất thực thể & phân cảnh', 'running');
+  // ── STEP 5: Accepted Data Agent only ──────────────
+  let dataResult: PostWritePipelineResult | null = null;
+
+  if (stepPlan.runDataAgent && acceptanceDecision.mayMutateAuthoritativeState) {
+    emitProgress(5, 'Trích xuất & promote dữ liệu accepted', 'running');
     const step5Start = Date.now();
 
     try {
@@ -552,7 +598,7 @@ export async function executeFullWritePipeline(opts: PipelineOptions): Promise<F
         attributes: {},
         sourceType: 'project' as const,
         confidence: 1.0,
-        extractorVersion: 'pipeline-v1',
+        extractorVersion: 'pipeline-v2-accepted-only',
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       }));
@@ -571,17 +617,24 @@ export async function executeFullWritePipeline(opts: PipelineOptions): Promise<F
         model: dataModel,
       });
     } catch (error) {
-      console.error('[FullPipeline] Data agent failed:', error);
+      console.error('[FullPipeline] Accepted data agent failed:', error);
     }
 
     stepTimings['data_agent'] = Date.now() - step5Start;
-    emitProgress(5, 'Trích xuất thực thể & phân cảnh', dataResult ? 'done' : 'failed', stepTimings['data_agent']);
+    emitProgress(5, 'Trích xuất & promote dữ liệu accepted', dataResult ? 'done' : 'failed', stepTimings['data_agent']);
   } else {
-    emitProgress(5, 'Trích xuất thực thể & phân cảnh (bỏ qua)', 'skipped');
+    emitProgress(
+      5,
+      `Data mutation blocked (${acceptanceDecision.verdict})`,
+      'skipped',
+    );
   }
 
-  // ── Bridge: promote ledger.foreshadowPlanted → project.foreshadowings ──
-  if (writeResult.ledger.foreshadowPlanted.length > 0) {
+  // ── Accepted-only bridge: ledger foreshadow → project state ──
+  if (
+    acceptanceDecision.mayMutateAuthoritativeState &&
+    writeResult.ledger.foreshadowPlanted.length > 0
+  ) {
     const { useProjectStore } = await import('../../store/use_project_store');
     const nowIso = new Date().toISOString();
     for (const desc of writeResult.ledger.foreshadowPlanted) {
@@ -600,10 +653,9 @@ export async function executeFullWritePipeline(opts: PipelineOptions): Promise<F
     }
   }
 
-  // ── STEP 6: Memory Sync ───────────────────────────
-
-  if (stepPlan.runMemorySync) {
-    emitProgress(6, 'Đồng bộ bộ nhớ tự sự', 'running');
+  // ── STEP 6: Accepted Memory Sync only ─────────────
+  if (stepPlan.runMemorySync && acceptanceDecision.maySyncAcceptedMemory) {
+    emitProgress(6, 'Đồng bộ accepted narrative memory', 'running');
     const step6Start = Date.now();
 
     try {
@@ -614,18 +666,19 @@ export async function executeFullWritePipeline(opts: PipelineOptions): Promise<F
     }
 
     stepTimings['memory_sync'] = Date.now() - step6Start;
-    emitProgress(6, 'Đồng bộ bộ nhớ tự sự', 'done', stepTimings['memory_sync']);
+    emitProgress(6, 'Đồng bộ accepted narrative memory', 'done', stepTimings['memory_sync']);
   } else {
-    emitProgress(6, 'Đồng bộ bộ nhớ tự sự (bỏ qua)', 'skipped');
+    emitProgress(
+      6,
+      `Accepted memory sync blocked (${acceptanceDecision.verdict})`,
+      'skipped',
+    );
   }
 
   // ── STEP 7: Report ────────────────────────────────
-
   emitProgress(7, 'Tổng hợp báo cáo', 'running');
   const totalDurationMs = Date.now() - pipelineStart;
-  emitProgress(7, 'Tổng hợp báo cáo', 'done', 0);
-
-  // ── Record Pipeline Session ───────────────────────
+  emitProgress(7, `Tổng hợp báo cáo — ${acceptanceDecision.verdict}`, 'done', 0);
 
   const pipelineSession: PipelineSession = {
     id: pipelineSessionId,
@@ -634,7 +687,7 @@ export async function executeFullWritePipeline(opts: PipelineOptions): Promise<F
     chapterIndex: targetChapterIndex,
     startedAt: new Date(pipelineStart).toISOString(),
     finishedAt: new Date().toISOString(),
-    totalTokens: 0, // Will be computed by store from records
+    totalTokens: 0,
     totalCost: 0,
     totalCalls: 0,
     stepBreakdown: {} as PipelineSession['stepBreakdown'],
@@ -649,6 +702,8 @@ export async function executeFullWritePipeline(opts: PipelineOptions): Promise<F
     reviewReport,
     styleAnalysis,
     preSaveReport,
+    groundedProseGate,
+    acceptanceDecision,
     dataResult,
     stepTimings,
     totalDurationMs,
