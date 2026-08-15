@@ -133,6 +133,7 @@ export function buildCreationProjectSeed({
     acceptedChapters.length,
     1,
   );
+  const eraProposal = framework?.bible?.narrativeEraRegister;
 
   return {
     projectPatch: {
@@ -142,6 +143,11 @@ export function buildCreationProjectSeed({
       genre: framework?.bible?.genre || '',
       subGenre: framework?.bible?.subGenre || [],
       writingStyle: framework?.bible?.writingStyle || '',
+      narrativeEraRegister: eraProposal ? {
+        ...eraProposal,
+        confirmed: true,
+        source: 'setup_ai',
+      } : undefined,
       endgame: framework?.bible?.endgame || '',
       mainCharacterCount: framework?.bible?.mainCharacterCount || 2,
       supportCharacterCount: framework?.bible?.supportCharacterCount || 3,
