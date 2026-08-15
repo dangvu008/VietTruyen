@@ -55,6 +55,29 @@ CHARACTER NATURALNESS — TÍNH CÁCH KHÔNG PHẢI THỦ TỤC (BẮT BUỘC):
 - Ngoại lệ: điều tra, truy tung, phá án, trận pháp, thám hiểm nguy hiểm hoặc tình huống mà việc xác minh là mục tiêu thực sự của scene. Khi đó vẫn tránh lặp thủ tục nếu không tạo thông tin hay quyết định mới.
 - TEST: "Nếu ẩn toàn bộ profile tính cách, đây vẫn là phản ứng tự nhiên nhất hoặc cần thiết nhất lúc này không?" Nếu không, viết lại.`;
 
+export const VIET_WRITER_READER_ORIENTATION_RULES: string = `\
+READER ORIENTATION — GIẤU ĐÁP ÁN, KHÔNG GIẤU ĐỀ BÀI (BẮT BUỘC):
+- Bí ẩn được phép che nguyên nhân, chân tướng, cơ chế ẩn, thân phận, hệ quả tương lai; KHÔNG được che thông tin trải nghiệm cơ bản mà POV đã biết và độc giả cần để hiểu cảnh hiện tại.
+- Ở chương mở đầu hoặc khi bước vào một cơ chế lặp/không gian lạ/quan hệ đã có từ trước, phải đặt sớm 1-3 mốc định hướng tối thiểu: POV đang ở đâu, hiện tượng này đối với họ mới hay quen, họ vừa đến bằng cách trải nghiệm nào, và vì sao phản ứng hiện tại hợp lý. Không cần giải thích chân tướng.
+- Nếu nhân vật đã sống với một hiện tượng nhiều năm mà độc giả bị buộc phải đoán đến nhiều chương sau hiện tượng đó vận hành ra sao ở cấp trải nghiệm, đó là lỗi reader_orientation_failure chứ không phải mystery hay.
+- Không info-dump. Dùng hành động, chuyển cảnh, ký ức ngắn, đối thoại đời thường hoặc một câu tường thuật rõ để đặt foothold.
+- TEST: "Một độc giả chỉ có những trang đã đọc có hiểu đề bài của bí ẩn chưa, dù chưa biết đáp án không?" Nếu chưa, bổ sung định hướng tối thiểu.`;
+
+export const VIET_WRITER_EPISTEMIC_PROSE_RULES: string = `\
+EPISTEMIC PROSE — REASONING NỘI BỘ KHÔNG ĐƯỢC RÒ RA CHÍNH VĂN (BẮT BUỘC):
+- Kỷ luật kiểm chứng thuộc lớp suy luận của Writer/Reviewer. Không biến nó thành khẩu khí mặc định của nhân vật hay lời kể.
+- Cấm lặp kiểu: "chưa đủ chứng minh", "một lần chưa thành quy luật", "có thể A/B/C", "không được tự nối", "cần nguồn độc lập", "phải loại trừ", "chỉ xác nhận phần dễ nhất" nếu cảnh không thật sự là công việc chuyên môn cần phát biểu như vậy.
+- Nhân vật vẫn được nghi ngờ, cân nhắc và kiểm tra; nhưng ưu tiên biểu đạt bằng lựa chọn, cảm giác, do dự, hành động, một câu nghĩ ngắn hoặc hậu quả thực tế thay vì biên bản phương pháp luận.
+- Nếu nhiều câu liên tiếp chỉ tồn tại để chứng minh nhân vật không hallucinate/suy diễn, hãy giữ tối đa ý bất định cần thiết và xóa phần còn lại.
+- Reviewer phải coi việc agent đưa rule kiểm chứng vào prose là epistemic_prose_leak, kể cả khi từng câu riêng lẻ đúng logic.`;
+
+export const VIET_WRITER_SCENE_ENGINE_RULES: string = `\
+SCENE ENGINE DIVERSITY — KHÔNG LẶP MÁY ĐIỀU TRA (BẮT BUỘC):
+- Không để nhiều chương/cảnh gần nhau lặp cùng một máy: phát hiện vật/manh mối → hỏi chuyên gia → thử/so sánh → loại khả năng → kết luận chưa biết, chỉ thay vật thể hoặc NPC.
+- Khi một nhánh đã được kiểm chứng đủ cho chức năng hiện tại, chuyển trọng tâm sang hệ quả sống: quan hệ, nguy cơ, lựa chọn, lợi ích, mất mát, xung đột, ham muốn, thay đổi vị trí hoặc trạng thái.
+- Hai cảnh có cùng mục đích kiểm chứng phải khác dramatic carrier hoặc được gộp/rút. Logic chặt không bù được nhịp truyện đứng yên.
+- Reviewer phải nhìn pattern qua các chương lân cận, không chỉ chấm từng cảnh riêng lẻ.`;
+
 export const VIET_WRITER_SEMANTIC_CLARITY_RULES: string = `\
 SEMANTIC CLARITY — BÍ ẨN NHƯNG PHẢI HIỂU ĐƯỢC CÂU (BẮT BUỘC):
 - Bí ẩn về thông tin được phép; mơ hồ về nghĩa cơ bản của câu thì không.
@@ -77,6 +100,9 @@ export const VIET_WRITER_PROSE_RULES: string = [
   VIET_WRITER_ANTI_AI_PROSE,
   VIET_WRITER_CREATIVE_RESTRAINT_RULES,
   VIET_WRITER_CHARACTER_NATURALNESS_RULES,
+  VIET_WRITER_READER_ORIENTATION_RULES,
+  VIET_WRITER_EPISTEMIC_PROSE_RULES,
+  VIET_WRITER_SCENE_ENGINE_RULES,
   VIET_WRITER_SEMANTIC_CLARITY_RULES,
 ].join('\n\n');
 
@@ -85,6 +111,9 @@ export const VIET_WRITER_REVIEW_RULES: string = [
   VIET_WRITER_ANTI_AI_PROSE,
   VIET_WRITER_CREATIVE_RESTRAINT_RULES,
   VIET_WRITER_CHARACTER_NATURALNESS_RULES,
+  VIET_WRITER_READER_ORIENTATION_RULES,
+  VIET_WRITER_EPISTEMIC_PROSE_RULES,
+  VIET_WRITER_SCENE_ENGINE_RULES,
   VIET_WRITER_PUNCTUATION_RULES,
   VIET_WRITER_NATURAL_RULES,
   VIET_WRITER_SEMANTIC_CLARITY_RULES,
@@ -96,4 +125,7 @@ TIÊU CHUẨN PHÁ VÂN TAY AI:
 - Không tự thêm metaphor mới khi sửa.
 - Không tự thêm plot device, mystery, twist, foreshadowing hoặc worldbuilding trong lúc biên tập.
 - Nếu câu nghe sâu nhưng Meaning Reconstruction Test thất bại, viết lại cụ thể.
-- Nếu nhân vật liên tục quan sát/kiểm tra/xác nhận/suy luận chỉ để biểu diễn thông minh hoặc thận trọng, áp Character Naturalness Test và bỏ thủ tục thừa.`;
+- Nếu nhân vật liên tục quan sát/kiểm tra/xác nhận/suy luận chỉ để biểu diễn thông minh hoặc thận trọng, áp Character Naturalness Test và bỏ thủ tục thừa.
+- Nếu độc giả không hiểu premise trải nghiệm mà POV đã biết, áp Reader Orientation: giấu đáp án, không giấu đề bài.
+- Nếu chính văn lặp ngôn ngữ kiểu tiêu chuẩn bằng chứng/phương pháp kiểm chứng, coi đó là reasoning leak và rút về phản ứng người thật.
+- Nếu các chương lân cận lặp máy clue → expert/test → loại trừ → unknown, phải gộp/rút/đổi dramatic carrier thay vì chỉ sửa câu chữ.`;
