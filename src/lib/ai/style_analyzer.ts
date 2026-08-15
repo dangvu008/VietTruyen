@@ -3,15 +3,6 @@
  * Purpose: AI phân tích lỗi văn phong/chính tả trong chapter content
  * Layer: Application (AI)
  * Domain: StyleLearning → [chapter analysis, correction detection]
- *
- * Data Contract:
- * - Input:  Chapter content (string) + project context (genre, tone, style)
- * - Output: StyleAnalysisResult với danh sách corrections
- * - Consumer: use_style_store → StyleFeedbackPanel
- *
- * Flow: Build prompt → Call AI (balanced tier) → Parse JSON → Return corrections
- * Refusal rule: Chapter < 100 chars → skip, không phân tích
- * Edge Cases: AI trả JSON sai format → fallback empty corrections
  */
 import { callAiModelTracked } from './tracked_ai_client';
 import { getModelForTask } from './model_router';
@@ -32,7 +23,7 @@ Nhiệm vụ: Phân tích văn phong, chính tả, ngữ pháp của đoạn vă
 Quy tắc:
 - Tập trung vào lỗi THẬT SỰ ảnh hưởng chất lượng, không bắt bẻ vặt
 - Ưu tiên: chính tả > ngữ pháp > chọn từ > mạch câu > lặp từ > giọng văn > hội thoại > nhịp truyện
-- Phát hiện lỗi lệch register/bối cảnh: cổ đại mà dùng từ hiện đại, hiện đại mà dùng cổ phong giả tạo, hoặc Hán Việt dày đặc không phù hợp.
+- Era/register phải theo CẤU HÌNH TƯỜNG MINH CỦA DỰ ÁN; không được tự suy genre rồi ghi đè lựa chọn hiện đại/cổ phong/mixed của người viết.
 - Phát hiện lỗi xưng hô: trượt ngôi kể, đổi đại từ vô cớ trong cùng cảnh, sai quan hệ quyền lực, sai sắc thái khi đối đầu/thân mật.
 - Mỗi correction phải có original (nguyên văn) và corrected (đã sửa) để user so sánh
 - Giải thích ngắn gọn tại sao sửa (1-2 câu)
@@ -46,14 +37,9 @@ interface AnalyzeOptions {
   existingRules?: StyleRule[];
 }
 
-/**
- * Phân tích văn phong/chính tả của 1 chapter.
- * Trả về StyleAnalysisResult với corrections để user review.
- */
 export async function analyzeChapterStyle(opts: AnalyzeOptions): Promise<StyleAnalysisResult> {
   const { chapterContent, chapterId, project, existingRules } = opts;
 
-  // Refusal: chapter quá ngắn
   if (chapterContent.length < 100) {
     return {
       chapterId,
@@ -64,7 +50,6 @@ export async function analyzeChapterStyle(opts: AnalyzeOptions): Promise<StyleAn
     };
   }
 
-  // Build prompt
   const aiStore = useAiStore.getState();
   const model = getModelForTask(
     'polish_style',
@@ -77,12 +62,9 @@ export async function analyzeChapterStyle(opts: AnalyzeOptions): Promise<StyleAn
     aiStore.preferredProvider
   );
 
-  if (!model) {
-    throw new Error('Không tìm thấy AI model phù hợp.');
-  }
+  if (!model) throw new Error('Không tìm thấy AI model phù hợp.');
 
   const userPrompt = buildAnalyzerPrompt(chapterContent, project, existingRules);
-
   const response = await callAiModelTracked({
     provider: model.provider,
     modelId: model.modelId,
@@ -102,7 +84,6 @@ function buildAnalyzerPrompt(
   project: Project,
   existingRules?: StyleRule[],
 ): string {
-  // Truncate content to ~3000 chars to save tokens
   const truncated = content.length > 3000
     ? content.substring(0, 3000) + '\n... (đã cắt bớt)'
     : content;
@@ -110,11 +91,17 @@ function buildAnalyzerPrompt(
   let rulesSection = '';
   if (existingRules && existingRules.length > 0) {
     const ruleLines = existingRules.slice(0, 5).map(
-      (r) => `- ${r.pattern} → ${r.suggestion}`
+      (rule) => `- ${rule.pattern} → ${rule.suggestion}`
     );
     rulesSection = `\n\nQUY TẮC ĐÃ HỌC (ưu tiên phát hiện lỗi tương tự):\n${ruleLines.join('\n')}`;
   }
   const eraRegisterGuardrail = buildEraRegisterGuardrailSection(project);
+  const explicitFrame = project.narrativeEraRegister?.frame;
+  const explicitAuditRule = explicitFrame === 'period'
+    ? '- Đây là project CỔ PHONG: soi đặc biệt từ/cách nghĩ hiện đại lọt vào chính văn, nhưng không ép văn ngôn hoặc Hán-Việt nặng hơn mức đã chọn.'
+    : explicitFrame === 'mixed'
+      ? '- Đây là project HIỆN ĐẠI + CỔ PHONG: chỉ báo lỗi khi register xuất hiện sai POV/không gian/nhân vật; không cấm từ hiện đại toàn cục.'
+      : '- Đây là project HIỆN ĐẠI: không báo lỗi chỉ vì từ ngữ hiện đại; ngược lại hãy soi cổ phong giả tạo nếu canon không cần.';
 
   return `Phân tích văn phong đoạn truyện sau:
 
@@ -124,6 +111,9 @@ PHONG CÁCH: ${project.writingStyle || 'Không rõ'}
 ${rulesSection}
 
 ${eraRegisterGuardrail}
+
+QUY TẮC AUDIT ERA:
+${explicitAuditRule}
 
 NỘI DUNG CHƯƠNG:
 """
@@ -146,12 +136,11 @@ Trả về JSON đúng format:
 
 Lưu ý: "original" phải trích NGUYÊN VĂN từ nội dung, không paraphrase.
 Chỉ liệt kê lỗi thật sự quan trọng, tối đa 15 corrections.
-Nếu genre/tone gợi ý bối cảnh cổ đại hoặc cổ phong, hãy đặc biệt soi lỗi dùng từ hiện đại kiểu "va chạm vật lý", "phản xạ thần kinh", "thành phố", "cao ốc", "CEO", "app".
-Đồng thời soi kỹ lỗi xưng hô theo CẶP (xưng hô tiếng Việt luôn đi theo cặp: tao↔mày, ta↔ngươi, tôi↔anh, thiếp↔chàng, thần↔bệ hạ...):
+Soi kỹ lỗi xưng hô theo CẶP và đúng era register đã khóa:
 - Nhảy cặp: cùng một nhân vật câu trước dùng cặp "tôi↔anh" câu sau nhảy sang "ta↔ngươi" hoặc "tao↔mày" mà không có sự kiện cảm xúc giải thích.
-- Trộn cặp: dùng "ta" (từ cặp ta↔ngươi) nhưng gọi đối phương là "anh" (từ cặp tôi↔anh), hoặc xưng "tôi" nhưng gọi "ngươi".
-- Trượt register: cặp cổ phong (ta↔ngươi, thiếp↔chàng) đổi sang cặp hiện đại (tôi↔anh, anh↔em) trong cùng cảnh mà không có lý do.
-- Dùng cặp "tao↔mày" — thô tục, không phù hợp giọng văn tiểu thuyết trừ khi nhân vật có hồ sơ xưng hô cho phép rõ ràng.`;
+- Trộn cặp: dùng "ta" nhưng gọi đối phương là "anh", hoặc xưng "tôi" nhưng gọi "ngươi", nếu profile/cảnh không cho phép.
+- Trượt register: cặp cổ phong đổi sang cặp hiện đại hoặc ngược lại trong cùng cảnh mà không có lý do.
+- Không mặc định "ta↔ngươi" luôn tốt hay "tôi↔anh" luôn sai; phải xét frame, POV, quan hệ và mức cổ phong của đúng project.`;
 }
 
 function parseAnalysisResponse(
@@ -163,23 +152,22 @@ function parseAnalysisResponse(
     const data = JSON.parse(response);
 
     const corrections: StyleCorrection[] = (data.corrections || []).map(
-      (c: any) => ({
+      (correction: any) => ({
         id: createId(),
         projectId,
         chapterId,
-        original: String(c.original || ''),
-        corrected: String(c.corrected || ''),
-        category: validateCategory(c.category),
-        explanation: String(c.explanation || ''),
+        original: String(correction.original || ''),
+        corrected: String(correction.corrected || ''),
+        category: validateCategory(correction.category),
+        explanation: String(correction.explanation || ''),
         status: 'pending' as const,
         createdAt: new Date().toISOString(),
       })
-    ).filter((c: StyleCorrection) => c.original && c.corrected);
+    ).filter((correction: StyleCorrection) => correction.original && correction.corrected);
 
-    // Build category counts
     const categoryCounts: Partial<Record<StyleCategory, number>> = {};
-    for (const c of corrections) {
-      categoryCounts[c.category] = (categoryCounts[c.category] || 0) + 1;
+    for (const correction of corrections) {
+      categoryCounts[correction.category] = (categoryCounts[correction.category] || 0) + 1;
     }
 
     return {
@@ -206,8 +194,6 @@ const VALID_CATEGORIES: StyleCategory[] = [
 ];
 
 function validateCategory(raw: string): StyleCategory {
-  if (VALID_CATEGORIES.includes(raw as StyleCategory)) {
-    return raw as StyleCategory;
-  }
-  return 'word_choice'; // safe default
+  if (VALID_CATEGORIES.includes(raw as StyleCategory)) return raw as StyleCategory;
+  return 'word_choice';
 }
