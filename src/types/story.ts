@@ -190,6 +190,31 @@ export type ProjectSyncStatus = 'idle' | 'syncing' | 'synced' | 'error';
 
 export type ProjectStatus = 'draft' | 'ongoing' | 'paused' | 'completed';
 
+/**
+ * Explicit per-story language/time-period register.
+ *
+ * This is intentionally separate from world.techLevel / worldSetting:
+ * - world settings describe what exists in the story world;
+ * - Narrative Era Register controls how narration, dialogue, and thought sound on the page.
+ *
+ * Inference may suggest values, but only confirmed=true is authoritative.
+ */
+export type NarrativeEraFrame = 'contemporary' | 'period' | 'mixed';
+export type NarrativeEraRegisterLevel = 1 | 2 | 3 | 4 | 5;
+export type NarrativeEraRegisterSource = 'user' | 'setup_ai' | 'template' | 'migration_confirmed';
+
+export interface NarrativeEraRegisterConfig {
+  frame: NarrativeEraFrame;
+  level: NarrativeEraRegisterLevel;
+  narratorLevel?: NarrativeEraRegisterLevel;
+  dialogueLevel?: NarrativeEraRegisterLevel;
+  thoughtLevel?: NarrativeEraRegisterLevel;
+  /** Only confirmed configs may pass setup/F0/writing gates. */
+  confirmed: boolean;
+  source: NarrativeEraRegisterSource;
+  notes?: string;
+}
+
 export interface Project {
   id: string;
   title: string;
@@ -200,6 +225,8 @@ export interface Project {
   writingStyle: string;     // Phong cách viết (dropdown)
   tone: string;
   styleId: string;
+  /** Required by runtime setup gate before outline/prose generation. Optional in persisted schema for legacy-project compatibility. */
+  narrativeEraRegister?: NarrativeEraRegisterConfig;
   targetChapters: number;
   endgame: string;
   mainCharacterCount: number;   // Số nhân vật chính (1-10)
