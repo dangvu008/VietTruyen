@@ -15,6 +15,7 @@ import {
   runGroundedProseRuntimeGate,
 } from './grounded_prose_runtime_gate';
 import { saveGroundedProseGateReceipt } from './grounded_prose_receipt_store';
+import { buildDeepWritingNotes, isDeepWritingMode } from '../ai/deep_writing_mode';
 
 interface ExecuteWorkflowIntentOptions {
   onUpdate?: (session: WorkflowSession) => void;
@@ -189,6 +190,10 @@ export async function executeWorkflowIntent(
 
       case 'full_write_pipeline': {
         const payload = intent.payload;
+        const deepWritingActive = isDeepWritingMode(payload);
+        const effectiveNotes = deepWritingActive
+          ? buildDeepWritingNotes(payload.notes)
+          : payload.notes;
 
         const stepToWorkflowStep: Record<number, WorkflowSession['step']> = {
           1: 'context_building',
@@ -206,11 +211,14 @@ export async function executeWorkflowIntent(
           mode: payload.mode,
           tensionLevel: payload.tensionLevel,
           prompt: payload.prompt,
-          notes: payload.notes,
+          notes: effectiveNotes,
           sourceOverride: payload.sourceOverride,
           styleInstruction: payload.styleInstruction,
-          skipReview: payload.skipReview,
-          skipPolish: payload.skipPolish,
+          // Deep Writing is intentionally the full craft path. It cannot be
+          // silently downgraded by skip flags because that would make the mode
+          // label lie to the user.
+          skipReview: deepWritingActive ? false : payload.skipReview,
+          skipPolish: deepWritingActive ? false : payload.skipPolish,
           qualityMode: payload.qualityMode,
           onChunk: options.onChunk,
           signal: options.signal,
@@ -220,7 +228,9 @@ export async function executeWorkflowIntent(
               session,
               {
                 step: wfStep,
-                statusMessage: `[${progress.step}/${progress.totalSteps}] ${progress.label}`,
+                statusMessage: deepWritingActive
+                  ? `[Deep Writing ${progress.step}/${progress.totalSteps}] ${progress.label}`
+                  : `[${progress.step}/${progress.totalSteps}] ${progress.label}`,
               },
               options.onUpdate,
             );
@@ -268,7 +278,9 @@ export async function executeWorkflowIntent(
             session,
             {
               step: 'failed',
-              statusMessage: `Pipeline ${pipelineResult.acceptanceDecision.verdict}: candidate được giữ lại nhưng không promote.`,
+              statusMessage: deepWritingActive
+                ? `Deep Writing ${pipelineResult.acceptanceDecision.verdict}: candidate được giữ lại nhưng không promote.`
+                : `Pipeline ${pipelineResult.acceptanceDecision.verdict}: candidate được giữ lại nhưng không promote.`,
               artifacts,
               error: {
                 code: pipelineResult.acceptanceDecision.verdict === 'FAIL'
@@ -291,7 +303,9 @@ export async function executeWorkflowIntent(
           session,
           {
             step: 'completed',
-            statusMessage: `Pipeline PASS và accepted memory đã được phép cập nhật trong ${Math.round(pipelineResult.totalDurationMs / 1000)}s.`,
+            statusMessage: deepWritingActive
+              ? `Deep Writing PASS; accepted memory được phép cập nhật trong ${Math.round(pipelineResult.totalDurationMs / 1000)}s.`
+              : `Pipeline PASS và accepted memory đã được phép cập nhật trong ${Math.round(pipelineResult.totalDurationMs / 1000)}s.`,
             artifacts,
             metrics: {
               startedAt: session.metrics.startedAt,
