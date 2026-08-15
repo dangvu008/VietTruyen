@@ -103,7 +103,43 @@ describe('pre_save_quality_gate', () => {
     });
   });
 
-  it('sends previous chapter and whole-story context before saving generated prose', async () => {
+  it('normalizes the new reader-orientation and epistemic-prose issue types', () => {
+    const parsed = parsePreSaveQualityResponse(JSON.stringify({
+      approved: false,
+      originalScore: 58,
+      revisedScore: 72,
+      issues: [
+        {
+          type: 'reader_orientation_failure',
+          severity: 'high',
+          description: 'POV biết cơ chế trải nghiệm nhưng độc giả không có điểm tựa.',
+          fix: 'Thêm một mốc định hướng tối thiểu.',
+        },
+        {
+          type: 'epistemic_prose_leak',
+          severity: 'medium',
+          description: 'Nhân vật nói như biên bản kiểm chứng.',
+          fix: 'Rút thành phản ứng tự nhiên.',
+        },
+        {
+          type: 'repetitive_investigation_structure',
+          severity: 'medium',
+          description: 'Cảnh lặp mô-típ hỏi-thử-loại trừ.',
+          fix: 'Đổi dramatic carrier.',
+        },
+      ],
+      appliedChanges: [],
+      revisedContent: 'Bản sửa.',
+    }), 'fallback');
+
+    expect(parsed.report.issues.map((issue) => issue.type)).toEqual([
+      'reader_orientation_failure',
+      'epistemic_prose_leak',
+      'repetitive_investigation_structure',
+    ]);
+  });
+
+  it('sends previous chapter, whole-story context and the new hard audit rules before saving generated prose', async () => {
     callAiModelTracked.mockResolvedValue(JSON.stringify({
       approved: true,
       originalScore: 70,
@@ -133,8 +169,17 @@ describe('pre_save_quality_gate', () => {
       pipelineStep: 'pre_save_quality_gate',
       userPrompt: expect.stringContaining('Previous chapter tail/summary'),
     }));
-    const userPrompt = callAiModelTracked.mock.calls[0][0].userPrompt as string;
+    const call = callAiModelTracked.mock.calls[0][0];
+    const userPrompt = call.userPrompt as string;
+    const systemPrompt = call.systemPrompt as string;
     expect(userPrompt).toContain('tiếng chuông vỡ');
+    expect(userPrompt).toContain('Reader orientation audit rule');
+    expect(userPrompt).toContain('Epistemic prose audit rule');
+    expect(userPrompt).toContain('Chapter-pattern audit rule');
+    expect(userPrompt).toContain('hide the answer, not the question');
+    expect(systemPrompt).toContain('READER ORIENTATION GATE');
+    expect(systemPrompt).toContain('epistemic_prose_leak');
+    expect(systemPrompt).toContain('repetitive_investigation_structure');
     expect(userPrompt).toContain('Generated chapter draft to check before saving');
     expect(result.content).toContain('dấu máu');
     expect(result.report.appliedChanges).toEqual(['Giảm giọng tổng kết AI.']);
