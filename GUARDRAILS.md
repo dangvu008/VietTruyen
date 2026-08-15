@@ -50,6 +50,55 @@ Mandatory writer behavior:
 
 This contract is injected into Writer prose rules and is a default invariant for every story project unless the user explicitly requests a different authorial mode.
 
+## Story Writing — Reader Orientation Hard Gate
+
+**Core rule: hide the answer, not the question.** Mystery may withhold cause, true identity, hidden mechanism, future consequence or author-only truth. It must not withhold basic experiential information that the POV already knows and a cold reader needs in order to understand the current scene.
+
+A chapter must be `HOLD` when any of the following is true:
+
+- a recurring phenomenon is familiar to the POV but the reader is forced to wait multiple chapters to understand how it is experienced at a basic level;
+- a major transition occurs but the reader cannot tell the minimum practical frame — where the POV is, whether the event is new/familiar, or what immediately preceded the transition — even though the POV knows it;
+- the POV reacts calmly/intimately to a situation that appears inexplicable to the reader only because known backstory/premise has been withheld;
+- the draft treats premise delivery itself as mystery instead of preserving mystery around the cause or deeper truth.
+
+Repair rules:
+
+- add only 1–3 early footholds through action, transition, short memory, ordinary dialogue or a concise narrator sentence;
+- do not dump lore or explain the hidden mechanism;
+- after repair, a cold reader must understand the *problem/premise* while still not knowing the *answer*.
+
+`reader_orientation_failure` is a high-severity pre-save issue when it affects Chapter 1, a major world transition, a new POV entry, or a recurring mechanism that drives the plot.
+
+## Story Writing — Epistemic Prose / Reasoning Leak Hard Gate
+
+Evidence discipline belongs primarily to Writer/Reviewer reasoning. It must not become a default narrative voice or character trait.
+
+Flag `epistemic_prose_leak` when prose repeatedly uses method-language such as:
+
+- “chưa đủ để chứng minh” / “một lần chưa thành quy luật”;
+- explicit source validation or “independent confirmation” language;
+- enumerated alternative explanations merely to show caution;
+- repeated reminders not to infer, not to connect clues, or to eliminate hypotheses;
+- lab/checklist phrasing that exists mainly to prove the character is rational, cautious or non-hallucinatory.
+
+Uncertainty is allowed and often desirable. Express it through human perception, hesitation, action, omission, conflicting desire, consequence or one concise thought. Do not turn a novel into a verification report.
+
+**Fail rule:** if removing the methodological wording preserves the same plot fact and uncertainty, prefer removal/simplification unless the scene is explicitly professional investigation, scientific work, legal proof, forensic work, puzzle-solving or another context that naturally requires formal reasoning.
+
+## Story Writing — Scene Engine Diversity Gate
+
+Review nearby chapters as a sequence, not only one chapter at a time.
+
+Flag `repetitive_investigation_structure` when multiple adjacent chapters substantially repeat:
+
+`clue/object → ask/search expert → test/compare → eliminate possibilities → conclude UNKNOWN`
+
+while only changing the object, location or NPC.
+
+A repeated investigation beat is acceptable only when it materially changes at least one of: relationship, risk, decision, goal, possession, location, character state, irreversible consequence, or reader understanding at a new level.
+
+When the pattern repeats without such change, compress/merge the checks or change the dramatic carrier. Tight logic does not compensate for static dramaturgy.
+
 ## Story Writing — Pre-Writing Framework Review Hard Gate
 
 Before any project is allowed to write Chapter 1, the story framework must pass a dedicated framework review. Chapter-level review is not a substitute for this gate.
@@ -70,6 +119,7 @@ F0 must review at minimum:
 - lore overload and premature reveal risk;
 - plot-forced behavior;
 - trait literalization / proceduralized characterization encoded in the setup;
+- reader-orientation requirements for Chapter 1 and every core recurring mechanism: what the POV already knows that readers must understand immediately vs what truth may remain intentionally hidden;
 - whether the framework leaves enough room for natural character and plot development.
 
 Verdict contract:
