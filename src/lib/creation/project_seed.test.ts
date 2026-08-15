@@ -2,6 +2,15 @@ import { describe, expect, it } from 'vitest';
 
 import { buildCreationProjectSeed } from './project_seed';
 
+const periodRegister = {
+  frame: 'period' as const,
+  level: 3 as const,
+  narratorLevel: 3 as const,
+  dialogueLevel: 3 as const,
+  thoughtLevel: 2 as const,
+  notes: 'Cổ phong trung độ, dễ đọc.',
+};
+
 describe('buildCreationProjectSeed', () => {
   it('preserves chapter order and sequence numbers from accepted chapters', () => {
     const seed = buildCreationProjectSeed({
@@ -37,6 +46,33 @@ describe('buildCreationProjectSeed', () => {
     expect(seed.chapters.map((chapter) => chapter.sequenceNumber)).toEqual([1, 2]);
   });
 
+  it('HOLDs framework promotion when no era register was reviewed', () => {
+    expect(() => buildCreationProjectSeed({
+      framework: {
+        bible: {
+          title: 'Thiếu Thiết Lập',
+          genre: 'Tiên hiệp',
+          subGenre: [],
+          writingStyle: 'Cổ phong',
+          logline: '',
+          endgame: '',
+          mainCharacterCount: 1,
+          supportCharacterCount: 1,
+          characterSetup: '',
+          worldSetting: '',
+          mainPlot: '',
+        },
+        characters: [],
+        world: { geography: '', magicSystem: '', techLevel: '', currency: '', factions: [], rules: '' },
+        outline: [],
+        chapterSkeleton: [],
+        foreshadowings: [],
+      },
+      acceptedChapters: [],
+      createId: () => 'id',
+    })).toThrow(/Văn phong thời đại/);
+  });
+
   it('uses the confirmed chapter target instead of the generated shell count', () => {
     const seed = buildCreationProjectSeed({
       framework: {
@@ -44,7 +80,8 @@ describe('buildCreationProjectSeed', () => {
           title: 'Trường Thiên',
           genre: 'Tiên hiệp',
           subGenre: [],
-          writingStyle: 'Chậm rãi',
+          writingStyle: 'Cổ phong trung độ — Era Register 3/5',
+          narrativeEraRegister: periodRegister,
           logline: 'Một thiếu niên đi qua trăm kiếp.',
           endgame: 'Hoàn thành đại đạo',
           mainCharacterCount: 1,
@@ -87,6 +124,55 @@ describe('buildCreationProjectSeed', () => {
 
     expect(seed.projectPatch.targetChapters).toBe(200);
     expect(seed.chapters).toHaveLength(2);
+    expect(seed.projectPatch.narrativeEraRegister).toMatchObject({
+      frame: 'period',
+      level: 3,
+      confirmed: true,
+      source: 'user',
+    });
+  });
+
+  it('normalizes contemporary framework choice without asking for period intensity', () => {
+    const seed = buildCreationProjectSeed({
+      framework: {
+        bible: {
+          title: 'Phố Mưa',
+          genre: 'Đô thị',
+          subGenre: [],
+          writingStyle: 'Hiện đại',
+          narrativeEraRegister: {
+            frame: 'contemporary',
+            level: 5,
+            narratorLevel: 5,
+            dialogueLevel: 5,
+            thoughtLevel: 5,
+          },
+          logline: '',
+          endgame: '',
+          mainCharacterCount: 1,
+          supportCharacterCount: 1,
+          characterSetup: '',
+          worldSetting: '',
+          mainPlot: '',
+        },
+        characters: [],
+        world: { geography: '', magicSystem: '', techLevel: 'Hiện đại', currency: '', factions: [], rules: '' },
+        outline: [],
+        chapterSkeleton: [],
+        foreshadowings: [],
+      },
+      acceptedChapters: [],
+      createId: () => 'id',
+    });
+
+    expect(seed.projectPatch.narrativeEraRegister).toMatchObject({
+      frame: 'contemporary',
+      level: 1,
+      narratorLevel: 1,
+      dialogueLevel: 1,
+      thoughtLevel: 1,
+      confirmed: true,
+    });
   });
 
   it('maps framework outline and foreshadowings into project patch', () => {
@@ -96,7 +182,8 @@ describe('buildCreationProjectSeed', () => {
           title: 'Huyết Thư',
           genre: 'Tiên hiệp',
           subGenre: ['Huyền huyễn'],
-          writingStyle: 'Dồn dập',
+          writingStyle: 'Cổ phong trung độ',
+          narrativeEraRegister: periodRegister,
           logline: 'Một kẻ bị đày tìm lại thiên mệnh.',
           endgame: 'Đoạt lại thiên thư',
           mainCharacterCount: 1,
@@ -135,9 +222,6 @@ describe('buildCreationProjectSeed', () => {
     });
 
     expect(seed.projectPatch.title).toBe('Huyết Thư');
-    // [Note] buildCreationProjectSeed also hydrates draft chapter shells from
-    // the framework outline. Those consume createId() first, so outline and
-    // foreshadowing IDs are entity-2 and entity-3 here.
     expect(seed.projectPatch.outline).toEqual([
       {
         id: 'entity-2',
