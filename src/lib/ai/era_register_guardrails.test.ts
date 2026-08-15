@@ -127,6 +127,8 @@ describe('era_register_guardrails', () => {
       genre: 'Đô thị',
       writingStyle: 'Giản dị – mạch lạc',
       tone: 'Đời thường',
+      logline: 'Một nhân viên văn phòng tìm lại nhịp sống sau biến cố gia đình.',
+      mainPlot: 'Cô học cách kết nối lại với thành phố và những người thân cận.',
       worldSetting: 'Việt Nam đương đại, thành phố lớn, công nghệ và công sở.',
       narrativeEraRegister: { frame: 'contemporary', confirmed: true, source: 'user' },
       world: {

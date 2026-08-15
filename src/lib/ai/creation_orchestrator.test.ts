@@ -46,7 +46,11 @@ function buildFramework(): BrainstormResult {
     bible: {
       genre: 'Tiên hiệp',
       subGenre: ['thăng cấp', 'phiêu lưu'],
-      writingStyle: 'Nhanh, giàu hình ảnh',
+      writingStyle: 'Giàu hình ảnh',
+      narrativeEraRegister: {
+        frame: 'period',
+        notes: 'Cổ đại–cổ phong trong thế giới giả tưởng.',
+      },
       title: 'Thiên Mệnh Hành Giả',
       logline: 'Một kẻ vô danh bị ép bước vào trò chơi của thiên mệnh.',
       endgame: 'Phá vỡ bàn cờ do thiên mệnh dựng lên.',
