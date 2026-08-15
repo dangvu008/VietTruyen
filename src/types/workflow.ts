@@ -19,6 +19,17 @@ export type WorkflowIntentType =
 
 export type WorkflowSource = 'button' | 'hotkey' | 'context_menu' | 'system' | 'batch';
 
+/**
+ * User-selectable writing pipeline mode.
+ *
+ * UI mapping:
+ * - fast: Nhanh — candidate-only, minimum expensive gates.
+ * - balanced: Cân bằng — core hard gates, lighter reviewer path.
+ * - quality: Sâu / Deep Writing — deep craft directive + full review/polish path.
+ *
+ * Important: Deep Writing increases craft depth, not plot complexity. The
+ * Creative Complexity Governor remains authoritative for invention scope.
+ */
 export type QualityMode = 'fast' | 'balanced' | 'quality';
 
 export type WorkflowStep =
@@ -76,11 +87,11 @@ export interface FullWritePipelinePayload {
   notes?: string;
   sourceOverride?: string;
   styleInstruction?: string;
-  /** Skip review step if user wants faster output. In quality mode this yields HOLD. */
+  /** Skip review step if user wants faster output. In Deep Writing/quality mode this is overridden off. */
   skipReview?: boolean;
-  /** Skip style analysis step */
+  /** Skip style analysis step. In Deep Writing/quality mode this is overridden off. */
   skipPolish?: boolean;
-  /** Controls expensive post-draft pipeline steps and promotion eligibility. */
+  /** Controls writing depth, expensive post-draft steps, and promotion eligibility. */
   qualityMode?: QualityMode;
 }
 
