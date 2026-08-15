@@ -28,6 +28,7 @@ export async function uploadProject(project: Project, userId: string): Promise<{
       genre: project.genre,
       sub_genre: project.subGenre,
       writing_style: project.writingStyle,
+      narrative_era_register: project.narrativeEraRegister || null,
       tone: project.tone,
       style_id: project.styleId,
       target_chapters: project.targetChapters,
@@ -113,7 +114,7 @@ export async function uploadProject(project: Project, userId: string): Promise<{
 
     // [Domain:Storage] STEP 5a — Upsert full chapters (content present)
     if (fullChapters.length > 0) {
-      const fullRows = fullChapters.map((c, _i) => ({
+      const fullRows = fullChapters.map((c) => ({
         id: c.id,
         project_id: project.id,
         title: c.title,
@@ -268,6 +269,7 @@ export async function downloadProjects(): Promise<{ data: Project[]; error: Erro
       genre: row.genre || '',
       subGenre: row.sub_genre || [],
       writingStyle: row.writing_style || '',
+      narrativeEraRegister: (row.narrative_era_register as Project['narrativeEraRegister']) || undefined,
       tone: row.tone || '',
       styleId: row.style_id || '',
       targetChapters: row.target_chapters || 60,
