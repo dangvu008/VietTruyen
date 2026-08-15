@@ -313,6 +313,7 @@ export type Database = {
           main_character_count: number | null
           main_plot: string | null
           notes: string | null
+          narrative_era_register: Json | null
           source_project_id: string | null
           style_id: string | null
           sub_genre: string[] | null
@@ -338,6 +339,7 @@ export type Database = {
           main_character_count?: number | null
           main_plot?: string | null
           notes?: string | null
+          narrative_era_register?: Json | null
           source_project_id?: string | null
           style_id?: string | null
           sub_genre?: string[] | null
@@ -363,6 +365,7 @@ export type Database = {
           main_character_count?: number | null
           main_plot?: string | null
           notes?: string | null
+          narrative_era_register?: Json | null
           source_project_id?: string | null
           style_id?: string | null
           sub_genre?: string[] | null

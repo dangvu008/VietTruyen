@@ -22,15 +22,11 @@ function makeProject(): Project {
     logline: 'Một tu sĩ trẻ bị cuốn vào tranh đoạt bí cảnh.',
     genre: 'Tiên hiệp',
     subGenre: [],
-    writingStyle: 'Nhanh, rõ, giàu hình ảnh · Cổ phong 3/5',
+    writingStyle: 'Nhanh – sắc',
     tone: 'Căng thẳng',
     styleId: 'style-1',
     narrativeEraRegister: {
       frame: 'period',
-      level: 3,
-      narratorLevel: 3,
-      dialogueLevel: 3,
-      thoughtLevel: 2,
       confirmed: true,
       source: 'user',
     },
@@ -291,8 +287,9 @@ describe('buildWritingContext', () => {
     expect(context.contextText).toContain('## CỤM NARRATIVE LIÊN QUAN');
     expect(context.contextText).toContain('Lâm Tề / Bạch Long');
     expect(context.contextText).toContain('Open threads');
-    expect(context.contextText).toContain('## ERA, REGION, AND REGISTER LOCK');
-    expect(context.contextText).toContain('Period intensity: 3/5');
+    expect(context.contextText).toContain('## ERA, REGION, AND REGISTER — CONFIRMED PROJECT DIRECTION');
+    expect(context.contextText).toContain('Frame: period');
+    expect(context.contextText).not.toContain('/5');
     expect(context.contextText).toContain('"va chạm vật lý"');
     expect(context.contextText).not.toContain('## NHÂN VẬT\n- Hạ Vũ');
   });
