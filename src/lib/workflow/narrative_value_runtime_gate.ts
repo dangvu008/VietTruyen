@@ -74,7 +74,7 @@ export async function runNarrativeValueRuntimeGate(
       responseFormat: 'json_object',
       skipCache: true,
       pipelineSessionId: opts.pipelineSessionId,
-      pipelineStep: 'narrative_value_gate',
+      pipelineStep: 'review_checkers',
       systemPrompt: buildSystemPrompt(),
       userPrompt: buildUserPrompt(opts),
     });
