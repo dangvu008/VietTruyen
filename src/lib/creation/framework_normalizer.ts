@@ -17,6 +17,31 @@ function normalizeStringList(value: unknown): string[] {
   return value.map(normalizeText).filter(Boolean);
 }
 
+function normalizeRegisterLevel(value: unknown): 1 | 2 | 3 | 4 | 5 | undefined {
+  const numeric = Number(value);
+  return numeric === 1 || numeric === 2 || numeric === 3 || numeric === 4 || numeric === 5
+    ? numeric
+    : undefined;
+}
+
+function normalizeEraRegister(value: unknown): BrainstormResult['bible']['narrativeEraRegister'] | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const input = value as Record<string, unknown>;
+  const frame = input.frame === 'period' || input.frame === 'mixed' || input.frame === 'contemporary'
+    ? input.frame
+    : undefined;
+  const level = normalizeRegisterLevel(input.level);
+  if (!frame || !level) return undefined;
+  return {
+    frame,
+    level,
+    narratorLevel: normalizeRegisterLevel(input.narratorLevel),
+    dialogueLevel: normalizeRegisterLevel(input.dialogueLevel),
+    thoughtLevel: normalizeRegisterLevel(input.thoughtLevel),
+    notes: normalizeText(input.notes) || undefined,
+  };
+}
+
 function normalizePsychology(value: unknown) {
   const input = value && typeof value === 'object' ? value as Record<string, unknown> : {};
   const normalized = {
@@ -39,6 +64,7 @@ export function normalizeCreationFramework(input: PartialBrainstormResult): Brai
       genre: normalizeText(bible?.genre),
       subGenre: normalizeStringList(bible?.subGenre),
       writingStyle: normalizeText(bible?.writingStyle),
+      narrativeEraRegister: normalizeEraRegister(bible?.narrativeEraRegister),
       title: normalizeText(bible?.title),
       logline: normalizeText(bible?.logline),
       endgame: normalizeText(bible?.endgame),
