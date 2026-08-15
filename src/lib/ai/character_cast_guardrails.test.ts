@@ -14,9 +14,18 @@ function makeProject(): Project {
     logline: 'Một nữ quan phải giữ bí mật của triều đình giữa cơn biến.',
     genre: 'Cổ đại',
     subGenre: ['Cung đấu'],
-    writingStyle: 'Tĩnh mà sắc',
+    writingStyle: 'Tĩnh mà sắc · Cổ phong 3/5',
     tone: 'Căng ngầm',
     styleId: 'style-1',
+    narrativeEraRegister: {
+      frame: 'period',
+      level: 3,
+      narratorLevel: 3,
+      dialogueLevel: 4,
+      thoughtLevel: 2,
+      confirmed: true,
+      source: 'user',
+    },
     targetChapters: 80,
     endgame: 'Lật được án cũ và giữ mạng cho gia tộc.',
     mainCharacterCount: 1,
@@ -79,13 +88,15 @@ function makeProject(): Project {
 }
 
 describe('character_cast_guardrails', () => {
-  it('defines multi-function character roles for framework generation', () => {
+  it('defines multi-function roles and mandatory era setup for framework generation', () => {
     const guardrails = buildCreationCharacterGuardrails();
 
     expect(guardrails).toContain('plot');
     expect(guardrails).toContain('world');
     expect(guardrails).toContain('emotional');
     expect(guardrails).toContain('không thêm cho đủ quân số');
+    expect(guardrails).toContain('narrativeEraRegister');
+    expect(guardrails).toContain('contemporary | period | mixed');
   });
 
   it('anchors chapter-level character expansion to beats and foreshadowing', () => {
