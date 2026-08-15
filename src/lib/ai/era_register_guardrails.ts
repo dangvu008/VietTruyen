@@ -152,25 +152,34 @@ function formatRegister(register: NarrativeRegister): string {
   return labels[register];
 }
 
-function levelDescription(level: NarrativeEraRegisterLevel): string {
+/** Period intensity only. Frame selection is separate. */
+function periodIntensityDescription(level: NarrativeEraRegisterLevel): string {
   switch (level) {
-    case 1: return 'contemporary/plain: natural present-day Vietnamese; no artificial period coloring';
-    case 2: return 'light period flavor: mostly plain Vietnamese with restrained period vocabulary and social register';
-    case 3: return 'readable period style: clearly period-flavored but fluent, accessible, and not pseudo-classical';
-    case 4: return 'strong period style: denser period diction/syntax while preserving semantic clarity';
-    case 5: return 'classical-heavy: strongly archaic/classical register; use only because this project explicitly chose it';
+    case 1: return 'very light period coloring: mostly plain Vietnamese, with era-appropriate naming, address, objects, and social habits';
+    case 2: return 'light period style: restrained period vocabulary and rhythm, still close to modern readability';
+    case 3: return 'medium/readable period style: clearly old-world in register but fluent, accessible, and not pseudo-classical';
+    case 4: return 'strong period style: denser period diction and syntax while preserving semantic clarity';
+    case 5: return 'very strong/classical-heavy period style: intentionally archaic; use only because this project explicitly chose it';
   }
 }
 
 function renderExplicitLevels(config: NarrativeEraRegisterConfig): string[] {
+  if (config.frame === 'contemporary') {
+    return [
+      '- Era style: contemporary. Period-intensity scale does not apply to published prose.',
+      config.notes ? `- Project-specific note: ${config.notes}` : '',
+    ].filter(Boolean);
+  }
+
   const narrator = config.narratorLevel ?? config.level;
   const dialogue = config.dialogueLevel ?? config.level;
   const thought = config.thoughtLevel ?? config.level;
+  const label = config.frame === 'mixed' ? 'Period component intensity' : 'Period intensity';
   return [
-    `- Project Era Register: ${config.level}/5 — ${levelDescription(config.level)}.`,
-    `- Narrator register: ${narrator}/5.`,
-    `- Dialogue register: ${dialogue}/5.`,
-    `- Thought/internal register: ${thought}/5.`,
+    `- ${label}: ${config.level}/5 — ${periodIntensityDescription(config.level)}.`,
+    `- Narrator period intensity: ${narrator}/5.`,
+    `- Dialogue period intensity: ${dialogue}/5.`,
+    `- Thought/internal period intensity: ${thought}/5.`,
     config.notes ? `- Project-specific note: ${config.notes}` : '',
   ].filter(Boolean);
 }
@@ -206,6 +215,7 @@ export function buildEraRegisterGuardrailSection(project: Project): string {
       ? renderContemporaryRules()
       : [
         '- Mixed-era project: partition registers by POV/world/source. Native period characters stay in-period; modern diction appears only where canon permits it.',
+        '- The 1-5 value controls how strongly the period component sounds old; it is not the modern/period mixing ratio.',
         ...renderPeriodRules(config),
       ];
 
