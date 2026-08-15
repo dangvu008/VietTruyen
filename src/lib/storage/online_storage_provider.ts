@@ -137,7 +137,6 @@ export class OnlineStorageProvider implements StorageProvider {
 
     if (error || !row) return null;
 
-
     // [Domain:Storage] STEP 2 — Fetch related entities in parallel
     const [worldRes, charsRes, beatsRes, foreshadowingsRes] = await Promise.all([
       supabase.from('world_rules').select('*').eq('project_id', projectId).maybeSingle(),
@@ -198,6 +197,7 @@ export class OnlineStorageProvider implements StorageProvider {
       genre: row.genre || '',
       subGenre: row.sub_genre || [],
       writingStyle: row.writing_style || '',
+      narrativeEraRegister: (row.narrative_era_register as Project['narrativeEraRegister']) || undefined,
       tone: row.tone || '',
       styleId: row.style_id || '',
       targetChapters: row.target_chapters || 60,
