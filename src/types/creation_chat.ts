@@ -31,9 +31,7 @@ export interface BatchComposeProgress {
   current: number;
   total: number;
   isRunning: boolean;
-  /** Number of chapters written successfully */
   successCount: number;
-  /** Number of chapters that failed */
   failCount: number;
 }
 
@@ -56,14 +54,18 @@ export interface SuggestionChip {
   id: string;
   emoji: string;
   label: string;
-  /** Optional detailed text sent as user message when chip is clicked */
   value?: string;
 }
 
 export interface SuggestionGroup {
-  /** Optional label above the chip group */
   groupLabel?: string;
   chips: SuggestionChip[];
+  /** Default remains multi for backward compatibility. */
+  selectionMode?: 'single' | 'multi';
+  /** Visible groups marked required must have a selected chip before confirmation. */
+  required?: boolean;
+  /** Show this group only when at least one selected chip has one of these values. */
+  visibleWhenSelectedValues?: string[];
 }
 
 // ─── Plot Review Preview ────────────────────────────────────
@@ -98,27 +100,16 @@ export interface CreationMessage {
   timestamp: string;
   type: CreationMessageType;
   tokenUsage?: CreationMessageTokenUsage;
-
-  /** Suggestion chips attached to AI messages (Phase 2) */
   suggestions?: SuggestionGroup[];
-  /** "Let AI decide" button config */
   aiDecideLabel?: string;
-
-  /** Plot review data attached to plot_preview messages */
   plotPreviewData?: CreationPlotPreview;
-
-  /** Framework data attached to framework_preview messages (Phase 3) */
   frameworkData?: BrainstormResult;
-
-  /** Chapter draft data attached to chapter_draft messages (Phase 4) */
   chapterDraft?: {
     chapterIndex: number;
     title: string;
     content: string;
     charCount: number;
   };
-
-  /** Cost preview data — shown after chapter_scope is answered, before plot preview */
   costPreviewData?: CreationCostPreviewData;
 }
 
@@ -161,7 +152,6 @@ export interface DiscussTopic {
   questionTemplate: string;
   suggestionGroups: SuggestionGroup[];
   aiDecideLabel: string;
-  /** Minimum topics answered before allowing "AI tự phát triển tất cả" */
   required: boolean;
 }
 
@@ -184,29 +174,18 @@ export interface CreationChatState {
   sessionStartedAt: string;
   phase: CreationPhase;
   messages: CreationMessage[];
-  /** Which discussion topic we're currently asking (Phase 2) */
   currentTopicIndex: number;
-  /** User answers collected during Phase 2 — topicId → chosen value */
   answers: Record<string, string>;
-  /** Phase 2.5 extracted plot review before framework generation */
   plotPreview: CreationPlotPreview | null;
   plotPreviewConfirmed: boolean;
-  /** Phase 3 extracted framework */
   framework: BrainstormResult | null;
   frameworkConfirmed: boolean;
-  /** Phase 4 compose state */
   currentChapterIndex: number;
-  /** Chapters accepted by user (from AI or manual) */
   acceptedChapters: AcceptedChapter[];
-  /** Draft text in composer, autosaved for resume after abrupt exit */
   draftInput: string;
-  /** Last autosave marker for the whole creation session */
   draftSavedAt: string | null;
-  /** Progress marker for AI generation + handoff state */
   progress: CreationWorkflowProgress;
-  /** Whether batch compose (auto-write all chapters) is active */
   isBatchComposing: boolean;
-  /** General loading/error state */
   isAiWorking: boolean;
   error: string | null;
 }
