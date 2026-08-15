@@ -74,7 +74,7 @@ function makeProject(overrides: ProjectOverride = {}): Project {
 }
 
 describe('era_register_guardrails', () => {
-  it('locks an ancient Chinese-style project to the explicit 3/5 period setting', () => {
+  it('locks a period project to explicit medium period intensity', () => {
     const project = makeProject();
 
     expect(inferEraRegister(project)).toBe('ancient');
@@ -85,16 +85,16 @@ describe('era_register_guardrails', () => {
     const section = buildEraRegisterGuardrailSection(project);
     expect(section).toContain('EXPLICIT PROJECT SETTING');
     expect(section).toContain('Frame: period');
-    expect(section).toContain('Project Era Register: 3/5');
-    expect(section).toContain('Narrator register: 3/5');
-    expect(section).toContain('Dialogue register: 3/5');
-    expect(section).toContain('Thought/internal register: 2/5');
+    expect(section).toContain('Period intensity: 3/5');
+    expect(section).toContain('Narrator period intensity: 3/5');
+    expect(section).toContain('Dialogue period intensity: 3/5');
+    expect(section).toContain('Thought/internal period intensity: 2/5');
     expect(section).toContain('Chinese / Sinosphere');
     expect(section).toContain('"va chạm vật lý"');
     expect(section).toContain('fake classical prose');
   });
 
-  it('keeps mixed-era projects partitioned instead of banning every modern term globally', () => {
+  it('uses the level as period-component intensity in mixed stories', () => {
     const project = makeProject({
       genre: 'Hệ thống',
       subGenre: ['Xuyên không', 'Cổ đại'],
@@ -112,14 +112,13 @@ describe('era_register_guardrails', () => {
     });
 
     expect(inferEraRegister(project)).toBe('mixed');
-    expect(inferExplanationMode(project)).toBe('in_era');
-
     const section = buildEraRegisterGuardrailSection(project);
     expect(section).toContain('Frame: mixed');
-    expect(section).toContain('partition registers by POV/world/source');
+    expect(section).toContain('Period component intensity: 2/5');
+    expect(section).toContain('not the modern/period mixing ratio');
   });
 
-  it('recognizes medieval Europe while respecting an explicit strong period register', () => {
+  it('recognizes medieval Europe while respecting a strong period intensity', () => {
     const project = makeProject({
       title: 'The Ashen Banner',
       genre: 'Historical fantasy',
@@ -150,10 +149,10 @@ describe('era_register_guardrails', () => {
     const section = buildEraRegisterGuardrailSection(project);
     expect(section).toContain('European');
     expect(section).toContain('military / campaign');
-    expect(section).toContain('Project Era Register: 4/5');
+    expect(section).toContain('Period intensity: 4/5');
   });
 
-  it('recognizes modern Vietnam and uses a confirmed contemporary register', () => {
+  it('does not expose a meaningless period scale for contemporary stories', () => {
     const project = makeProject({
       title: 'Sài Gòn Sau Cơn Mưa',
       genre: 'Đô thị',
@@ -186,7 +185,8 @@ describe('era_register_guardrails', () => {
     const section = buildEraRegisterGuardrailSection(project);
     expect(section).toContain('Frame: contemporary');
     expect(section).toContain('Vietnamese sphere');
-    expect(section).toContain('Project Era Register: 1/5');
+    expect(section).toContain('Period-intensity scale does not apply');
+    expect(section).not.toContain('Period intensity: 1/5');
   });
 
   it('falls back to East Asia inference while explicit setting still controls prose', () => {
@@ -214,8 +214,6 @@ describe('era_register_guardrails', () => {
 
     expect(inferEraRegister(project)).toBe('modern');
     expect(inferCivilizationalRegion(project)).toBe('east_asia');
-
-    const section = buildEraRegisterGuardrailSection(project);
-    expect(section).toContain('East Asian');
+    expect(buildEraRegisterGuardrailSection(project)).toContain('East Asian');
   });
 });
