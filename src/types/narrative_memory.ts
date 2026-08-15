@@ -61,7 +61,7 @@ export interface AttributeDiff {
   key: string;
   oldValue: string;
   newValue: string;
-  reason: string; // "nhân vật bị thương mất cánh tay trái trong trận chiến"
+  reason: string;
 }
 
 export interface EntityDefinition {
@@ -86,8 +86,8 @@ export interface EntitySnapshot {
   projectId: string;
   chapterId: string;
   chapterIndex: number;
-  attributes: Record<string, string>; // key-value pairs of all attributes at this point
-  diffs: AttributeDiff[]; // what changed from previous snapshot
+  attributes: Record<string, string>;
+  diffs: AttributeDiff[];
   timestamp: string;
 }
 
@@ -121,9 +121,9 @@ export interface ChapterDependency {
   projectId: string;
   entityId: string;
   entityType: EntityType;
-  attributeKeys: string[]; // which specific attributes are referenced
+  attributeKeys: string[];
   importance: DependencyImportance;
-  context: string; // "Mô tả ngoại hình nhân vật khi gặp lần đầu"
+  context: string;
 }
 
 export interface AttributeDependency {
@@ -144,7 +144,6 @@ export interface AttributeDependency {
   updatedAt: string;
 }
 
-// AI-extracted metadata from a chapter
 export interface ChapterEntityRef {
   entityId: string;
   entityName: string;
@@ -152,7 +151,7 @@ export interface ChapterEntityRef {
   attributeKeys: string[];
   importance: DependencyImportance;
   context: string;
-  changes?: AttributeDiff[]; // if entity changed in this chapter
+  changes?: AttributeDiff[];
 }
 
 export interface ChapterMetadata {
@@ -179,8 +178,8 @@ export interface AffectedChapter {
   chapterTitle: string;
   chapterIndex: number;
   severity: Severity;
-  affectedPassages: string[]; // relevant text snippets
-  dependencyContext: string; // why this chapter is affected
+  affectedPassages: string[];
+  dependencyContext: string;
 }
 
 export interface PatchSuggestion {
@@ -360,6 +359,18 @@ export interface BrainstormResult {
     genre: string;
     subGenre: string[];
     writingStyle: string;
+    /**
+     * Era-register proposal shown in framework review. The proposal is not authoritative
+     * until the writer confirms the framework; project_seed then promotes it to a confirmed per-story setting.
+     */
+    narrativeEraRegister?: {
+      frame: 'contemporary' | 'period' | 'mixed';
+      level: 1 | 2 | 3 | 4 | 5;
+      narratorLevel?: 1 | 2 | 3 | 4 | 5;
+      dialogueLevel?: 1 | 2 | 3 | 4 | 5;
+      thoughtLevel?: 1 | 2 | 3 | 4 | 5;
+      notes?: string;
+    };
     title: string;
     logline: string;
     endgame: string;
@@ -400,7 +411,7 @@ export interface BrainstormResult {
     title: string;
     summary: string;
     keyEvents: string[];
-    entityRefs: string[]; // entity names referenced
+    entityRefs: string[];
   }>;
   foreshadowings: Array<{
     description: string;
@@ -411,36 +422,21 @@ export interface BrainstormResult {
 // Layer 5: Pending Hooks — Plot Continuity Registry (P1)
 // ═══════════════════════════════════════════════════════════
 
-/** Lifecycle status of a foreshadowing/plot hook */
 export type PendingHookStatus = 'open' | 'resolved' | 'dropped';
-
-/** Source of a hook — AI detection or explicit author definition */
 export type PendingHookSource = 'ai_detected' | 'user_defined';
 
-/**
- * PendingHook — a single foreshadowing thread tracked across chapters.
- * Planted at one chapter, expected to pay off at a future chapter.
- * AI-detected hooks have confidence < 1; user-defined have confidence = 1.
- */
 export interface PendingHook {
   id: string;
   projectId: string;
-  /** Chapter where the hook was planted */
   plantedChapterId: string;
   plantedChapterIndex: number;
-  /** Human-readable description: "Vết thương bí ẩn trên tay trái Lý Thiên" */
   description: string;
-  /** Optional verbatim evidence from chapter text */
   evidence?: string;
-  /** Entity IDs (character, item, location) this hook involves */
   relatedEntityIds: string[];
-  /** Expected chapter index where this hook should pay off */
   expectedPayoffBy?: number;
   status: PendingHookStatus;
-  /** Filled when status → 'resolved' */
   resolvedChapterId?: string;
   resolvedAt?: string;
-  /** 0-1: AI confidence. User-defined hooks always = 1 */
   confidence: number;
   source: PendingHookSource;
   createdAt: string;
