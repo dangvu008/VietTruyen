@@ -31,13 +31,21 @@ function renderRuleBlock(title: string, lines: string[]): string {
 }
 
 export function buildCreationCharacterGuardrails(): string {
-  return renderRuleBlock('CHARACTER CAST GUARDRAILS', [
+  return renderRuleBlock('FRAMEWORK SETUP HARD REQUIREMENTS', [
     '- Cast khởi đầu phải đủ sống động nhưng không thêm cho đủ quân số.',
     '- Hãy ưu tiên một cast lõi gọn, sau đó phân vai rõ cho từng người.',
     '- Nhân vật nên phủ được 3 nhóm chức năng: plot (đẩy cốt truyện), world (làm dày thế giới), emotional (tạo cảm xúc và điểm nhớ).',
     '- Nhân vật phụ không chỉ để gây xung đột; họ có thể là điểm nhấn không khí, phản chiếu nhân vật chính, hoặc giữ nhịp cảm xúc.',
     '- Không tạo hồ sơ riêng cho crowd character chỉ xuất hiện trang trí. Nếu một người chỉ lướt qua cho đủ cảnh, hãy để họ vô danh.',
     '- Mỗi nhân vật có tên phải có lý do tồn tại, mối liên hệ với cast lõi, và ảnh hưởng còn lại sau lần xuất hiện đầu tiên.',
+    '- MANDATORY: bible.narrativeEraRegister phải luôn có trong JSON framework với shape { frame, level, narratorLevel, dialogueLevel, thoughtLevel, notes }.',
+    '- frame chỉ được là contemporary | period | mixed. level/narratorLevel/dialogueLevel/thoughtLevel chỉ được là số nguyên 1-5.',
+    '- Thang mức: 1 = contemporary/plain; 2 = light period flavor; 3 = readable period style; 4 = strong period style; 5 = classical-heavy.',
+    '- Đây chỉ là ĐỀ XUẤT trong framework để người viết xem và sửa trước khi xác nhận. Không output confirmed/source trong framework.',
+    '- Không hardcode theo thể loại: tiên hiệp không mặc định phải 3/5, lịch sử không mặc định phải 4/5, hiện đại không mặc định phải 1/5. Chọn mức phù hợp với đúng dự án đang tạo.',
+    '- narratorLevel, dialogueLevel, thoughtLevel có thể khác nhau khi hợp lý; ví dụ lời kể 3/5 nhưng nội tâm 2/5 để giữ độ dễ đọc.',
+    '- writingStyle phải ghi ngắn gọn mức Era Register đã đề xuất (ví dụ “Cổ phong trung độ — Era Register 3/5”) để nó luôn hiện trên framework review ngay cả ở giao diện cũ.',
+    '- World Period/techLevel mô tả thế giới có gì; Narrative Era Register mô tả văn bản nghe thuộc thời đại nào. Không được gộp hai khái niệm này.',
   ]);
 }
 
