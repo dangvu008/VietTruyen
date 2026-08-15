@@ -410,14 +410,21 @@ async function buildEntityTimelineSection(project: Project, targetChapterIndex: 
 }
 
 function buildRecentSummaries(project: Project, targetChapterIndex: number, maxChars = 1800): string {
-  const chapters = getChaptersChronological(project).filter((c) => c.index < targetChapterIndex).slice(-3);
-  if (chapters.length === 0) return '';
-  const each = Math.max(180, Math.floor(maxChars / chapters.length));
-  return `## TÓM TẮT GẦN NHẤT\n${chapters.map((c) => `- Ch.${c.index}: ${quickTruncate(c.summary || c.content || '', each)}`).join('\n')}`;
+  const ordered = getChaptersChronological(project);
+  const previousChapters = ordered.slice(0, Math.max(0, targetChapterIndex)).slice(-3);
+  if (previousChapters.length === 0) return '';
+  const each = Math.max(180, Math.floor(maxChars / previousChapters.length));
+  return `## TÓM TẮT GẦN NHẤT\n${previousChapters.map((chapter, offset) => {
+    const absoluteIndex = Math.max(0, targetChapterIndex) - previousChapters.length + offset;
+    const chapterNumber = chapter.sequenceNumber ?? absoluteIndex + 1;
+    return `- Ch.${chapterNumber}: ${quickTruncate(chapter.summary || chapter.content || '', each)}`;
+  }).join('\n')}`;
 }
 
 function buildPreviousChapterTail(project: Project, targetChapterIndex: number, maxChars = 1200): string {
-  const previous = getChaptersChronological(project).filter((c) => c.index < targetChapterIndex).slice(-1)[0];
+  const ordered = getChaptersChronological(project);
+  const previousIndex = Math.min(Math.max(0, targetChapterIndex), ordered.length) - 1;
+  const previous = previousIndex >= 0 ? ordered[previousIndex] : undefined;
   if (!previous?.content) return '';
   const tail = previous.content.slice(-maxChars);
   return `## ĐOẠN CUỐI CHƯƠNG TRƯỚC\n${tail}`;
@@ -447,7 +454,7 @@ function buildExpectationSection(expectation: ExpectationProfile, branch: Surpri
   return `## EXPECTATION / BRANCH\n${quickTruncate(JSON.stringify({ expectation, branch }), 1200)}`;
 }
 
-function buildTensionSection(project: Project, targetChapterIndex: number, tensionLevel: TensionLevel, branch: SurpriseBranch): string {
+function buildTensionSection(_project: Project, targetChapterIndex: number, tensionLevel: TensionLevel, branch: SurpriseBranch): string {
   return `## TENSION\nChapter ${targetChapterIndex}; level=${String(tensionLevel)}; branch=${quickTruncate(JSON.stringify(branch),500)}`;
 }
 
