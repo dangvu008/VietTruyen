@@ -16,6 +16,7 @@ export interface PreSaveQualityIssue {
     | 'ai_tone' | 'previous_continuity' | 'chapter_cohesion'
     | 'trait_literalization' | 'character_context_mismatch'
     | 'proceduralized_characterization' | 'semantic_obscurity' | 'pseudo_coinage'
+    | 'reader_orientation_failure' | 'epistemic_prose_leak' | 'repetitive_investigation_structure'
     | 'creative_overreach' | 'complexity_escalation' | 'unplanned_mystery'
     | 'knowledge_leak' | 'forced_symbolism';
   severity: 'low' | 'medium' | 'high';
@@ -53,18 +54,22 @@ function buildPreSaveSystemPrompt(): string {
     '5. Judge the pattern, not isolated verbs. Checking a location, wound, object or clue is valid when the immediate situation makes that check materially necessary. Do not flag normal practical behavior.',
     '6. Prefer human salience: after waking, danger, grief, injury, surprise or reunion, attention should normally be pulled by the most immediate sensory/emotional/practical concern. Do not make a character perform analytical verification merely to prove they are cautious or smart.',
     '7. If proceduralized characterization is found, remove only unnecessary verification/explanation and replace it with context-driven perception, reaction or action. Preserve genuine competence and necessary investigation.',
-    '8. Mystery may hide facts but not the basic semantic meaning of a sentence. Detect semantic_obscurity and pseudo_coinage.',
-    '9. Apply the Meaning Reconstruction Test: suspicious wording must be paraphrasable in plain Vietnamese without adding information.',
-    '10. Detect creative_overreach when the draft invents lore, factions, powers, identities, motives, prophecy, long-term goals, foreshadowing, secrets, or plot machinery not required by canon/chapter intent.',
-    '11. Detect complexity_escalation when a simple causal path is expanded into extra steps, investigations, hidden meanings, nested motives, or side complications that add canon debt without necessary scene value.',
-    '12. Detect unplanned_mystery when an ordinary detail is upgraded into a clue, omen, signal, suspicious anomaly, or question only to manufacture intrigue.',
-    '13. Detect forced_symbolism when objects, gestures, weather, dreams, repeated wording, or imagery are made symbolically significant without support from the existing story.',
-    '14. Detect knowledge_leak when a character reasons from author-only information or reaches a conclusion not justified by what that character actually knows and observes on the page.',
-    '15. Minimum Necessary Invention: if the scene still works after removing a new invention, prefer removal/simplification unless the outline or canon clearly needs it.',
-    '16. Atmospheric detail is allowed to remain merely atmospheric. Do not convert it into foreshadowing during revision.',
-    '17. Hook, cliffhanger, twist, coolpoint, reveal, philosophy, symbolism, and micro-payoff are NOT mandatory in every chapter. Never add one merely because the draft lacks it.',
-    '18. Revise only affected spans. Prefer deletion/simplification over adding replacement lore. Do not create new metaphor, mystery, plot device, worldbuilding, character backstory, or foreshadowing while editing.',
-    '19. Do not punish valid canon-backed worldbuilding terms or intentional mystery.',
+    '8. READER ORIENTATION GATE: mystery may hide the cause, true identity, hidden mechanism or future consequence, but must not hide basic experiential information the POV already knows and a cold reader needs to understand the current scene. Detect reader_orientation_failure when the reader cannot tell the practical frame of a recurring phenomenon, transition, location, relationship or situation even though the POV already understands that frame.',
+    '9. Apply the rule “hide the answer, not the question”. In an opening or major transition, establish the minimum known baseline early enough that the reader can understand why the POV reacts as they do. Do not dump lore; one or two natural anchors are usually enough.',
+    '10. Detect epistemic_prose_leak when internal agent/reviewer discipline leaks into narration or character thought: repeated evidence standards, hypothesis language, source-validation language, lists of alternative explanations, “not enough to prove”, “one sample is not a rule”, or explicit reminders not to infer. Uncertainty may remain, but express it like human perception/thought, not a research protocol.',
+    '11. Detect repetitive_investigation_structure when nearby chapters/scenes repeatedly use substantially the same dramatic machine — clue/object -> question/expert -> test/compare -> eliminate possibilities -> conclude unknown — without a new relationship, risk, decision, irreversible consequence or materially different experience. Vary scene engines rather than merely swapping the object being examined.',
+    '12. Mystery may hide facts but not the basic semantic meaning of a sentence. Detect semantic_obscurity and pseudo_coinage.',
+    '13. Apply the Meaning Reconstruction Test: suspicious wording must be paraphrasable in plain Vietnamese without adding information.',
+    '14. Detect creative_overreach when the draft invents lore, factions, powers, identities, motives, prophecy, long-term goals, foreshadowing, secrets, or plot machinery not required by canon/chapter intent.',
+    '15. Detect complexity_escalation when a simple causal path is expanded into extra steps, investigations, hidden meanings, nested motives, or side complications that add canon debt without necessary scene value.',
+    '16. Detect unplanned_mystery when an ordinary detail is upgraded into a clue, omen, signal, suspicious anomaly, or question only to manufacture intrigue.',
+    '17. Detect forced_symbolism when objects, gestures, weather, dreams, repeated wording, or imagery are made symbolically significant without support from the existing story.',
+    '18. Detect knowledge_leak when a character reasons from author-only information or reaches a conclusion not justified by what that character actually knows and observes on the page.',
+    '19. Minimum Necessary Invention: if the scene still works after removing a new invention, prefer removal/simplification unless the outline or canon clearly needs it.',
+    '20. Atmospheric detail is allowed to remain merely atmospheric. Do not convert it into foreshadowing during revision.',
+    '21. Hook, cliffhanger, twist, coolpoint, reveal, philosophy, symbolism, and micro-payoff are NOT mandatory in every chapter. Never add one merely because the draft lacks it.',
+    '22. Revise only affected spans. Prefer deletion/simplification over adding replacement lore. Do not create new metaphor, mystery, plot device, worldbuilding, character backstory, or foreshadowing while editing.',
+    '23. Do not punish valid canon-backed worldbuilding terms or intentional mystery.',
     'Return JSON only.',
   ].join('\n');
 }
@@ -91,6 +96,15 @@ function buildPreSaveUserPrompt(opts: PreSaveQualityGateOptions): string {
     'Character behavior audit rule:',
     'Resolve behavior from the immediate scene before applying static traits. Flag trait_literalization when prose performs a trait without contextual need; character_context_mismatch when static-profile behavior ignores current stakes/state/relationship; proceduralized_characterization when the character repeatedly behaves like an investigator or checklist engine (observe/check/verify/compare/infer/eliminate) merely to demonstrate intelligence, caution, calmness or suspicion. A single necessary check is not a violation. Ask: would this exact verification still be the most natural next action if the profile label were hidden? If no, rewrite toward the scene salience.',
     '',
+    'Reader orientation audit rule:',
+    `Chapter ${currentChapterNumber} must give a cold reader the minimum practical frame needed to understand the scene. Especially in chapter 1, a recurring phenomenon, unusual transition, second world, established relationship, or familiar danger already known to the POV must be oriented early instead of being withheld as if it were itself the mystery. Preserve the deeper unknown cause/mechanism. Rule: hide the answer, not the question.`,
+    '',
+    'Epistemic prose audit rule:',
+    'Keep evidence discipline in the writer/reviewer reasoning layer, not in the finished prose. Flag repeated formal uncertainty statements, explicit hypothesis management, source-validation talk, enumerated alternative explanations, and verification methodology unless the scene specifically requires a character to perform that professional task. Replace with the shortest natural perception, hesitation, emotion or action that preserves the same uncertainty.',
+    '',
+    'Chapter-pattern audit rule:',
+    'Use nearby chapter context to detect repeated scene engines. If several chapters keep doing clue/object -> ask/check -> expert/test -> compare -> rule out -> still unknown, do not merely polish the wording. Flag repetitive_investigation_structure and compress, merge or change the dramatic carrier so that relationship, risk, choice, discovery, loss, desire or consequence bears more of the chapter.',
+    '',
     'Creative restraint audit rule:',
     'Use the chapter intent as a scope boundary. Ask for every new mystery/lore/secret/foreshadow/plot device: was this required by existing canon or the declared chapter intent? If not, and the scene works without it, remove or neutralize it. Do not replace one unnecessary invention with another. A plain causal explanation is preferred over an unsupported clever one. Characters may be wrong or uncertain; they must not reason from author-only knowledge.',
     '',
@@ -113,7 +127,7 @@ function buildPreSaveUserPrompt(opts: PreSaveQualityGateOptions): string {
     '"""',
     '',
     'Return this JSON shape:',
-    JSON.stringify({ approved: true, originalScore: 0, revisedScore: 0, issues: [{ type: 'creative_overreach', severity: 'medium', description: 'short issue', fix: 'remove or simplify only the unsupported invention' }], appliedChanges: ['short change summary'], revisedContent: 'full revised chapter text only' }),
+    JSON.stringify({ approved: true, originalScore: 0, revisedScore: 0, issues: [{ type: 'reader_orientation_failure', severity: 'high', description: 'short issue', fix: 'add only the minimum POV-known orientation without revealing the hidden cause' }], appliedChanges: ['short change summary'], revisedContent: 'full revised chapter text only' }),
   ].filter(Boolean).join('\n');
 }
 
@@ -131,8 +145,9 @@ function normalizeIssueType(value: unknown): PreSaveQualityIssue['type'] {
     value === 'previous_continuity' || value === 'chapter_cohesion' ||
     value === 'trait_literalization' || value === 'character_context_mismatch' ||
     value === 'proceduralized_characterization' || value === 'semantic_obscurity' ||
-    value === 'pseudo_coinage' || value === 'creative_overreach' ||
-    value === 'complexity_escalation' || value === 'unplanned_mystery' ||
+    value === 'pseudo_coinage' || value === 'reader_orientation_failure' ||
+    value === 'epistemic_prose_leak' || value === 'repetitive_investigation_structure' ||
+    value === 'creative_overreach' || value === 'complexity_escalation' || value === 'unplanned_mystery' ||
     value === 'knowledge_leak' || value === 'forced_symbolism'
   ) return value;
   return 'ai_tone';
