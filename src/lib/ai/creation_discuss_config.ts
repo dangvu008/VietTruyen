@@ -7,25 +7,18 @@
  * Design Decision:
  * Chips are static per topic (not AI-generated) for reliability and speed.
  * AI generates the text question, chips come from this config.
- * This ensures user ALWAYS has clickable options, even if AI response is slow.
  */
 
 import type { DiscussTopic, SuggestionChip } from '../../types/creation_chat';
-
-// ─── Helper ─────────────────────────────────────────────────
 
 function chip(emoji: string, label: string, value?: string): SuggestionChip {
   return { id: `${emoji}-${label}`, emoji, label, value: value || label };
 }
 
-// ─── Topic Definitions ──────────────────────────────────────
-
 export const DISCUSS_TOPICS: DiscussTopic[] = [
-  // ❶ Hệ tu luyện / Magic System
   {
     id: 'magic_system',
-    questionTemplate:
-      'Nhân vật tu luyện / sử dụng sức mạnh bằng cách nào?',
+    questionTemplate: 'Nhân vật tu luyện / sử dụng sức mạnh bằng cách nào?',
     suggestionGroups: [
       {
         chips: [
@@ -45,12 +38,9 @@ export const DISCUSS_TOPICS: DiscussTopic[] = [
     aiDecideLabel: '🤖 AI chọn phù hợp với ý tưởng ban đầu',
     required: false,
   },
-
-  // ❷ Xung đột chính
   {
     id: 'conflict',
-    questionTemplate:
-      'Xung đột lớn nhất — điều gì kéo người đọc đọc tiếp?',
+    questionTemplate: 'Xung đột lớn nhất — điều gì kéo người đọc đọc tiếp?',
     suggestionGroups: [
       {
         groupLabel: 'Chọn 1–2 xung đột chính:',
@@ -71,12 +61,9 @@ export const DISCUSS_TOPICS: DiscussTopic[] = [
     aiDecideLabel: '🤖 AI chọn xung đột hay nhất cho ý tưởng này',
     required: false,
   },
-
-  // ❸ Nhân vật chính
   {
     id: 'protagonist',
-    questionTemplate:
-      'Nhân vật chính — anh/cô ấy là người thế nào?',
+    questionTemplate: 'Nhân vật chính — anh/cô ấy là người thế nào?',
     suggestionGroups: [
       {
         groupLabel: 'Tên:',
@@ -113,12 +100,9 @@ export const DISCUSS_TOPICS: DiscussTopic[] = [
     aiDecideLabel: '🤖 AI tự thiết kế nhân vật phù hợp',
     required: false,
   },
-
-  // ❹ Giọng văn + Phản diện (gộp để giảm số vòng)
   {
     id: 'tone_antagonist',
-    questionTemplate:
-      'Giọng văn muốn viết + kiểu phản diện / mối đe dọa?',
+    questionTemplate: 'Giọng văn muốn viết + kiểu phản diện / mối đe dọa?',
     suggestionGroups: [
       {
         groupLabel: 'Giọng văn:',
@@ -146,12 +130,40 @@ export const DISCUSS_TOPICS: DiscussTopic[] = [
     aiDecideLabel: '🤖 AI tự quyết định cả 2',
     required: false,
   },
-
-  // ❺ Quy mô truyện — Bao nhiêu chương?
+  {
+    id: 'era_register',
+    questionTemplate: 'Văn phong thời đại của truyện nên là hiện đại, cổ phong hay kết hợp cả hai?',
+    suggestionGroups: [
+      {
+        groupLabel: 'Bước 1 · Chọn kiểu văn phong thời đại',
+        selectionMode: 'single',
+        required: true,
+        chips: [
+          chip('🏙️', 'Hiện đại', 'ERA_FRAME=contemporary'),
+          chip('🏯', 'Cổ phong', 'ERA_FRAME=period'),
+          chip('☯️', 'Hiện đại + Cổ phong', 'ERA_FRAME=mixed'),
+        ],
+      },
+      {
+        groupLabel: 'Bước 2 · Chọn độ cổ phong',
+        selectionMode: 'single',
+        required: true,
+        visibleWhenSelectedValues: ['ERA_FRAME=period', 'ERA_FRAME=mixed'],
+        chips: [
+          chip('1️⃣', '1/5 · Rất nhẹ', 'ERA_LEVEL=1'),
+          chip('2️⃣', '2/5 · Nhẹ', 'ERA_LEVEL=2'),
+          chip('3️⃣', '3/5 · Trung độ, dễ đọc', 'ERA_LEVEL=3'),
+          chip('4️⃣', '4/5 · Đậm', 'ERA_LEVEL=4'),
+          chip('5️⃣', '5/5 · Rất đậm / cổ văn', 'ERA_LEVEL=5'),
+        ],
+      },
+    ],
+    aiDecideLabel: '🤖 AI đề xuất, tôi duyệt lại trong khung truyện',
+    required: true,
+  },
   {
     id: 'chapter_scope',
-    questionTemplate:
-      'Bạn muốn truyện kéo dài khoảng bao nhiêu chương?',
+    questionTemplate: 'Bạn muốn truyện kéo dài khoảng bao nhiêu chương?',
     suggestionGroups: [
       {
         groupLabel: 'Chọn quy mô mục tiêu:',
@@ -172,8 +184,7 @@ export const DISCUSS_TOPICS: DiscussTopic[] = [
 
 const STORY_ENGINE_TOPIC: DiscussTopic = {
   id: 'story_engine',
-  questionTemplate:
-    'Điểm hấp dẫn cốt lõi nào nên kéo người đọc theo dõi từ đầu?',
+  questionTemplate: 'Điểm hấp dẫn cốt lõi nào nên kéo người đọc theo dõi từ đầu?',
   suggestionGroups: [
     {
       groupLabel: 'Chọn hướng bám sát ý tưởng gốc:',
@@ -192,37 +203,14 @@ const STORY_ENGINE_TOPIC: DiscussTopic = {
 };
 
 const SPECULATIVE_POWER_KEYWORDS = [
-  'ai',
-  'am luat',
-  'ao thuat',
-  'code',
-  'cong phap',
-  'dan duoc',
-  'do thi tu tien',
-  'dot pha',
-  'game',
-  'he thong',
-  'huyen huyen',
-  'linh khi',
-  'ma phap',
-  'nang luc',
-  'phap thuat',
-  'phu',
-  'sci-fi',
-  'sieu nhien',
-  'suc manh',
-  'tu chan',
-  'tu luyen',
-  'tu tien',
-  'vo dao',
+  'ai', 'am luat', 'ao thuat', 'code', 'cong phap', 'dan duoc', 'do thi tu tien',
+  'dot pha', 'game', 'he thong', 'huyen huyen', 'linh khi', 'ma phap', 'nang luc',
+  'phap thuat', 'phu', 'sci-fi', 'sieu nhien', 'suc manh', 'tu chan', 'tu luyen',
+  'tu tien', 'vo dao',
 ];
 
 function normalizeIdeaText(text: string): string {
-  return text
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/đ/g, 'd');
+  return text.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd');
 }
 
 function shouldAskMagicSystem(originalIdea: string): boolean {
@@ -241,8 +229,6 @@ export function getDiscussTopicsForIdea(originalIdea: string): DiscussTopic[] {
   ];
 }
 
-// ─── Quick Start Examples (Phase 1 chips) ───────────────────
-
 export const STARTER_IDEAS: SuggestionChip[] = [
   chip('⚔️', 'Truyện tu tiên kết hợp sci-fi'),
   chip('🏰', 'Tiểu thuyết cung đấu thời Lê sơ'),
@@ -258,12 +244,6 @@ export const STARTER_IDEAS: SuggestionChip[] = [
   chip('🌌', 'Tiên hiệp vũ trụ, phá cảnh giới siêu thời gian'),
 ];
 
-// ─── Smart Skip Check ───────────────────────────────────────
-
-/**
- * Build a summary from user answers so far, used when generating framework.
- * Returns a condensed string AI can use as context.
- */
 export function buildAnswersSummary(answers: Record<string, string>): string {
   const parts: string[] = [];
   if (answers.magic_system) parts.push(`Hệ tu luyện: ${answers.magic_system}`);
@@ -271,5 +251,6 @@ export function buildAnswersSummary(answers: Record<string, string>): string {
   if (answers.conflict) parts.push(`Xung đột: ${answers.conflict}`);
   if (answers.protagonist) parts.push(`Nhân vật chính: ${answers.protagonist}`);
   if (answers.tone_antagonist) parts.push(`Giọng văn & phản diện: ${answers.tone_antagonist}`);
+  if (answers.era_register) parts.push(`Văn phong thời đại: ${answers.era_register}`);
   return parts.join('\n');
 }
