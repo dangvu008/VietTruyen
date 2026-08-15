@@ -22,17 +22,12 @@ interface ChapterShell {
 
 function sortAcceptedChapters(chapters: AcceptedChapter[]): AcceptedChapter[] {
   return [...chapters].sort((left, right) => {
-    if (left.chapterIndex !== right.chapterIndex) {
-      return left.chapterIndex - right.chapterIndex;
-    }
+    if (left.chapterIndex !== right.chapterIndex) return left.chapterIndex - right.chapterIndex;
     return left.createdAt.localeCompare(right.createdAt);
   });
 }
 
-function buildOutline(
-  framework: BrainstormResult | null,
-  createId: () => string,
-): OutlineBeat[] {
+function buildOutline(framework: BrainstormResult | null, createId: () => string): OutlineBeat[] {
   return (framework?.outline || []).map((item) => ({
     id: createId(),
     title: item.title,
@@ -41,10 +36,7 @@ function buildOutline(
   }));
 }
 
-function buildCharacters(
-  framework: BrainstormResult | null,
-  createId: () => string,
-) {
+function buildCharacters(framework: BrainstormResult | null, createId: () => string) {
   return (framework?.characters || []).map((character) => ({
     id: createId(),
     name: character.name,
@@ -78,8 +70,8 @@ function buildProjectChapters(
   const acceptedByIndex = new Map(
     sortAcceptedChapters(acceptedChapters).map((chapter) => [chapter.chapterIndex, chapter] as const),
   );
-
   const shellByIndex = new Map<number, ChapterShell>();
+
   (framework?.outline || []).forEach((item, index) => {
     shellByIndex.set(index, {
       title: item.title || `Chương ${index + 1}`,
@@ -103,7 +95,6 @@ function buildProjectChapters(
   return Array.from({ length: totalCount }, (_, chapterIndex) => {
     const accepted = acceptedByIndex.get(chapterIndex);
     const shell = shellByIndex.get(chapterIndex);
-
     return {
       id: createId(),
       title: accepted?.title || shell?.title || `Chương ${chapterIndex + 1}`,
@@ -115,6 +106,36 @@ function buildProjectChapters(
       updatedAt: accepted?.updatedAt || nowIso,
     };
   });
+}
+
+function promoteEraRegister(framework: BrainstormResult | null): Project['narrativeEraRegister'] | undefined {
+  if (!framework) return undefined;
+  const proposal = framework.bible.narrativeEraRegister;
+  if (!proposal) {
+    throw new Error('SETUP HOLD: Chưa chọn Văn phong thời đại. Hãy chọn Hiện đại / Cổ phong / Hiện đại + Cổ phong trước khi xác nhận khung truyện.');
+  }
+
+  if (proposal.frame === 'contemporary') {
+    return {
+      frame: 'contemporary',
+      level: 1,
+      narratorLevel: 1,
+      dialogueLevel: 1,
+      thoughtLevel: 1,
+      confirmed: true,
+      source: 'user',
+      notes: proposal.notes,
+    };
+  }
+
+  return {
+    ...proposal,
+    narratorLevel: proposal.narratorLevel ?? proposal.level,
+    dialogueLevel: proposal.dialogueLevel ?? proposal.level,
+    thoughtLevel: proposal.thoughtLevel ?? proposal.level,
+    confirmed: true,
+    source: 'user',
+  };
 }
 
 export function buildCreationProjectSeed({
@@ -133,7 +154,7 @@ export function buildCreationProjectSeed({
     acceptedChapters.length,
     1,
   );
-  const eraProposal = framework?.bible?.narrativeEraRegister;
+  const narrativeEraRegister = promoteEraRegister(framework);
 
   return {
     projectPatch: {
@@ -143,11 +164,7 @@ export function buildCreationProjectSeed({
       genre: framework?.bible?.genre || '',
       subGenre: framework?.bible?.subGenre || [],
       writingStyle: framework?.bible?.writingStyle || '',
-      narrativeEraRegister: eraProposal ? {
-        ...eraProposal,
-        confirmed: true,
-        source: 'setup_ai',
-      } : undefined,
+      narrativeEraRegister,
       endgame: framework?.bible?.endgame || '',
       mainCharacterCount: framework?.bible?.mainCharacterCount || 2,
       supportCharacterCount: framework?.bible?.supportCharacterCount || 3,
