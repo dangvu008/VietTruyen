@@ -28,7 +28,14 @@ export async function uploadProject(project: Project, userId: string): Promise<{
       genre: project.genre,
       sub_genre: project.subGenre,
       writing_style: project.writingStyle,
-      narrative_era_register: project.narrativeEraRegister || null,
+      narrative_era_register: project.narrativeEraRegister
+        ? {
+            frame: project.narrativeEraRegister.frame,
+            confirmed: project.narrativeEraRegister.confirmed,
+            source: project.narrativeEraRegister.source,
+            notes: project.narrativeEraRegister.notes ?? null,
+          }
+        : null,
       tone: project.tone,
       style_id: project.styleId,
       target_chapters: project.targetChapters,
@@ -269,7 +276,7 @@ export async function downloadProjects(): Promise<{ data: Project[]; error: Erro
       genre: row.genre || '',
       subGenre: row.sub_genre || [],
       writingStyle: row.writing_style || '',
-      narrativeEraRegister: (row.narrative_era_register as Project['narrativeEraRegister']) || undefined,
+      narrativeEraRegister: (row.narrative_era_register as unknown as Project['narrativeEraRegister']) || undefined,
       tone: row.tone || '',
       styleId: row.style_id || '',
       targetChapters: row.target_chapters || 60,

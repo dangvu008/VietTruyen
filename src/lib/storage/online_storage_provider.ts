@@ -197,7 +197,7 @@ export class OnlineStorageProvider implements StorageProvider {
       genre: row.genre || '',
       subGenre: row.sub_genre || [],
       writingStyle: row.writing_style || '',
-      narrativeEraRegister: (row.narrative_era_register as Project['narrativeEraRegister']) || undefined,
+      narrativeEraRegister: (row.narrative_era_register as unknown as Project['narrativeEraRegister']) || undefined,
       tone: row.tone || '',
       styleId: row.style_id || '',
       targetChapters: row.target_chapters || 60,
