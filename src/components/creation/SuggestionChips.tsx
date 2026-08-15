@@ -1,13 +1,8 @@
 /**
  * File: SuggestionChips.tsx
- * Purpose: Render clickable suggestion chips with multi-select + confirm button
+ * Purpose: Render clickable suggestion chips with multi/single-select, conditional groups, and confirm button
  * Layer: UI (Shared Component)
- * Domain: CreationChat → [user input, chip selection]
- *
- * Behavior:
- * - Clicking a chip toggles its selected state (multi-select by default)
- * - User must click "Xác nhận & Gửi" to submit selected values
- * - Custom free-text can also be staged and confirmed together
+ * Domain: CreationChat → [user input, structured setup selection]
  */
 import React from 'react';
 import { CheckCircle2, Send } from 'lucide-react';
@@ -17,13 +12,10 @@ interface SuggestionChipsProps {
   groups: SuggestionGroup[];
   aiDecideLabel?: string;
   disabled?: boolean;
-  /** Called with joined selected values when user confirms */
   onConfirmSelect: (value: string) => void;
   onAiDecide?: () => void;
   onSmartSkip?: () => void;
 }
-
-// ─── Styles ─────────────────────────────────────────────────
 
 const S = {
   wrapper: {
@@ -183,7 +175,21 @@ const S = {
   },
 };
 
-// ─── Component ───────────────────────────────────────────────
+function selectedValuesForIds(
+  selectedIds: Set<string>,
+  chipValueMap: Map<string, string>,
+): Set<string> {
+  return new Set(
+    [...selectedIds]
+      .map((id) => chipValueMap.get(id))
+      .filter((value): value is string => Boolean(value)),
+  );
+}
+
+function isGroupVisible(group: SuggestionGroup, selectedValues: Set<string>): boolean {
+  if (!group.visibleWhenSelectedValues?.length) return true;
+  return group.visibleWhenSelectedValues.some((value) => selectedValues.has(value));
+}
 
 export default function SuggestionChips({
   groups,
@@ -193,12 +199,10 @@ export default function SuggestionChips({
   onAiDecide,
   onSmartSkip,
 }: SuggestionChipsProps) {
-  // [Domain:CreationChat] STEP 1 — local multi-select state
   const [selectedIds, setSelectedIds] = React.useState<Set<string>>(new Set());
   const [customIdea, setCustomIdea] = React.useState('');
   const [stagedCustom, setStagedCustom] = React.useState('');
 
-  // Build a quick lookup: chip id → value
   const chipValueMap = React.useMemo(() => {
     const map = new Map<string, string>();
     for (const group of groups) {
@@ -209,37 +213,67 @@ export default function SuggestionChips({
     return map;
   }, [groups]);
 
-  const totalSelected = selectedIds.size + (stagedCustom ? 1 : 0);
-  const canConfirm = totalSelected > 0 && !disabled;
+  const selectedValues = React.useMemo(
+    () => selectedValuesForIds(selectedIds, chipValueMap),
+    [selectedIds, chipValueMap],
+  );
+  const visibleGroups = React.useMemo(
+    () => groups.filter((group) => isGroupVisible(group, selectedValues)),
+    [groups, selectedValues],
+  );
+  const visibleChipIds = React.useMemo(
+    () => new Set(visibleGroups.flatMap((group) => group.chips.map((chip) => chip.id))),
+    [visibleGroups],
+  );
+  const visibleSelectedIds = React.useMemo(
+    () => [...selectedIds].filter((id) => visibleChipIds.has(id)),
+    [selectedIds, visibleChipIds],
+  );
+  const requiredGroupsSatisfied = visibleGroups.every((group) => {
+    if (!group.required) return true;
+    return group.chips.some((chip) => selectedIds.has(chip.id));
+  });
+  const totalSelected = visibleSelectedIds.length + (stagedCustom ? 1 : 0);
+  const canConfirm = totalSelected > 0 && requiredGroupsSatisfied && !disabled;
 
-  // [Domain:CreationChat] STEP 2 — toggle chip selection
-  const toggleChip = (chipId: string) => {
+  const toggleChip = (group: SuggestionGroup, chipId: string) => {
     if (disabled) return;
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(chipId)) next.delete(chipId);
-      else next.add(chipId);
+    setSelectedIds((previous) => {
+      const next = new Set(previous);
+      const wasSelected = next.has(chipId);
+
+      if (group.selectionMode === 'single') {
+        for (const chip of group.chips) next.delete(chip.id);
+        if (!wasSelected) next.add(chipId);
+      } else if (wasSelected) {
+        next.delete(chipId);
+      } else {
+        next.add(chipId);
+      }
+
+      // Drop stale selections from groups that become hidden after changing a parent choice.
+      const nextValues = selectedValuesForIds(next, chipValueMap);
+      for (const candidateGroup of groups) {
+        if (isGroupVisible(candidateGroup, nextValues)) continue;
+        for (const candidateChip of candidateGroup.chips) next.delete(candidateChip.id);
+      }
       return next;
     });
   };
 
-  // [Domain:CreationChat] STEP 3 — stage custom text
-  const handleStageCustom = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
+  const handleStageCustom = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
     const trimmed = customIdea.trim();
     if (!trimmed || disabled) return;
     setStagedCustom(trimmed);
     setCustomIdea('');
   };
 
-  // [Domain:CreationChat] STEP 4 — confirm & send all selected values
   const handleConfirm = () => {
     if (!canConfirm) return;
-    const parts: string[] = [];
-    for (const id of selectedIds) {
-      const val = chipValueMap.get(id);
-      if (val) parts.push(val);
-    }
+    const parts = visibleSelectedIds
+      .map((id) => chipValueMap.get(id))
+      .filter((value): value is string => Boolean(value));
     if (stagedCustom) parts.push(stagedCustom);
     onConfirmSelect(parts.join('; '));
     setSelectedIds(new Set());
@@ -248,12 +282,9 @@ export default function SuggestionChips({
 
   return (
     <div style={{ ...S.wrapper, opacity: disabled ? 0.5 : 1, pointerEvents: disabled ? 'none' : 'auto' }}>
-      {/* Chip groups */}
-      {groups.map((group, gi) => (
-        <div key={gi}>
-          {group.groupLabel && (
-            <div style={S.groupLabel}>{group.groupLabel}</div>
-          )}
+      {visibleGroups.map((group, groupIndex) => (
+        <div key={`${group.groupLabel || 'group'}-${groupIndex}`}>
+          {group.groupLabel && <div style={S.groupLabel}>{group.groupLabel}</div>}
           <div style={S.chipGrid}>
             {group.chips.map((chip) => {
               const isSelected = selectedIds.has(chip.id);
@@ -262,7 +293,7 @@ export default function SuggestionChips({
                   key={chip.id}
                   type="button"
                   style={S.chip(isSelected)}
-                  onClick={() => toggleChip(chip.id)}
+                  onClick={() => toggleChip(group, chip.id)}
                   disabled={disabled}
                   aria-pressed={isSelected}
                   title={chip.value || chip.label}
@@ -277,12 +308,11 @@ export default function SuggestionChips({
         </div>
       ))}
 
-      {/* Custom free-text input */}
       <form style={S.customForm} onSubmit={handleStageCustom}>
         <input
           style={S.customInput}
           value={customIdea}
-          onChange={(e) => setCustomIdea(e.target.value)}
+          onChange={(event) => setCustomIdea(event.target.value)}
           placeholder="Nhập ý riêng của bạn rồi nhấn Thêm…"
           disabled={disabled}
           aria-label="Ý riêng của bạn"
@@ -296,7 +326,6 @@ export default function SuggestionChips({
         </button>
       </form>
 
-      {/* Staged custom idea badge */}
       {stagedCustom && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <div style={S.chip(true)}>
@@ -315,7 +344,6 @@ export default function SuggestionChips({
         </div>
       )}
 
-      {/* Confirm bar */}
       <div style={S.confirmBar}>
         <button
           type="button"
@@ -330,26 +358,24 @@ export default function SuggestionChips({
         </button>
         {totalSelected > 0 && (
           <span style={S.selectedCount}>
-            {totalSelected} lựa chọn
+            {requiredGroupsSatisfied ? `${totalSelected} lựa chọn` : 'Cần chọn đủ mục bắt buộc'}
           </span>
         )}
       </div>
 
-      {/* AI decide button */}
       {aiDecideLabel && onAiDecide && (
         <button
           type="button"
           style={S.aiDecide}
           onClick={onAiDecide}
           disabled={disabled}
-          onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(212,165,116,0.12)'; }}
-          onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(212,165,116,0.05)'; }}
+          onMouseEnter={(event) => { event.currentTarget.style.background = 'rgba(212,165,116,0.12)'; }}
+          onMouseLeave={(event) => { event.currentTarget.style.background = 'rgba(212,165,116,0.05)'; }}
         >
           {aiDecideLabel}
         </button>
       )}
 
-      {/* Smart skip */}
       {onSmartSkip && (
         <>
           <div style={S.divider}>hoặc</div>
@@ -358,8 +384,8 @@ export default function SuggestionChips({
             style={S.smartSkip}
             onClick={onSmartSkip}
             disabled={disabled}
-            onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(99,179,237,0.12)'; }}
-            onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(99,179,237,0.05)'; }}
+            onMouseEnter={(event) => { event.currentTarget.style.background = 'rgba(99,179,237,0.12)'; }}
+            onMouseLeave={(event) => { event.currentTarget.style.background = 'rgba(99,179,237,0.05)'; }}
           >
             🚀 AI tự phát triển và đưa bản review cốt truyện
           </button>
