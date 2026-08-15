@@ -1,4 +1,5 @@
 import type { Project } from '../../types/story';
+import { assertEraRegisterConfigured } from './era_register_setup_gate';
 
 type OutlineGuardrailScope = 'master' | 'volume' | 'chapter';
 
@@ -45,6 +46,10 @@ export function buildOutlineCharacterGuardrails(
   scope: OutlineGuardrailScope,
   rangeLabel?: string,
 ): string {
+  // Setup/F0 invariant: outline generation may suggest an Era Register, but it may not
+  // proceed until the per-story setting has been explicitly confirmed.
+  assertEraRegisterConfigured(project, 'outline');
+
   const scopeLabelMap: Record<OutlineGuardrailScope, string> = {
     master: 'toàn truyện',
     volume: 'quyển/arc này',
@@ -69,6 +74,8 @@ export function buildChapterCharacterGuardrails(
   project: Project,
   targetChapterIndex: number,
 ): string {
+  assertEraRegisterConfigured(project, 'prose');
+
   const currentBeat = project.outline?.[targetChapterIndex];
   const nextBeat = project.outline?.[targetChapterIndex + 1];
 
