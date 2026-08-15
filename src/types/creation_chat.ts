@@ -152,6 +152,7 @@ export type DiscussTopicId =
   | 'conflict'
   | 'protagonist'
   | 'tone_antagonist'
+  | 'era_register'
   | 'chapter_scope'
   | 'ready_check';
 
