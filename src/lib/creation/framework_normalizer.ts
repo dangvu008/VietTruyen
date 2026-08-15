@@ -17,27 +17,25 @@ function normalizeStringList(value: unknown): string[] {
   return value.map(normalizeText).filter(Boolean);
 }
 
-function normalizeRegisterLevel(value: unknown): 1 | 2 | 3 | 4 | 5 | undefined {
-  const numeric = Number(value);
-  return numeric === 1 || numeric === 2 || numeric === 3 || numeric === 4 || numeric === 5
-    ? numeric
-    : undefined;
-}
+const VALID_ERA_FRAMES = new Set([
+  'contemporary',
+  'near_premodern',
+  'period',
+  'future',
+  'timeless_fantasy',
+  'mixed',
+  'custom',
+]);
 
 function normalizeEraRegister(value: unknown): BrainstormResult['bible']['narrativeEraRegister'] | undefined {
   if (!value || typeof value !== 'object') return undefined;
   const input = value as Record<string, unknown>;
-  const frame = input.frame === 'period' || input.frame === 'mixed' || input.frame === 'contemporary'
-    ? input.frame
+  const frame = typeof input.frame === 'string' && VALID_ERA_FRAMES.has(input.frame)
+    ? input.frame as NonNullable<BrainstormResult['bible']['narrativeEraRegister']>['frame']
     : undefined;
-  const level = normalizeRegisterLevel(input.level);
-  if (!frame || !level) return undefined;
+  if (!frame) return undefined;
   return {
     frame,
-    level,
-    narratorLevel: normalizeRegisterLevel(input.narratorLevel),
-    dialogueLevel: normalizeRegisterLevel(input.dialogueLevel),
-    thoughtLevel: normalizeRegisterLevel(input.thoughtLevel),
     notes: normalizeText(input.notes) || undefined,
   };
 }

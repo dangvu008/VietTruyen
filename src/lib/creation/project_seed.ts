@@ -110,31 +110,20 @@ function buildProjectChapters(
 
 function promoteEraRegister(framework: BrainstormResult | null): Project['narrativeEraRegister'] | undefined {
   if (!framework) return undefined;
-  const proposal = framework.bible.narrativeEraRegister;
-  if (!proposal) {
-    throw new Error('SETUP HOLD: Chưa chọn Văn phong thời đại. Hãy chọn Hiện đại / Cổ phong / Hiện đại + Cổ phong trước khi xác nhận khung truyện.');
+  if (!String(framework.bible.writingStyle || '').trim()) {
+    throw new Error('SETUP HOLD: Chưa chọn loại văn phong rộng trước khi xác nhận khung truyện.');
   }
 
-  if (proposal.frame === 'contemporary') {
-    return {
-      frame: 'contemporary',
-      level: 1,
-      narratorLevel: 1,
-      dialogueLevel: 1,
-      thoughtLevel: 1,
-      confirmed: true,
-      source: 'user',
-      notes: proposal.notes,
-    };
+  const proposal = framework.bible.narrativeEraRegister;
+  if (!proposal) {
+    throw new Error('SETUP HOLD: Chưa chọn thời đại / khung kể chuyện. Hãy chọn một khung rộng trước khi xác nhận khung truyện.');
   }
 
   return {
-    ...proposal,
-    narratorLevel: proposal.narratorLevel ?? proposal.level,
-    dialogueLevel: proposal.dialogueLevel ?? proposal.level,
-    thoughtLevel: proposal.thoughtLevel ?? proposal.level,
+    frame: proposal.frame,
     confirmed: true,
     source: 'user',
+    notes: proposal.notes,
   };
 }
 

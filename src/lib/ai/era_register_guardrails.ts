@@ -5,8 +5,8 @@
  * Domain: StorySetup -> [era register, vocabulary guardrails]
  */
 import type {
+  NarrativeEraFrame,
   NarrativeEraRegisterConfig,
-  NarrativeEraRegisterLevel,
   Project,
 } from '../../types/story';
 import { assertEraRegisterConfigured } from './era_register_setup_gate';
@@ -76,10 +76,11 @@ function normalizeText(value: string): string {
 }
 
 function projectRegisterSource(project: Project): string {
+  // Genre is excluded: it may suggest a template, but must not decide prose register.
   return [
-    project.title, project.genre, ...(project.subGenre || []), project.writingStyle, project.tone,
-    project.logline, project.mainPlot, project.worldSetting, project.notes, project.world?.techLevel,
-    project.world?.magicSystem, project.world?.currency, project.world?.rules,
+    project.title, project.writingStyle, project.tone, project.logline, project.mainPlot,
+    project.worldSetting, project.notes, project.world?.techLevel, project.world?.magicSystem,
+    project.world?.currency, project.world?.rules,
   ].filter(Boolean).join(' ');
 }
 
@@ -152,47 +153,35 @@ function formatRegister(register: NarrativeRegister): string {
   return labels[register];
 }
 
-/** Period intensity only. Frame selection is separate. */
-function periodIntensityDescription(level: NarrativeEraRegisterLevel): string {
-  switch (level) {
-    case 1: return 'very light period coloring: mostly plain Vietnamese, with era-appropriate naming, address, objects, and social habits';
-    case 2: return 'light period style: restrained period vocabulary and rhythm, still close to modern readability';
-    case 3: return 'medium/readable period style: clearly old-world in register but fluent, accessible, and not pseudo-classical';
-    case 4: return 'strong period style: denser period diction and syntax while preserving semantic clarity';
-    case 5: return 'very strong/classical-heavy period style: intentionally archaic; use only because this project explicitly chose it';
-  }
+function formatFrame(frame: NarrativeEraFrame): string {
+  const labels: Record<NarrativeEraFrame, string> = {
+    contemporary: 'contemporary / hiện đại',
+    near_premodern: 'near-premodern / cận–tiền hiện đại',
+    period: 'period / cổ đại–cổ phong',
+    future: 'future / tương lai',
+    timeless_fantasy: 'timeless fantasy / giả tưởng phi lịch sử',
+    mixed: 'mixed / pha trộn',
+    custom: 'custom / tự mô tả',
+  };
+  return labels[frame];
 }
 
-function renderExplicitLevels(config: NarrativeEraRegisterConfig): string[] {
-  if (config.frame === 'contemporary') {
-    return [
-      '- Era style: contemporary. Period-intensity scale does not apply to published prose.',
-      config.notes ? `- Project-specific note: ${config.notes}` : '',
-    ].filter(Boolean);
-  }
-
-  const narrator = config.narratorLevel ?? config.level;
-  const dialogue = config.dialogueLevel ?? config.level;
-  const thought = config.thoughtLevel ?? config.level;
-  const label = config.frame === 'mixed' ? 'Period component intensity' : 'Period intensity';
+function renderExplicitDirection(project: Project, config: NarrativeEraRegisterConfig): string[] {
   return [
-    `- ${label}: ${config.level}/5 — ${periodIntensityDescription(config.level)}.`,
-    `- Narrator period intensity: ${narrator}/5.`,
-    `- Dialogue period intensity: ${dialogue}/5.`,
-    `- Thought/internal period intensity: ${thought}/5.`,
+    `- Writing-style direction: ${project.writingStyle}.`,
+    `- Era frame: ${formatFrame(config.frame)}.`,
     config.notes ? `- Project-specific note: ${config.notes}` : '',
+    '- No sentence-rhythm, paragraph-length, description/dialogue ratio, emotional-intensity, or era-intensity quota is active.',
   ].filter(Boolean);
 }
 
-function renderPeriodRules(config: NarrativeEraRegisterConfig): string[] {
+function renderPeriodRules(): string[] {
   return [
-    '- Period voice must arise from social world, naming, objects, institutions, rhythm, and character worldview — not from stuffing Sino-Vietnamese or archaic words into every sentence.',
+    '- Period voice must arise from social world, naming, objects, institutions, and character worldview — not from stuffing Sino-Vietnamese or archaic words into every sentence.',
     '- Do not modernize a native character’s conceptual vocabulary merely to make reasoning explicit.',
     `- Avoid in period scenes unless canon/profession explicitly supports them: ${ANCIENT_FORBIDDEN_EXAMPLES.join(', ')}.`,
     `- Prefer in-world phrasing: ${ANCIENT_REPLACEMENT_EXAMPLES.join('; ')}.`,
-    config.level >= 4
-      ? '- Strong register is allowed, but every sentence must still pass semantic clarity; archaic density is not a quality metric.'
-      : '- Keep prose readable. Do not drift into fake classical prose, ornamental archaism, or dense Hán-Việt merely to sound old.',
+    '- Keep prose readable. Archaic density, sentence length, and Hán-Việt density are not quality metrics.',
   ];
 }
 
@@ -204,30 +193,53 @@ function renderContemporaryRules(): string[] {
   ];
 }
 
+function renderFrameRules(config: NarrativeEraRegisterConfig): string[] {
+  switch (config.frame) {
+    case 'period':
+    case 'near_premodern':
+      return renderPeriodRules();
+    case 'contemporary':
+      return renderContemporaryRules();
+    case 'future':
+      return [
+        '- Future-facing diction and technology must remain grounded in canon and POV knowledge.',
+        '- New terminology needs a clear functional foothold; jargon density is not a quality metric.',
+      ];
+    case 'timeless_fantasy':
+      return [
+        '- Follow the world’s internal material, social, and linguistic logic instead of forcing a real historical register.',
+        '- Invented terms must remain clear and canon-supported.',
+      ];
+    case 'mixed':
+      return [
+        '- Partition registers by POV, world, source, and scene context.',
+        '- Do not enforce a global modern/period ratio or infer sentence style from the mixed label.',
+        ...renderPeriodRules(),
+      ];
+    case 'custom':
+      return [
+        '- Follow only the custom frame described in the confirmed project note.',
+        '- Do not expand a short writer description into extra prose constraints.',
+      ];
+  }
+}
+
 export function buildEraRegisterGuardrailSection(project: Project): string {
   const config = assertEraRegisterConfigured(project, 'prose');
   const region = formatRegion(inferCivilizationalRegion(project));
   const narrativeRegister = formatRegister(inferNarrativeRegister(project));
   const explanationMode = inferExplanationMode(project);
-  const frameRules = config.frame === 'period'
-    ? renderPeriodRules(config)
-    : config.frame === 'contemporary'
-      ? renderContemporaryRules()
-      : [
-        '- Mixed-era project: partition registers by POV/world/source. Native period characters stay in-period; modern diction appears only where canon permits it.',
-        '- The 1-5 value controls how strongly the period component sounds old; it is not the modern/period mixing ratio.',
-        ...renderPeriodRules(config),
-      ];
 
   return [
-    '## ERA, REGION, AND REGISTER LOCK — EXPLICIT PROJECT SETTING',
-    `- Frame: ${config.frame}. This explicit per-story setting overrides inference.`,
+    '## ERA, REGION, AND REGISTER — CONFIRMED PROJECT DIRECTION',
+    `- Frame: ${config.frame}. The writer-confirmed project choice overrides AI inference.`,
     `- Civilizational region hint: ${region}.`,
     `- Social/narrative register hint: ${narrativeRegister}.`,
     `- Explanation mode hint: ${explanationMode}.`,
-    ...renderExplicitLevels(config),
-    ...frameRules,
+    ...renderExplicitDirection(project, config),
+    ...renderFrameRules(config),
     '- Before choosing a term, ask whether this narrator/character in this world and social position could naturally think or say it that way.',
-    '- Era fidelity must not override character truth, scene context, or semantic clarity.',
+    '- Era fidelity must not override character truth, scene context, semantic clarity, or narrative continuity.',
   ].join('\n');
+
 }

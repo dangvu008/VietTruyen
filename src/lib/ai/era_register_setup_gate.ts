@@ -1,7 +1,6 @@
 import type {
   NarrativeEraFrame,
   NarrativeEraRegisterConfig,
-  NarrativeEraRegisterLevel,
   Project,
 } from '../../types/story';
 
@@ -15,19 +14,37 @@ export interface EraRegisterSetupGateResult {
   suggestedConfig: NarrativeEraRegisterConfig;
 }
 
-const VALID_LEVELS = new Set<NarrativeEraRegisterLevel>([1, 2, 3, 4, 5]);
-const VALID_FRAMES = new Set<NarrativeEraFrame>(['contemporary', 'period', 'mixed']);
+const VALID_FRAMES = new Set<NarrativeEraFrame>([
+  'contemporary',
+  'near_premodern',
+  'period',
+  'future',
+  'timeless_fantasy',
+  'mixed',
+  'custom',
+]);
 const PERIOD_HINTS = [
-  'cổ đại', 'cổ phong', 'tiên hiệp', 'tu chân', 'huyền huyễn', 'kiếm hiệp', 'giang hồ',
-  'triều đình', 'vương triều', 'tông môn', 'linh lực', 'chân khí', 'linh thạch', 'medieval',
-  'feudal', 'samurai', 'shogun',
+  'cổ đại', 'cổ phong', 'triều đình', 'vương triều', 'tông môn', 'giang hồ',
+  'medieval', 'feudal', 'samurai', 'shogun',
+];
+const NEAR_PREMODERN_HINTS = [
+  'cận đại', 'tiền hiện đại', 'early modern', 'industrial revolution', 'steampunk',
+  'thuộc địa', 'thế kỷ 18', 'thế kỷ 19', 'đầu thế kỷ 20',
 ];
 const MODERN_HINTS = [
-  'hiện đại', 'đô thị', 'công nghệ', 'khoa học', 'sci-fi', 'cyberpunk', 'livestream',
-  'lập trình', 'dữ liệu', 'ceo', 'tập đoàn', 'app', 'android',
+  'hiện đại', 'đương đại', 'đô thị', 'công nghệ', 'livestream', 'lập trình',
+  'dữ liệu', 'ceo', 'tập đoàn', 'app', 'android',
+];
+const FUTURE_HINTS = [
+  'tương lai', 'sci-fi', 'khoa huyễn', 'cyberpunk', 'space opera', 'liên sao',
+  'du hành vũ trụ', 'trí tuệ nhân tạo',
+];
+const TIMELESS_FANTASY_HINTS = [
+  'giả tưởng phi lịch sử', 'không gắn lịch sử', 'timeless fantasy', 'secondary world',
+  'thế giới hư cấu không thời đại',
 ];
 const MIXED_HINTS = [
-  'xuyên không', 'trọng sinh', 'hệ thống', 'du hành thời gian', 'litrpg', 'game hóa',
+  'pha trộn', 'xuyên không', 'du hành thời gian', 'hai thời đại', 'đa thời đại',
 ];
 
 function normalize(value: string): string {
@@ -39,14 +56,12 @@ function normalize(value: string): string {
 }
 
 function projectHintText(project: Project): string {
+  // Deliberately excludes genre/subGenre: genre may inform a proposal, but must not
+  // decide how the prose sounds or which era frame becomes project truth.
   return normalize([
-    project.genre,
-    ...(project.subGenre || []),
     project.writingStyle,
-    project.tone,
     project.worldSetting,
     project.world?.techLevel,
-    project.world?.magicSystem,
     project.notes,
   ].filter(Boolean).join(' '));
 }
@@ -55,66 +70,58 @@ function hasAny(source: string, hints: string[]): boolean {
   return hints.some((hint) => source.includes(normalize(hint)));
 }
 
-function isValidLevel(value: unknown): value is NarrativeEraRegisterLevel {
-  return VALID_LEVELS.has(value as NarrativeEraRegisterLevel);
-}
-
 function resolveSuggestedFrame(project: Project): NarrativeEraFrame {
   const source = projectHintText(project);
-  const period = hasAny(source, PERIOD_HINTS);
-  const modern = hasAny(source, MODERN_HINTS);
-  const mixed = hasAny(source, MIXED_HINTS);
-
-  if (mixed || (period && modern)) return 'mixed';
-  if (period) return 'period';
-  if (modern) return 'contemporary';
-  return 'contemporary';
-}
-
-function resolveSuggestedLevel(frame: NarrativeEraFrame): NarrativeEraRegisterLevel {
-  if (frame === 'period') return 3;
-  if (frame === 'mixed') return 2;
-  return 1;
+  if (hasAny(source, MIXED_HINTS)) return 'mixed';
+  if (hasAny(source, FUTURE_HINTS)) return 'future';
+  if (hasAny(source, NEAR_PREMODERN_HINTS)) return 'near_premodern';
+  if (hasAny(source, PERIOD_HINTS)) return 'period';
+  if (hasAny(source, MODERN_HINTS)) return 'contemporary';
+  if (hasAny(source, TIMELESS_FANTASY_HINTS)) return 'timeless_fantasy';
+  return 'custom';
 }
 
 export function suggestEraRegisterConfig(project: Project): NarrativeEraRegisterConfig {
-  const frame = resolveSuggestedFrame(project);
-  const level = resolveSuggestedLevel(frame);
   return {
-    frame,
-    level,
-    narratorLevel: level,
-    dialogueLevel: level,
-    thoughtLevel: level,
+    frame: resolveSuggestedFrame(project),
     confirmed: false,
     source: 'setup_ai',
-    notes: 'AI suggestion only. Must be explicitly confirmed or edited before outline/prose generation.',
+    notes: 'AI suggestion only. The writer must review or replace this broad frame before generation.',
   };
 }
 
-function validateExplicitConfig(config: NarrativeEraRegisterConfig | undefined): string[] {
+function validateExplicitConfig(project: Project): string[] {
+  const config = project.narrativeEraRegister;
   if (!config) {
     return ['Narrative Era Register is required before outline or prose generation.'];
   }
 
   const blockers: string[] = [];
   if (!VALID_FRAMES.has(config.frame)) blockers.push('Narrative Era Register frame is invalid.');
-  if (!isValidLevel(config.level)) blockers.push('Narrative Era Register level must be 1-5.');
-  if (config.narratorLevel !== undefined && !isValidLevel(config.narratorLevel)) blockers.push('Narrator register level must be 1-5.');
-  if (config.dialogueLevel !== undefined && !isValidLevel(config.dialogueLevel)) blockers.push('Dialogue register level must be 1-5.');
-  if (config.thoughtLevel !== undefined && !isValidLevel(config.thoughtLevel)) blockers.push('Thought register level must be 1-5.');
+  if (!String(project.writingStyle || '').trim()) blockers.push('A broad writing-style choice is required before generation.');
   if (!config.confirmed) blockers.push('Narrative Era Register suggestion must be explicitly confirmed before generation.');
+  if (config.frame === 'custom' && !String(config.notes || '').trim()) {
+    blockers.push('Custom era frame requires a short writer description.');
+  }
+
+  const legacy = config as NarrativeEraRegisterConfig & Record<string, unknown>;
+  if (['level', 'narratorLevel', 'dialogueLevel', 'thoughtLevel'].some((key) => key in legacy)) {
+    blockers.push('Legacy era-intensity fields must be removed and the broad frame reconfirmed.');
+  }
   return blockers;
 }
 
 export function evaluateEraRegisterSetup(project: Project): EraRegisterSetupGateResult {
-  const blockers = validateExplicitConfig(project.narrativeEraRegister);
+  const blockers = validateExplicitConfig(project);
   const warnings: string[] = [];
   const suggested = suggestEraRegisterConfig(project);
   const explicit = project.narrativeEraRegister;
 
-  if (explicit?.confirmed && explicit.frame !== suggested.frame) {
-    warnings.push(`Explicit ${explicit.frame} register differs from inferred ${suggested.frame} setting. Explicit project choice wins.`);
+  if (explicit?.confirmed && suggested.frame !== 'custom' && explicit.frame !== suggested.frame) {
+    warnings.push(`Explicit ${explicit.frame} frame differs from the AI proposal ${suggested.frame}. Explicit project choice wins.`);
+  }
+  if (explicit?.frame === 'mixed' && !String(explicit.notes || '').trim()) {
+    warnings.push('Mixed era frame should include a short note explaining which parts belong to which era.');
   }
 
   return {

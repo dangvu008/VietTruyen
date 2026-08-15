@@ -8,9 +8,7 @@ import {
   inferNarrativeRegister,
 } from './era_register_guardrails';
 
-type ProjectOverride = Omit<Partial<Project>, 'world'> & {
-  world?: Partial<Project['world']>;
-};
+type ProjectOverride = Omit<Partial<Project>, 'world'> & { world?: Partial<Project['world']> };
 
 function makeProject(overrides: ProjectOverride = {}): Project {
   const base: Project = {
@@ -20,18 +18,14 @@ function makeProject(overrides: ProjectOverride = {}): Project {
     logline: 'Một thiếu niên bước vào giang hồ giữa lúc triều đình rối loạn.',
     genre: 'Tiên hiệp',
     subGenre: [],
-    writingStyle: 'Cổ phong, trang trọng',
+    writingStyle: 'Cổ điển – trầm',
     tone: 'Trầm, căng',
     styleId: 'tien-hiep',
     narrativeEraRegister: {
       frame: 'period',
-      level: 3,
-      narratorLevel: 3,
-      dialogueLevel: 3,
-      thoughtLevel: 2,
       confirmed: true,
       source: 'user',
-      notes: 'Cổ phong trung độ, dễ đọc.',
+      notes: 'Cổ đại–cổ phong trong thế giới giả tưởng.',
     },
     targetChapters: 30,
     endgame: '',
@@ -61,40 +55,28 @@ function makeProject(overrides: ProjectOverride = {}): Project {
     createdAt: '2026-01-01',
     updatedAt: '2026-01-01',
   };
-
-  return {
-    ...base,
-    ...overrides,
-    subGenre: overrides.subGenre ?? base.subGenre,
-    world: {
-      ...base.world,
-      ...overrides.world,
-    },
-  };
+  return { ...base, ...overrides, subGenre: overrides.subGenre ?? base.subGenre, world: { ...base.world, ...overrides.world } };
 }
 
 describe('era_register_guardrails', () => {
-  it('locks a period project to explicit medium period intensity', () => {
+  it('renders a broad period direction without intensity quotas', () => {
     const project = makeProject();
-
     expect(inferEraRegister(project)).toBe('ancient');
     expect(inferCivilizationalRegion(project)).toBe('china');
     expect(inferNarrativeRegister(project)).toBe('mixed');
     expect(inferExplanationMode(project)).toBe('in_era');
 
     const section = buildEraRegisterGuardrailSection(project);
-    expect(section).toContain('EXPLICIT PROJECT SETTING');
+    expect(section).toContain('CONFIRMED PROJECT DIRECTION');
     expect(section).toContain('Frame: period');
-    expect(section).toContain('Period intensity: 3/5');
-    expect(section).toContain('Narrator period intensity: 3/5');
-    expect(section).toContain('Dialogue period intensity: 3/5');
-    expect(section).toContain('Thought/internal period intensity: 2/5');
+    expect(section).toContain('Writing-style direction: Cổ điển – trầm');
     expect(section).toContain('Chinese / Sinosphere');
     expect(section).toContain('"va chạm vật lý"');
-    expect(section).toContain('fake classical prose');
+    expect(section).not.toContain('/5');
+    expect(section).toContain('not quality metrics');
   });
 
-  it('uses the level as period-component intensity in mixed stories', () => {
+  it('partitions mixed frames by POV and scene without a ratio', () => {
     const project = makeProject({
       genre: 'Hệ thống',
       subGenre: ['Xuyên không', 'Cổ đại'],
@@ -102,39 +84,27 @@ describe('era_register_guardrails', () => {
       notes: 'Không hiện đại hóa lời kể của nhân vật bản địa.',
       narrativeEraRegister: {
         frame: 'mixed',
-        level: 2,
-        narratorLevel: 2,
-        dialogueLevel: 3,
-        thoughtLevel: 2,
         confirmed: true,
         source: 'user',
+        notes: 'Nhân vật hiện đại đi vào một xã hội cổ đại.',
       },
     });
-
     expect(inferEraRegister(project)).toBe('mixed');
     const section = buildEraRegisterGuardrailSection(project);
     expect(section).toContain('Frame: mixed');
-    expect(section).toContain('Period component intensity: 2/5');
-    expect(section).toContain('not the modern/period mixing ratio');
+    expect(section).toContain('Partition registers by POV');
+    expect(section).not.toContain('/5');
   });
 
-  it('recognizes medieval Europe while respecting a strong period intensity', () => {
+  it('recognizes medieval Europe without measuring archaic density', () => {
     const project = makeProject({
       title: 'The Ashen Banner',
       genre: 'Historical fantasy',
-      writingStyle: 'Medieval Europe, knight campaign, battlefield realism',
+      writingStyle: 'Cổ điển – trầm',
       tone: 'Bleak and martial',
       logline: 'A knight serves a fractured kingdom while the Church hunts forbidden relics.',
       worldSetting: 'Castles, abbeys, feudal lords, levy troops, and siege warfare.',
-      narrativeEraRegister: {
-        frame: 'period',
-        level: 4,
-        narratorLevel: 4,
-        dialogueLevel: 4,
-        thoughtLevel: 3,
-        confirmed: true,
-        source: 'user',
-      },
+      narrativeEraRegister: { frame: 'near_premodern', confirmed: true, source: 'user' },
       world: {
         geography: 'Western Europe',
         techLevel: 'Late medieval',
@@ -142,33 +112,23 @@ describe('era_register_guardrails', () => {
         rules: 'Feudal oaths, war levy, and church law',
       },
     });
-
     expect(inferCivilizationalRegion(project)).toBe('europe');
     expect(inferNarrativeRegister(project)).toBe('military');
-
     const section = buildEraRegisterGuardrailSection(project);
     expect(section).toContain('European');
     expect(section).toContain('military / campaign');
-    expect(section).toContain('Period intensity: 4/5');
+    expect(section).toContain('near_premodern');
+    expect(section).not.toContain('/5');
   });
 
-  it('does not expose a meaningless period scale for contemporary stories', () => {
-    const project = makeProject({
+  it('supports contemporary and future frames without period diction', () => {
+    const contemporary = makeProject({
       title: 'Sài Gòn Sau Cơn Mưa',
       genre: 'Đô thị',
-      writingStyle: 'Hiện đại, plain language, giải thích hiện đại khi cần',
+      writingStyle: 'Giản dị – mạch lạc',
       tone: 'Đời thường',
-      logline: 'Một kỹ sư dữ liệu ở Việt Nam tìm lại gia đình sau một biến cố nghề nghiệp.',
       worldSetting: 'Việt Nam đương đại, thành phố lớn, công nghệ và công sở.',
-      narrativeEraRegister: {
-        frame: 'contemporary',
-        level: 1,
-        narratorLevel: 1,
-        dialogueLevel: 1,
-        thoughtLevel: 1,
-        confirmed: true,
-        source: 'user',
-      },
+      narrativeEraRegister: { frame: 'contemporary', confirmed: true, source: 'user' },
       world: {
         geography: 'TP.HCM, Việt Nam',
         techLevel: 'Hiện đại',
@@ -177,43 +137,18 @@ describe('era_register_guardrails', () => {
         rules: 'Đời sống đô thị và áp lực công việc',
       },
     });
-
-    expect(inferEraRegister(project)).toBe('modern');
-    expect(inferCivilizationalRegion(project)).toBe('vietnam');
-    expect(inferExplanationMode(project)).toBe('modern_explanation');
-
-    const section = buildEraRegisterGuardrailSection(project);
+    expect(inferEraRegister(contemporary)).toBe('modern');
+    expect(inferCivilizationalRegion(contemporary)).toBe('vietnam');
+    const section = buildEraRegisterGuardrailSection(contemporary);
     expect(section).toContain('Frame: contemporary');
-    expect(section).toContain('Vietnamese sphere');
-    expect(section).toContain('Period-intensity scale does not apply');
-    expect(section).not.toContain('Period intensity: 1/5');
-  });
+    expect(section).not.toContain('/5');
 
-  it('falls back to East Asia inference while explicit setting still controls prose', () => {
-    const project = makeProject({
-      title: 'Neon Meridian',
-      genre: 'Sci-fi',
-      writingStyle: 'Future East Asia, corporate thriller',
-      tone: 'Cold, fast',
-      logline: 'A courier runs through a megacity bloc in future East Asia.',
-      worldSetting: 'A cross-border East Asian megacity with AI logistics and regional trade blocs.',
-      narrativeEraRegister: {
-        frame: 'contemporary',
-        level: 1,
-        confirmed: true,
-        source: 'user',
-      },
-      world: {
-        geography: 'East Asia megalopolis',
-        techLevel: 'Future',
-        magicSystem: '',
-        currency: 'Digital credits',
-        rules: 'Corporate contracts and predictive surveillance',
-      },
+    const future = makeProject({
+      writingStyle: 'Nhanh – sắc',
+      worldSetting: 'Một thành phố tương lai với AI logistics.',
+      narrativeEraRegister: { frame: 'future', confirmed: true, source: 'user' },
+      world: { techLevel: 'Future' },
     });
-
-    expect(inferEraRegister(project)).toBe('modern');
-    expect(inferCivilizationalRegion(project)).toBe('east_asia');
-    expect(buildEraRegisterGuardrailSection(project)).toContain('East Asian');
+    expect(buildEraRegisterGuardrailSection(future)).toContain('Future-facing diction');
   });
 });

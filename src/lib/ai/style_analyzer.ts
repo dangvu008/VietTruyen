@@ -97,11 +97,17 @@ function buildAnalyzerPrompt(
   }
   const eraRegisterGuardrail = buildEraRegisterGuardrailSection(project);
   const explicitFrame = project.narrativeEraRegister?.frame;
-  const explicitAuditRule = explicitFrame === 'period'
-    ? '- Đây là project CỔ PHONG: soi đặc biệt từ/cách nghĩ hiện đại lọt vào chính văn, nhưng không ép văn ngôn hoặc Hán-Việt nặng hơn mức đã chọn.'
+  const explicitAuditRule = explicitFrame === 'period' || explicitFrame === 'near_premodern'
+    ? '- Đây là project có khung tiền hiện đại/cổ đại: soi anachronism và cách nghĩ lệch POV, nhưng không ép văn ngôn, Hán-Việt, nhịp câu hoặc độ dài đoạn.'
     : explicitFrame === 'mixed'
-      ? '- Đây là project HIỆN ĐẠI + CỔ PHONG: chỉ báo lỗi khi register xuất hiện sai POV/không gian/nhân vật; không cấm từ hiện đại toàn cục.'
-      : '- Đây là project HIỆN ĐẠI: không báo lỗi chỉ vì từ ngữ hiện đại; ngược lại hãy soi cổ phong giả tạo nếu canon không cần.';
+      ? '- Đây là project PHA TRỘN: chỉ báo lỗi khi register xuất hiện sai POV/không gian/nhân vật; không cấm từ hiện đại hay cổ phong toàn cục.'
+      : explicitFrame === 'future'
+        ? '- Đây là project TƯƠNG LAI: thuật ngữ mới phải có foothold rõ và hợp knowledge boundary; không biến jargon thành thước đo chất lượng.'
+        : explicitFrame === 'timeless_fantasy'
+          ? '- Đây là GIẢ TƯỞNG PHI LỊCH SỬ: giữ nhất quán nội tại, không ép thế giới khớp một thời đại lịch sử có sẵn.'
+          : explicitFrame === 'custom'
+            ? '- Đây là CUSTOM FRAME: audit theo notes đã được người viết xác nhận; không tự phát minh thêm luật giọng văn.'
+            : '- Đây là project HIỆN ĐẠI: không báo lỗi chỉ vì từ ngữ hiện đại; chỉ flag cổ phong giả tạo khi canon/POV không cần.';
 
   return `Phân tích văn phong đoạn truyện sau:
 

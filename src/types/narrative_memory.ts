@@ -364,11 +364,14 @@ export interface BrainstormResult {
      * until the writer confirms the framework; project_seed then promotes it to a confirmed per-story setting.
      */
     narrativeEraRegister?: {
-      frame: 'contemporary' | 'period' | 'mixed';
-      level: 1 | 2 | 3 | 4 | 5;
-      narratorLevel?: 1 | 2 | 3 | 4 | 5;
-      dialogueLevel?: 1 | 2 | 3 | 4 | 5;
-      thoughtLevel?: 1 | 2 | 3 | 4 | 5;
+      frame:
+        | 'contemporary'
+        | 'near_premodern'
+        | 'period'
+        | 'future'
+        | 'timeless_fantasy'
+        | 'mixed'
+        | 'custom';
       notes?: string;
     };
     title: string;

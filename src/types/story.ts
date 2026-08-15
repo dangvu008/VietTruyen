@@ -199,20 +199,24 @@ export type ProjectStatus = 'draft' | 'ongoing' | 'paused' | 'completed';
  *
  * Inference may suggest values, but only confirmed=true is authoritative.
  */
-export type NarrativeEraFrame = 'contemporary' | 'period' | 'mixed';
-export type NarrativeEraRegisterLevel = 1 | 2 | 3 | 4 | 5;
+export type NarrativeEraFrame =
+  | 'contemporary'
+  | 'near_premodern'
+  | 'period'
+  | 'future'
+  | 'timeless_fantasy'
+  | 'mixed'
+  | 'custom';
 export type NarrativeEraRegisterSource = 'user' | 'setup_ai' | 'template' | 'migration_confirmed';
 
 export interface NarrativeEraRegisterConfig {
+  /** Broad storytelling-era frame. Never infer this as project truth from genre. */
   frame: NarrativeEraFrame;
-  level: NarrativeEraRegisterLevel;
-  narratorLevel?: NarrativeEraRegisterLevel;
-  dialogueLevel?: NarrativeEraRegisterLevel;
-  thoughtLevel?: NarrativeEraRegisterLevel;
+  /** Required for mixed/custom frames and available for any project-specific clarification. */
+  notes?: string;
   /** Only confirmed configs may pass setup/F0/writing gates. */
   confirmed: boolean;
   source: NarrativeEraRegisterSource;
-  notes?: string;
 }
 
 export interface Project {

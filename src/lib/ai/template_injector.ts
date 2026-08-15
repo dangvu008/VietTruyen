@@ -16,7 +16,7 @@ import {
   buildTemplatePromptSlice,
   serializeTemplateForPrompt,
 } from '../../data/story_templates/template_registry';
-import type { StoryTemplate, TemplateDialogueRule, TemplateLanguageRegister } from '../../types/story_template';
+import type { StoryTemplate, TemplateLanguageRegister } from '../../types/story_template';
 import { useTemplateStore } from '../../store/use_template_store';
 
 type LanguageRegisterProfile = TemplateLanguageRegister;
@@ -238,17 +238,6 @@ function inferLanguageRegisterProfile(
   };
 }
 
-function formatDialogueRule(rule: TemplateDialogueRule): string {
-  const fragments = [`- ${rule.context}: ${rule.preferredPairs.join(', ')}`];
-  if (rule.forbiddenPairs && rule.forbiddenPairs.length > 0) {
-    fragments.push(`tránh ${rule.forbiddenPairs.join(', ')}`);
-  }
-  if (rule.note) {
-    fragments.push(rule.note);
-  }
-  return fragments.join(' | ');
-}
-
 // ─── Framework Prompt Injection ─────────────────────────────
 
 /**
@@ -275,17 +264,10 @@ Hãy BÁM SÁT khung này để tạo bible, outline và chapter skeleton.
 ═══════════════════════════════════════════════════════════
 ${serialized}
 
-🗣️ REGISTER NGÔN NGỮ
-- Bối cảnh ưu tiên: ${register.eraLabel}
-- Lời kể: ${register.narrationStyle}
-- Từ vựng ưu tiên: ${register.preferredTerms.join(', ')}
-- Từ/cụm nên tránh: ${register.avoidTerms.join(', ')}
-- Xưng hô ưu tiên: ${register.preferredPronouns.join(', ')}
-- Xưng hô cấm/hạn chế: ${register.forbiddenPronouns.join(', ')}
-- Mẫu xưng hô theo cảnh:
-${register.dialogueRules.map(formatDialogueRule).join('\n')}
-- Hán Việt: ${register.hanVietGuidance}
-- Lưu ý: ${register.dictionGuidance}
+🗣️ GỢI Ý REGISTER TỪ TEMPLATE (KHÔNG AUTHORITATIVE)
+- Tham khảo bối cảnh thường gặp: ${register.eraLabel}
+- Đây chỉ là proposal theo thể loại. Không dùng để ghi đè WRITING_STYLE hoặc ERA_FRAME đã được người viết xác nhận.
+- Không suy ra thông số câu/đoạn, cường độ định lượng, mật độ Hán Việt hay xưng hô bắt buộc từ template.
 ═══════════════════════════════════════════════════════════`;
 }
 
@@ -313,16 +295,8 @@ export function injectTemplateToWriterPrompt(
   // [Domain:StoryTemplate] STEP 1 — Core genre guidance
   parts.push(`[GENRE TEMPLATE: ${template.name}]`);
   parts.push(`USP: ${template.coreSellingPoint}`);
-  parts.push(`[ERA / REGISTER: ${register.eraLabel}]`);
-  parts.push(`Lời kể: ${register.narrationStyle}`);
-  parts.push(`Từ vựng ưu tiên: ${register.preferredTerms.join(', ')}`);
-  parts.push(`Tránh từ lạc bối cảnh: ${register.avoidTerms.join(', ')}`);
-  parts.push(`Xưng hô ưu tiên: ${register.preferredPronouns.join(', ')}`);
-  parts.push(`Xưng hô cấm/hạn chế: ${register.forbiddenPronouns.join(', ')}`);
-  parts.push('Mẫu xưng hô theo cảnh:');
-  parts.push(...register.dialogueRules.map(formatDialogueRule));
-  parts.push(`Hán Việt: ${register.hanVietGuidance}`);
-  parts.push(`Register note: ${register.dictionGuidance}`);
+  parts.push(`[TEMPLATE REGISTER PROPOSAL: ${register.eraLabel}]`);
+  parts.push('Chỉ dùng proposal này khi tương thích với Story Setup đã xác nhận; không tự biến nó thành luật giọng văn, xưng hô hoặc cường độ.');
 
   // [Domain:StoryTemplate] STEP 2 — Arc-specific guidance (nếu biết chapterIndex)
   if (chapterIndex !== undefined) {

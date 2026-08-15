@@ -13,7 +13,7 @@ function makeProject(overrides: Partial<Project> = {}): Project {
     logline: 'Một thiếu niên bước vào giang hồ.',
     genre: 'Tiên hiệp',
     subGenre: [],
-    writingStyle: 'Cổ phong',
+    writingStyle: 'Cổ điển – trầm',
     tone: 'Trầm',
     styleId: 'tien-hiep',
     targetChapters: 100,
@@ -48,60 +48,72 @@ function makeProject(overrides: Partial<Project> = {}): Project {
 }
 
 describe('era_register_setup_gate', () => {
-  it('HOLDs a project with no explicit Narrative Era Register', () => {
+  it('HOLDs a project with no explicit broad era frame', () => {
     const result = evaluateEraRegisterSetup(makeProject());
-
     expect(result.verdict).toBe('HOLD');
     expect(result.blockers.join(' ')).toContain('Narrative Era Register');
     expect(result.suggestedConfig.confirmed).toBe(false);
-    expect(result.suggestedConfig.level).toBe(3);
+    expect(result.suggestedConfig.frame).toBe('period');
+    expect(result.suggestedConfig).not.toHaveProperty('level');
   });
 
   it('does not accept an inferred/unconfirmed value as project truth', () => {
     const suggestion = suggestEraRegisterConfig(makeProject());
     const project = makeProject({ narrativeEraRegister: suggestion });
-
     expect(evaluateEraRegisterSetup(project).verdict).toBe('HOLD');
     expect(() => assertEraRegisterConfigured(project, 'outline')).toThrow(/confirm/i);
   });
 
-  it('PASSes only after a valid explicit register is confirmed', () => {
+  it('PASSes after a broad writing style and era frame are confirmed', () => {
     const project = makeProject({
       narrativeEraRegister: {
         frame: 'period',
-        level: 3,
-        narratorLevel: 3,
-        dialogueLevel: 3,
-        thoughtLevel: 2,
         confirmed: true,
         source: 'user',
-        notes: 'Cổ phong trung độ, dễ đọc.',
+        notes: 'Cổ đại–cổ phong trong thế giới giả tưởng.',
       },
     });
-
     expect(evaluateEraRegisterSetup(project)).toMatchObject({ verdict: 'PASS', blockers: [] });
     expect(() => assertEraRegisterConfigured(project, 'prose')).not.toThrow();
   });
 
-  it('supports modern and mixed stories without forcing period diction', () => {
-    const modern = makeProject({
-      genre: 'Đô thị',
-      writingStyle: 'Hiện đại',
-      worldSetting: 'Việt Nam đương đại, công nghệ và công sở.',
+  it('supports future frames without intensity levels', () => {
+    const future = makeProject({
+      writingStyle: 'Nhanh – sắc',
+      worldSetting: 'Một thành phố liên sao trong tương lai.',
       world: {
-        geography: 'TP.HCM',
+        geography: 'Quỹ đạo Sao Hỏa',
         magicSystem: '',
-        techLevel: 'Hiện đại',
-        currency: 'VND',
+        techLevel: 'Tương lai',
+        currency: 'Credits',
         factions: [],
         rules: '',
         facts: [],
       },
     });
+    const suggestion = suggestEraRegisterConfig(future);
+    expect(suggestion.frame).toBe('future');
+    expect(suggestion).not.toHaveProperty('level');
+  });
 
-    const suggestion = suggestEraRegisterConfig(modern);
-    expect(suggestion.frame).toBe('contemporary');
-    expect(suggestion.level).toBe(1);
-    expect(suggestion.confirmed).toBe(false);
+  it('HOLDs legacy 1-5 configs until the writer reconfirms a broad frame', () => {
+    const project = makeProject({
+      narrativeEraRegister: {
+        frame: 'period',
+        confirmed: true,
+        source: 'migration_confirmed',
+        level: 5,
+      } as unknown as Project['narrativeEraRegister'],
+    });
+    const result = evaluateEraRegisterSetup(project);
+    expect(result.verdict).toBe('HOLD');
+    expect(result.blockers.join(' ')).toContain('Legacy era-intensity fields');
+  });
+
+  it('requires a short description for custom frames', () => {
+    const project = makeProject({
+      narrativeEraRegister: { frame: 'custom', confirmed: true, source: 'user' },
+    });
+    expect(evaluateEraRegisterSetup(project).verdict).toBe('HOLD');
   });
 });

@@ -140,6 +140,7 @@ export interface CreationCostPreviewData {
 export type DiscussTopicId =
   | 'magic_system'
   | 'story_engine'
+  | 'genre_stack'
   | 'conflict'
   | 'protagonist'
   | 'tone_antagonist'

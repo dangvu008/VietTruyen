@@ -83,7 +83,8 @@ const FRAMEWORK_SYSTEM = buildJsonObjectSystem(
     'Stay concise but complete.',
     'Invent missing details only when needed for consistency.',
     'Prioritize internal coherence over novelty.',
-    'Treat an explicit ERA_FRAME / ERA_LEVEL answer as a writer choice, not an AI suggestion.',
+    'Treat explicit PRIMARY_GENRE, WRITING_STYLE, and ERA_FRAME answers as writer choices, not AI suggestions.',
+    'Never invent sentence rhythm, paragraph length, description/dialogue ratios, darkness scales, or era-intensity levels as framework fields.',
   ],
 );
 
@@ -96,17 +97,18 @@ export function buildDiscussResponsePrompt(
   const contextParts: string[] = [];
   if (previousAnswers.magic_system) contextParts.push(`Hệ tu luyện: ${previousAnswers.magic_system}`);
   if (previousAnswers.story_engine) contextParts.push(`Động cơ câu chuyện: ${previousAnswers.story_engine}`);
+  if (previousAnswers.genre_stack) contextParts.push(`Genre Stack: ${previousAnswers.genre_stack}`);
   if (previousAnswers.conflict) contextParts.push(`Xung đột: ${previousAnswers.conflict}`);
   if (previousAnswers.protagonist) contextParts.push(`Nhân vật chính: ${previousAnswers.protagonist}`);
-  if (previousAnswers.tone_antagonist) contextParts.push(`Giọng & phản diện: ${previousAnswers.tone_antagonist}`);
-  if (previousAnswers.era_register) contextParts.push(`Văn phong thời đại: ${previousAnswers.era_register}`);
+  if (previousAnswers.tone_antagonist) contextParts.push(`Loại văn phong & mối đe dọa: ${previousAnswers.tone_antagonist}`);
+  if (previousAnswers.era_register) contextParts.push(`Thời đại / khung kể chuyện: ${previousAnswers.era_register}`);
 
   const previousContext = contextParts.length > 0
     ? `\n\nĐã biết:\n${contextParts.join('\n')}`
     : '';
 
   const eraInstruction = topicId === 'era_register'
-    ? '\n\nĐây là cấu hình văn phong thời đại. ERA_FRAME=contemporary nghĩa là văn phong hiện đại. ERA_FRAME=period là cổ phong. ERA_FRAME=mixed là hiện đại kết hợp cổ phong. Nếu có ERA_LEVEL=N thì N là độ đậm cổ phong 1-5; không được hiểu nó là cấp tu luyện hay mức chất lượng.'
+    ? '\n\nĐây là lựa chọn thời đại / khung kể chuyện ở mức rộng. Không tạo thang cổ phong, nhịp câu, độ dài đoạn hoặc tỷ lệ văn phong từ lựa chọn này.'
     : '';
 
   return {
@@ -133,17 +135,16 @@ export function buildAiDecidePrompt(
 
 Đã biết: ${JSON.stringify(previousAnswers)}
 
-Hãy ĐỀ XUẤT văn phong thời đại phù hợp cho truyện này.
-- Chọn đúng một frame: ERA_FRAME=contemporary | ERA_FRAME=period | ERA_FRAME=mixed.
-- Nếu chọn period hoặc mixed, chọn thêm đúng một độ cổ phong: ERA_LEVEL=1..5.
-- Nếu chọn contemporary, không cần ERA_LEVEL; framework sẽ lưu level=1 cho compatibility.
-- 1/5 = rất nhẹ; 2/5 = nhẹ; 3/5 = trung độ dễ đọc; 4/5 = đậm; 5/5 = rất đậm/cổ văn.
-- Không mặc định tiên hiệp=3/5. Dựa trên đúng ý tưởng và giọng truyện.
+Hãy ĐỀ XUẤT đúng một thời đại / khung kể chuyện rộng:
+ERA_FRAME=contemporary | near_premodern | period | future | timeless_fantasy | mixed | custom.
+- Không suy frame chỉ từ genre.
+- Không tạo ERA_LEVEL hoặc bất kỳ thang cường độ nào.
+- Với mixed/custom, thêm một mô tả ngắn để người viết review.
 
 Kết thúc câu trả lời bằng một dòng máy đọc được, ví dụ:
-ERA_FRAME=period; ERA_LEVEL=3
+ERA_FRAME=period
 hoặc
-ERA_FRAME=contemporary`,
+ERA_FRAME=custom; ERA_NOTES=thế giới hư cấu có hai tầng thời đại`,
     };
   }
 
@@ -229,21 +230,38 @@ Hãy cập nhật lại JSON theo đúng format cũ. Chỉ thay những phần c
   };
 }
 
-function eraRegisterFrameworkInstruction(answers: Record<string, string>): string {
-  if (answers.era_register) {
-    return `ERA REGISTER — LỰA CHỌN CỦA NGƯỜI VIẾT:
-${answers.era_register}
-- Nếu có ERA_FRAME=contemporary: bible.narrativeEraRegister.frame="contemporary" và level=1.
-- Nếu có ERA_FRAME=period hoặc mixed: copy đúng frame và ERA_LEVEL đã chọn; nếu thiếu ERA_LEVEL thì không được tự đoán, hãy dùng level 3 chỉ như proposal và ghi rõ trong notes rằng cần người dùng review.
-- narratorLevel/dialogueLevel/thoughtLevel mặc định bằng level, chỉ tách khác khi thông tin đã thu thập cho lý do rõ ràng.
-- writingStyle phải phản ánh lựa chọn này bằng ngôn ngữ dễ đọc.`;
-  }
+function storySetupFrameworkInstruction(answers: Record<string, string>): string {
+  const genreInstruction = answers.genre_stack
+    ? `GENRE STACK — LỰA CHỌN CỦA NGƯỜI VIẾT:
+${answers.genre_stack}
+- Copy đúng một PRIMARY_GENRE vào bible.genre.
+- SECONDARY_GENRE chỉ vào bible.subGenre khi đã được chọn; không tự kích hoạt genre phụ chỉ vì có motif tương tự.
+- Genre chính giữ lời hứa cốt lõi; genre phụ chỉ bổ sung trong phạm vi đã xác nhận.`
+    : `GENRE STACK — CHƯA CÓ LỰA CHỌN TRỰC TIẾP:
+- Đề xuất đúng một primary genre và chỉ các secondary genres thật sự cần.
+- Đây là proposal để người viết review; không tự coi là Canon.`;
 
-  return `ERA REGISTER — SMART SKIP / CHƯA CÓ LỰA CHỌN TRỰC TIẾP:
-- Bạn phải đề xuất bible.narrativeEraRegister để người viết nhìn thấy trong framework trước khi xác nhận.
-- Chọn frame contemporary | period | mixed theo dự án.
-- Nếu period/mixed, đề xuất độ cổ phong 1-5. Nếu contemporary, dùng level=1.
+  const styleInstruction = answers.tone_antagonist
+    ? `LOẠI VĂN PHONG — LỰA CHỌN CỦA NGƯỜI VIẾT:
+${answers.tone_antagonist}
+- bible.writingStyle chỉ ghi hướng rộng tương ứng WRITING_STYLE.
+- Không chuyển lựa chọn thành nhịp câu, độ dài đoạn, tỷ lệ miêu tả–đối thoại–nội tâm, mức đen tối hoặc cường độ cảm xúc cố định.`
+    : `LOẠI VĂN PHONG — SMART SKIP:
+- Đề xuất một hướng rộng: giản dị–mạch lạc / cổ điển–trầm / giàu hình ảnh / nhanh–sắc / hài hước–đời thường / tự mô tả.
+- Không tạo thông số kỹ thuật cho câu, đoạn hoặc tỷ lệ nội dung.`;
+
+  const eraInstruction = answers.era_register
+    ? `ERA FRAME — LỰA CHỌN CỦA NGƯỜI VIẾT:
+${answers.era_register}
+- Copy đúng ERA_FRAME vào bible.narrativeEraRegister.frame.
+- Không output level/narratorLevel/dialogueLevel/thoughtLevel.
+- Với mixed/custom, dùng notes để giữ mô tả ngắn đã được người viết đưa ra; không tự thêm luật giọng văn.`
+    : `ERA FRAME — SMART SKIP / CHƯA CÓ LỰA CHỌN TRỰC TIẾP:
+- Đề xuất đúng một frame: contemporary | near_premodern | period | future | timeless_fantasy | mixed | custom.
+- Không suy frame chỉ từ genre và không tạo legacy intensity fields.
 - Đây chỉ là proposal; framework vẫn phải được người viết xác nhận trước khi promote.`;
+
+  return [genreInstruction, styleInstruction, eraInstruction].join('\n\n');
 }
 
 export function buildCreationFrameworkPrompt(
@@ -275,7 +293,7 @@ ${JSON.stringify(plotPreview, null, 2)}`
     conflictPatterns ? `\nXUNG ĐỘT ĐẶC TRƯNG:\n${conflictPatterns}` : '',
   ].join('');
   const characterGuardrails = buildCreationCharacterGuardrails();
-  const eraInstruction = eraRegisterFrameworkInstruction(answers);
+  const setupInstruction = storySetupFrameworkInstruction(answers);
 
   return {
     system: FRAMEWORK_SYSTEM,
@@ -291,7 +309,7 @@ ${historyText}${plotReviewText}${templateBlock}${extraTemplateContext}
 
 ${characterGuardrails}
 
-${eraInstruction}
+${setupInstruction}
 
 Trả về JSON đúng format sau. Sáng tạo thêm nếu thiếu thông tin, nhưng KHÔNG được bỏ narrativeEraRegister:
 
@@ -299,14 +317,10 @@ Trả về JSON đúng format sau. Sáng tạo thêm nếu thiếu thông tin, n
   "bible": {
     "genre": "thể loại chính",
     "subGenre": ["tag1", "tag2", "tag3"],
-    "writingStyle": "phong cách viết + mô tả ngắn Era Register",
+    "writingStyle": "một loại văn phong rộng, không kèm thông số câu/đoạn",
     "narrativeEraRegister": {
-      "frame": "contemporary | period | mixed",
-      "level": 3,
-      "narratorLevel": 3,
-      "dialogueLevel": 3,
-      "thoughtLevel": 3,
-      "notes": "giải thích ngắn vì sao mức này hợp truyện"
+      "frame": "contemporary | near_premodern | period | future | timeless_fantasy | mixed | custom",
+      "notes": "chỉ dùng để làm rõ mixed/custom hoặc yêu cầu riêng của người viết"
     },
     "title": "tên truyện hay nhất",
     "logline": "mô tả 1 câu gọn nhất",

@@ -39,6 +39,44 @@ export const DISCUSS_TOPICS: DiscussTopic[] = [
     required: false,
   },
   {
+    id: 'genre_stack',
+    questionTemplate: 'Thể loại nào giữ lời hứa chính của truyện, và những thể loại phụ nào thực sự cần?',
+    suggestionGroups: [
+      {
+        groupLabel: 'Thể loại chính · chọn đúng 1',
+        selectionMode: 'single',
+        required: true,
+        chips: [
+          chip('☁️', 'Tiên hiệp', 'PRIMARY_GENRE=TIEN_HIEP'),
+          chip('✨', 'Huyền huyễn', 'PRIMARY_GENRE=HUYEN_HUYEN'),
+          chip('⚔️', 'Võ hiệp', 'PRIMARY_GENRE=VO_HIEP'),
+          chip('💕', 'Ngôn tình', 'PRIMARY_GENRE=NGON_TINH'),
+          chip('🏺', 'Cổ đại', 'PRIMARY_GENRE=CO_DAI'),
+          chip('👻', 'Kinh dị siêu nhiên', 'PRIMARY_GENRE=KINH_DI_SIEU_NHIEN'),
+          chip('🔎', 'Trinh thám / Huyền nghi', 'PRIMARY_GENRE=TRINH_THAM_HUYEN_NGHI'),
+          chip('👑', 'Cung đấu / Quyền mưu', 'PRIMARY_GENRE=CUNG_DAU_QUYEN_MUU'),
+          chip('🧟', 'Mạt thế / Sinh tồn', 'PRIMARY_GENRE=MAT_THE_SINH_TON'),
+          chip('🚀', 'Khoa huyễn', 'PRIMARY_GENRE=KHOA_HUYEN'),
+        ],
+      },
+      {
+        groupLabel: 'Thể loại phụ quan trọng · chọn khi đã rõ',
+        selectionMode: 'multi',
+        required: false,
+        chips: [
+          chip('🌱', 'Sinh tồn', 'SECONDARY_GENRE=SINH_TON'),
+          chip('🧭', 'Phiêu lưu / Khám phá', 'SECONDARY_GENRE=PHIEU_LUU_KHAM_PHA'),
+          chip('🧩', 'Huyền nghi', 'SECONDARY_GENRE=HUYEN_NGHI'),
+          chip('💕', 'Tình cảm', 'SECONDARY_GENRE=TINH_CAM'),
+          chip('🏛️', 'Quyền mưu', 'SECONDARY_GENRE=QUYEN_MUU'),
+          chip('📈', 'Trưởng thành', 'SECONDARY_GENRE=TRUONG_THANH'),
+        ],
+      },
+    ],
+    aiDecideLabel: '🤖 AI đề xuất Genre Stack, tôi duyệt lại',
+    required: true,
+  },
+  {
     id: 'conflict',
     questionTemplate: 'Xung đột lớn nhất — điều gì kéo người đọc đọc tiếp?',
     suggestionGroups: [
@@ -102,63 +140,55 @@ export const DISCUSS_TOPICS: DiscussTopic[] = [
   },
   {
     id: 'tone_antagonist',
-    questionTemplate: 'Giọng văn muốn viết + kiểu phản diện / mối đe dọa?',
+    questionTemplate: 'Bạn muốn loại văn phong nào, và mối đe dọa chính thuộc kiểu nào?',
     suggestionGroups: [
       {
-        groupLabel: 'Giọng văn:',
+        groupLabel: 'Loại văn phong · chọn một hướng rộng',
+        selectionMode: 'single',
+        required: true,
         chips: [
-          chip('🎭', 'Nghiêm túc, sử thi', 'Giọng nghiêm túc, hùng tráng, sử thi'),
-          chip('😏', 'Hài hước, dí dỏm', 'Giọng hài hước nhẹ, thông minh, dí dỏm'),
-          chip('🌑', 'Dark, u ám', 'Giọng dark, u ám, tâm lý sâu'),
-          chip('📝', 'Miêu tả chi tiết', 'Giọng trau chuốt, miêu tả chi tiết, văn học'),
-          chip('⚡', 'Nhanh, súc tích', 'Giọng ngắn gọn, tiết tấu nhanh, ít miêu tả thừa'),
-          chip('🌸', 'Lãng mạn, trữ tình', 'Giọng lãng mạn, chú trọng cảm xúc nhân vật'),
+          chip('🪶', 'Giản dị – mạch lạc', 'WRITING_STYLE=plain_clear'),
+          chip('🏛️', 'Cổ điển – trầm', 'WRITING_STYLE=classic_grave'),
+          chip('🎨', 'Giàu hình ảnh', 'WRITING_STYLE=image_rich'),
+          chip('⚡', 'Nhanh – sắc', 'WRITING_STYLE=fast_sharp'),
+          chip('😄', 'Hài hước – đời thường', 'WRITING_STYLE=humorous_everyday'),
+          chip('✍️', 'Tự mô tả', 'WRITING_STYLE=custom'),
         ],
       },
       {
         groupLabel: 'Phản diện / Mối đe dọa:',
         chips: [
-          chip('👤', 'Nhân vật tà đạo', 'Phản diện là nhân vật tà đạo / ma vương'),
-          chip('🏛️', 'Tổ chức bí mật', 'Tổ chức bí mật thao túng tất cả từ bóng tối'),
-          chip('🤖', 'AI / Hệ thống cổ đại', 'AI hoặc hệ thống cổ đại mất kiểm soát'),
-          chip('🌀', 'Không rõ ràng', 'Không có phản diện rõ ràng — xung đột nội tâm hoặc quy luật thế giới'),
-          chip('👑', 'Cường giả / Lão tổ', 'Thế lực mạnh từ bóng tối, cường giả đứng trên vũ trụ'),
-          chip('🌊', 'Thiên tai / Vô thường', 'Thiên tai, quy luật tự nhiên, không có kẻ thù cụ thể'),
+          chip('👤', 'Nhân vật đối địch', 'Phản diện là một nhân vật có mục tiêu và lợi ích đối nghịch'),
+          chip('🏛️', 'Tổ chức / Thể chế', 'Một tổ chức hoặc thể chế tạo sức ép lên nhân vật'),
+          chip('🌀', 'Không có phản diện rõ', 'Xung đột nội tâm, quan hệ hoặc quy luật thế giới'),
+          chip('👑', 'Cường giả / Kẻ nắm quyền', 'Một cá nhân hoặc tầng quyền lực vượt trội'),
+          chip('🌊', 'Thiên tai / Vô thường', 'Thiên tai, môi trường hoặc quy luật tự nhiên'),
         ],
       },
     ],
-    aiDecideLabel: '🤖 AI tự quyết định cả 2',
-    required: false,
+    aiDecideLabel: '🤖 AI đề xuất hai hướng, tôi duyệt lại',
+    required: true,
   },
   {
     id: 'era_register',
-    questionTemplate: 'Văn phong thời đại của truyện nên là hiện đại, cổ phong hay kết hợp cả hai?',
+    questionTemplate: 'Thời đại / khung kể chuyện của truyện thuộc hướng nào?',
     suggestionGroups: [
       {
-        groupLabel: 'Bước 1 · Chọn kiểu văn phong thời đại',
+        groupLabel: 'Chọn một khung rộng',
         selectionMode: 'single',
         required: true,
         chips: [
           chip('🏙️', 'Hiện đại', 'ERA_FRAME=contemporary'),
-          chip('🏯', 'Cổ phong', 'ERA_FRAME=period'),
-          chip('☯️', 'Hiện đại + Cổ phong', 'ERA_FRAME=mixed'),
-        ],
-      },
-      {
-        groupLabel: 'Bước 2 · Chọn độ cổ phong',
-        selectionMode: 'single',
-        required: true,
-        visibleWhenSelectedValues: ['ERA_FRAME=period', 'ERA_FRAME=mixed'],
-        chips: [
-          chip('1️⃣', '1/5 · Rất nhẹ', 'ERA_LEVEL=1'),
-          chip('2️⃣', '2/5 · Nhẹ', 'ERA_LEVEL=2'),
-          chip('3️⃣', '3/5 · Trung độ, dễ đọc', 'ERA_LEVEL=3'),
-          chip('4️⃣', '4/5 · Đậm', 'ERA_LEVEL=4'),
-          chip('5️⃣', '5/5 · Rất đậm / cổ văn', 'ERA_LEVEL=5'),
+          chip('🚂', 'Cận / tiền hiện đại', 'ERA_FRAME=near_premodern'),
+          chip('🏯', 'Cổ đại / cổ phong', 'ERA_FRAME=period'),
+          chip('🚀', 'Tương lai', 'ERA_FRAME=future'),
+          chip('🌌', 'Giả tưởng không gắn lịch sử', 'ERA_FRAME=timeless_fantasy'),
+          chip('☯️', 'Pha trộn', 'ERA_FRAME=mixed'),
+          chip('✍️', 'Tự mô tả', 'ERA_FRAME=custom'),
         ],
       },
     ],
-    aiDecideLabel: '🤖 AI đề xuất, tôi duyệt lại trong khung truyện',
+    aiDecideLabel: '🤖 AI đề xuất một khung rộng, tôi duyệt lại',
     required: true,
   },
   {
@@ -248,9 +278,10 @@ export function buildAnswersSummary(answers: Record<string, string>): string {
   const parts: string[] = [];
   if (answers.magic_system) parts.push(`Hệ tu luyện: ${answers.magic_system}`);
   if (answers.story_engine) parts.push(`Động cơ câu chuyện: ${answers.story_engine}`);
+  if (answers.genre_stack) parts.push(`Genre Stack: ${answers.genre_stack}`);
   if (answers.conflict) parts.push(`Xung đột: ${answers.conflict}`);
   if (answers.protagonist) parts.push(`Nhân vật chính: ${answers.protagonist}`);
-  if (answers.tone_antagonist) parts.push(`Giọng văn & phản diện: ${answers.tone_antagonist}`);
-  if (answers.era_register) parts.push(`Văn phong thời đại: ${answers.era_register}`);
+  if (answers.tone_antagonist) parts.push(`Loại văn phong & mối đe dọa: ${answers.tone_antagonist}`);
+  if (answers.era_register) parts.push(`Thời đại / khung kể chuyện: ${answers.era_register}`);
   return parts.join('\n');
 }

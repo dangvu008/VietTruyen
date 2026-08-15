@@ -14,15 +14,11 @@ function makeProject(): Project {
     logline: 'Một nữ quan phải giữ bí mật của triều đình giữa cơn biến.',
     genre: 'Cổ đại',
     subGenre: ['Cung đấu'],
-    writingStyle: 'Tĩnh mà sắc · Cổ phong 3/5',
+    writingStyle: 'Cổ điển – trầm',
     tone: 'Căng ngầm',
     styleId: 'style-1',
     narrativeEraRegister: {
       frame: 'period',
-      level: 3,
-      narratorLevel: 3,
-      dialogueLevel: 4,
-      thoughtLevel: 2,
       confirmed: true,
       source: 'user',
     },
@@ -96,7 +92,8 @@ describe('character_cast_guardrails', () => {
     expect(guardrails).toContain('emotional');
     expect(guardrails).toContain('không thêm cho đủ quân số');
     expect(guardrails).toContain('narrativeEraRegister');
-    expect(guardrails).toContain('contemporary | period | mixed');
+    expect(guardrails).toContain('contemporary | near_premodern | period | future');
+    expect(guardrails).not.toContain('1-5');
   });
 
   it('anchors chapter-level character expansion to beats and foreshadowing', () => {

@@ -4,11 +4,7 @@ import { buildCreationProjectSeed } from './project_seed';
 
 const periodRegister = {
   frame: 'period' as const,
-  level: 3 as const,
-  narratorLevel: 3 as const,
-  dialogueLevel: 3 as const,
-  thoughtLevel: 2 as const,
-  notes: 'Cổ phong trung độ, dễ đọc.',
+  notes: 'Cổ đại–cổ phong trong thế giới giả tưởng.',
 };
 
 describe('buildCreationProjectSeed', () => {
@@ -70,7 +66,7 @@ describe('buildCreationProjectSeed', () => {
       },
       acceptedChapters: [],
       createId: () => 'id',
-    })).toThrow(/Văn phong thời đại/);
+    })).toThrow(/thời đại \/ khung kể chuyện/);
   });
 
   it('uses the confirmed chapter target instead of the generated shell count', () => {
@@ -80,7 +76,7 @@ describe('buildCreationProjectSeed', () => {
           title: 'Trường Thiên',
           genre: 'Tiên hiệp',
           subGenre: [],
-          writingStyle: 'Cổ phong trung độ — Era Register 3/5',
+          writingStyle: 'Cổ điển – trầm',
           narrativeEraRegister: periodRegister,
           logline: 'Một thiếu niên đi qua trăm kiếp.',
           endgame: 'Hoàn thành đại đạo',
@@ -126,13 +122,12 @@ describe('buildCreationProjectSeed', () => {
     expect(seed.chapters).toHaveLength(2);
     expect(seed.projectPatch.narrativeEraRegister).toMatchObject({
       frame: 'period',
-      level: 3,
       confirmed: true,
       source: 'user',
     });
   });
 
-  it('normalizes contemporary framework choice without asking for period intensity', () => {
+  it('promotes a contemporary framework choice without intensity fields', () => {
     const seed = buildCreationProjectSeed({
       framework: {
         bible: {
@@ -142,10 +137,6 @@ describe('buildCreationProjectSeed', () => {
           writingStyle: 'Hiện đại',
           narrativeEraRegister: {
             frame: 'contemporary',
-            level: 5,
-            narratorLevel: 5,
-            dialogueLevel: 5,
-            thoughtLevel: 5,
           },
           logline: '',
           endgame: '',
@@ -167,10 +158,6 @@ describe('buildCreationProjectSeed', () => {
 
     expect(seed.projectPatch.narrativeEraRegister).toMatchObject({
       frame: 'contemporary',
-      level: 1,
-      narratorLevel: 1,
-      dialogueLevel: 1,
-      thoughtLevel: 1,
       confirmed: true,
     });
   });
@@ -182,7 +169,7 @@ describe('buildCreationProjectSeed', () => {
           title: 'Huyết Thư',
           genre: 'Tiên hiệp',
           subGenre: ['Huyền huyễn'],
-          writingStyle: 'Cổ phong trung độ',
+          writingStyle: 'Cổ điển – trầm',
           narrativeEraRegister: periodRegister,
           logline: 'Một kẻ bị đày tìm lại thiên mệnh.',
           endgame: 'Đoạt lại thiên thư',
