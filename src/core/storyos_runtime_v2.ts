@@ -60,10 +60,7 @@ const scoreBeat = (beat: OutlineBeat, input: RuntimeWriterInput) => {
   return words.reduce((score, word) => score + (haystack.includes(word) ? 1 : 0), 0);
 };
 
-/**
- * Compile the bounded context a Writer is allowed to see in StoryOS v2.
- * This intentionally excludes chapter archives and global review/checker policy.
- */
+/** Compile the bounded context a Writer is allowed to see in StoryOS v2. */
 export const compileMinimalWriterPacket = (input: RuntimeWriterInput): MinimalWriterPacket => {
   const rankedOutline = [...input.project.outline]
     .map((beat, index) => ({ beat, index, score: scoreBeat(beat, input) }))
@@ -94,7 +91,7 @@ export const buildV2WriterRequest = <T extends RuntimeWriterInput>(
     ...request.project,
     characters: packet.relevantCharacters,
     outline: packet.relevantOutline,
-    // Accepted prose archives do not belong in the Writer context. Direct seam is explicit.
+    // Accepted prose archives do not belong in Writer context. The direct seam is explicit.
     chapters: [],
     notes: packet.continuityNotes,
     currentFocus: packet.currentFocus,
@@ -105,13 +102,10 @@ export const buildV2WriterRequest = <T extends RuntimeWriterInput>(
     sourceText: packet.directSeam,
     notes: packet.continuityNotes,
     project: boundedProject,
-  };
+  } as T;
 };
 
-/**
- * A separate literary read. It reports weaknesses but never mutates prose.
- * Semantic/canon validation belongs to authority-backed invariant validators.
- */
+/** A separate literary read. It reports weaknesses but never mutates prose. */
 export const runLiteraryCritic = (output: string): LiteraryCriticResult => {
   const findings: string[] = [];
   const text = output.trim();
@@ -146,16 +140,14 @@ export const runLiteraryCritic = (output: string): LiteraryCriticResult => {
 };
 
 /**
- * Local validator is deliberately conservative. It only blocks technical/output invariants
- * that can be proven without authoritative Notion story state.
+ * Local validation is deliberately conservative: only invariants provable without
+ * authoritative Notion story state are hard-blocked here.
  */
 export const validateLocalInvariants = (output: string): InvariantValidationResult => {
   const violations: InvariantViolation[] = [];
   const text = output.trim();
 
-  if (!text) {
-    violations.push({ code: 'EMPTY_OUTPUT', message: 'Writer output is empty.' });
-  }
+  if (!text) violations.push({ code: 'EMPTY_OUTPUT', message: 'Writer output is empty.' });
 
   if (/\b(?:SYSTEM|ASSISTANT|PRE-FLIGHT RECEIPT|CHAIN OF THOUGHT)\b/i.test(text)) {
     violations.push({ code: 'META_LEAK', message: 'Runtime/meta instruction leaked into prose.' });
