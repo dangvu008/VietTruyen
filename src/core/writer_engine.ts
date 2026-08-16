@@ -3,6 +3,16 @@ import { styleById, stylePresets } from '../data/style_presets';
 import { buildConsistencyReport, buildFixParagraph, selfReflect } from './reflection';
 import { writerStrategyRegistry } from './writer_strategies/index';
 import { applyStyle } from './style_engine';
+import {
+  buildV2WriterRequest,
+  compileMinimalWriterPacket,
+  runLiteraryCritic,
+  validateLocalInvariants,
+  type InvariantValidationResult,
+  type LiteraryCriticResult,
+  type MinimalWriterPacket,
+  type StoryOsRuntimeVersion,
+} from './storyos_runtime_v2';
 
 // Ensure all strategies are registered
 import './writer_strategies/create_strategy';
@@ -22,6 +32,8 @@ export interface WriterRequest {
   selfReflection: boolean;
   consistency: boolean;
   project: Project;
+  /** StoryOS v2 is the default. Set legacy explicitly only for compatibility/debugging. */
+  runtimeVersion?: StoryOsRuntimeVersion;
 }
 
 export interface WriterGeneratedData {
@@ -32,30 +44,32 @@ export interface WriterGeneratedData {
   chapterContent?: string;
 }
 
+export interface WriterRuntimeReport {
+  version: StoryOsRuntimeVersion;
+  writerPacket?: MinimalWriterPacket;
+  literaryCritic?: LiteraryCriticResult;
+  invariantValidation?: InvariantValidationResult;
+}
+
 export interface WriterResponse {
   output: string;
   report?: ReturnType<typeof selfReflect>['report'];
   consistencyReport?: ReturnType<typeof buildConsistencyReport>;
   generated?: WriterGeneratedData;
+  runtime?: WriterRuntimeReport;
 }
 
 // Re-export applyStyle to not break backward compatibility
 export { applyStyle };
 
-export const runWriter = (request: WriterRequest): WriterResponse => {
-  const style = styleById[request.styleId] ?? stylePresets[0];
-  
-  const strategy = writerStrategyRegistry.getStrategy(request.mode);
-  if (!strategy) {
-    throw new Error(`Strategy not found for mode: ${request.mode}`);
-  }
-
-  // Execute the specific mode logic
-  const response = strategy.execute({ request, style });
+const runLegacyWriter = (
+  request: WriterRequest,
+  response: WriterResponse,
+  style: (typeof stylePresets)[number],
+): WriterResponse => {
   let output = response.output;
-
-  // Global post-processing: Self Reflection & Consistency
   let report: WriterResponse['report'];
+
   if (request.selfReflection) {
     const reflection = selfReflect(output, request.project.outline, request.project.characters, style);
     report = reflection.report;
@@ -71,5 +85,57 @@ export const runWriter = (request: WriterRequest): WriterResponse => {
     ? buildConsistencyReport(output, request.project.characters, request.project.outline, request.project.world)
     : undefined;
 
-  return { ...response, output, report, consistencyReport };
+  return {
+    ...response,
+    output,
+    report,
+    consistencyReport,
+    runtime: { version: 'legacy' },
+  };
+};
+
+export const runWriter = (request: WriterRequest): WriterResponse => {
+  const style = styleById[request.styleId] ?? stylePresets[0];
+  const runtimeVersion: StoryOsRuntimeVersion = request.runtimeVersion ?? 'storyos_v2';
+
+  const strategy = writerStrategyRegistry.getStrategy(request.mode);
+  if (!strategy) {
+    throw new Error(`Strategy not found for mode: ${request.mode}`);
+  }
+
+  if (runtimeVersion === 'legacy') {
+    const response = strategy.execute({ request, style });
+    return runLegacyWriter(request, response, style);
+  }
+
+  // StoryOS v2: compile bounded Writer context before generation.
+  const writerPacket = compileMinimalWriterPacket(request);
+  const boundedRequest = buildV2WriterRequest(request, writerPacket);
+  const response = strategy.execute({ request: boundedRequest, style });
+
+  // Critic and invariant validation are separate reads. Neither is allowed to mutate prose.
+  const literaryCritic = runLiteraryCritic(response.output);
+  const invariantValidation = validateLocalInvariants(response.output);
+
+  // Optional compatibility report remains observational only in v2.
+  const consistencyReport = request.consistency
+    ? buildConsistencyReport(
+        response.output,
+        writerPacket.relevantCharacters,
+        writerPacket.relevantOutline,
+        writerPacket.world,
+      )
+    : undefined;
+
+  return {
+    ...response,
+    output: response.output,
+    consistencyReport,
+    runtime: {
+      version: 'storyos_v2',
+      writerPacket,
+      literaryCritic,
+      invariantValidation,
+    },
+  };
 };
