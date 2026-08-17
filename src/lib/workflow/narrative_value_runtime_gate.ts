@@ -74,7 +74,10 @@ export async function runNarrativeValueRuntimeGate(
       responseFormat: 'json_object',
       skipCache: true,
       pipelineSessionId: opts.pipelineSessionId,
-      pipelineStep: 'narrative_value_gate',
+      // Narrative-value review is part of the pre-save quality phase. Reuse
+      // the existing label so token analytics remain exhaustive without
+      // forcing every dashboard/report consumer to learn a one-off label.
+      pipelineStep: 'pre_save_quality_gate',
       systemPrompt: buildSystemPrompt(),
       userPrompt: buildUserPrompt(opts),
     });

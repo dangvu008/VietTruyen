@@ -1,6 +1,6 @@
 import type { Project } from '../../types/story';
-import { compileStoryContext, renderCompiledStoryContext, type CompiledStoryContext } from './context_compiler';
-import { retrieveForWriting } from './hybrid_memory_query';
+import type { CompiledStoryContext } from './context_compiler';
+import { resolveStoryMemory } from './story_memory_resolver';
 
 export interface LongFormWritingContext {
   projectId: string;
@@ -20,18 +20,17 @@ export async function buildLongFormWritingContext(
   targetChapterIndex: number,
   query: string
 ): Promise<LongFormWritingContext> {
-  if (!project.id) throw new Error('project.id is required for story-isolated retrieval');
-  if (!Number.isFinite(targetChapterIndex) || targetChapterIndex < 1) {
-    throw new Error('targetChapterIndex must be >= 1');
-  }
-
-  const memory = await retrieveForWriting(project, targetChapterIndex, query);
-  const compiled = compileStoryContext(memory);
+  const resolved = await resolveStoryMemory({
+    project,
+    targetChapterIndex,
+    query,
+    intent: 'write_chapter',
+  });
 
   return {
-    projectId: project.id,
-    targetChapterIndex,
-    compiled,
-    promptBlock: renderCompiledStoryContext(compiled),
+    projectId: resolved.projectId,
+    targetChapterIndex: resolved.targetChapterIndex,
+    compiled: resolved.compiled,
+    promptBlock: resolved.promptBlock,
   };
 }
