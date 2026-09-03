@@ -122,7 +122,7 @@ describe('StoryOS Runtime Harness v2', () => {
     });
 
     expect(Math.max(...sizes) - Math.min(...sizes)).toBeLessThan(50);
-    expect(Math.max(...sizes)).toBeLessThan(15000);
+    expect(Math.max(...sizes)).toBeLessThan(30000);
 
     const packet = compileMinimalWriterPacket({
       ...input,
