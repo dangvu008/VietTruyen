@@ -49,12 +49,25 @@ export interface WriterGeneratedData {
   chapterContent?: string;
 }
 
+export interface StoryOsExecutionReceipt {
+  policy: 'storyos-execution-receipt-v1';
+  projectId: string;
+  canonVersion: number;
+  contextPolicy: MinimalWriterPacket['contextPolicy'];
+  skillPolicy?: MinimalWriterPacket['skills'] extends infer T
+    ? T extends { policy: infer P } ? P : never
+    : never;
+  writerSkills: Array<{ skillId: string; version: string }>;
+  reviewSkills: Array<{ skillId: string; version: string }>;
+}
+
 export interface WriterRuntimeReport {
   version: StoryOsRuntimeVersion;
   writerPacket?: MinimalWriterPacket;
   reviewPacket?: StoryOsReviewPacket;
   literaryCritic?: LiteraryCriticResult;
   invariantValidation?: InvariantValidationResult;
+  receipt?: StoryOsExecutionReceipt;
 }
 
 export interface WriterResponse {
@@ -139,6 +152,16 @@ export const runWriter = (request: WriterRequest): WriterResponse => {
       )
     : undefined;
 
+  const receipt: StoryOsExecutionReceipt = {
+    policy: 'storyos-execution-receipt-v1',
+    projectId: request.project.id,
+    canonVersion: request.project.canonVersion ?? 0,
+    contextPolicy: writerPacket.contextPolicy,
+    skillPolicy: writerPacket.skills?.policy,
+    writerSkills: writerPacket.skills?.selected.map(({ skillId, version }) => ({ skillId, version })) ?? [],
+    reviewSkills: reviewPacket.skills.selected.map(({ skillId, version }) => ({ skillId, version })),
+  };
+
   return {
     ...response,
     output: response.output,
@@ -149,6 +172,7 @@ export const runWriter = (request: WriterRequest): WriterResponse => {
       reviewPacket,
       literaryCritic,
       invariantValidation,
+      receipt,
     },
   };
 };
