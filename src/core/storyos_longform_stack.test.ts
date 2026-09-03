@@ -8,6 +8,7 @@ import {
   validateChapterStateProposal,
   type ChapterStateProposal,
 } from './storyos_state_loop';
+import { buildStoryOsAuthorMemoryPacket, buildStoryOsPlanningPacket } from './storyos_stage_packets';
 import type { MinimalWriterPacket } from './storyos_runtime_v2';
 import { adviseWriterContext } from './sol_advisor';
 
@@ -40,6 +41,8 @@ const stateProposal: ChapterStateProposal = {
   resolvedLoopIds: [],
 };
 
+const registry = { manifests: storyOsBuiltinManifests, bodies: storyOsBuiltinBodies };
+
 describe('StoryOS long-form stack', () => {
   it('routes extracted prose skills without loading review skills into Writer context', () => {
     const packet = buildRuntimeSkillPacket({
@@ -66,17 +69,14 @@ describe('StoryOS long-form stack', () => {
       characters: writerPacket.relevantCharacters,
       outline: writerPacket.relevantOutline,
       world: writerPacket.world,
-      skillRegistry: { manifests: storyOsBuiltinManifests, bodies: storyOsBuiltinBodies },
+      skillRegistry: registry,
     });
     expect(advised.skills?.selected.every((skill) => !skill.skillId.startsWith('review.'))).toBe(true);
     expect(advised.skills?.selected.every((skill) => !skill.skillId.startsWith('planning.'))).toBe(true);
   });
 
   it('builds review context separately and deterministically selects review skills', () => {
-    const review = buildStoryOsReviewPacket('A called the stranger by a name she never learned.', writerPacket, {
-      manifests: storyOsBuiltinManifests,
-      bodies: storyOsBuiltinBodies,
-    });
+    const review = buildStoryOsReviewPacket('A called the stranger by a name she never learned.', writerPacket, registry);
     expect(review.policy).toBe('separate-review-v1');
     expect(review.skills.selected.map((skill) => skill.skillId)).toEqual([
       'review.character',
@@ -85,6 +85,15 @@ describe('StoryOS long-form stack', () => {
     ]);
     expect(review.skills.selected.every((skill) => skill.skillId.startsWith('review.'))).toBe(true);
     expect(review.skills.totalEstimatedTokens).toBeLessThanOrEqual(1800);
+  });
+
+  it('keeps planning and author learning in their own isolated stages', () => {
+    const planning = buildStoryOsPlanningPacket('Lập dàn ý chương và cài một phục bút cho lá thư.', registry);
+    expect(planning.skills.selected.map((skill) => skill.skillId)).toContain('planning.chapter-beats');
+    expect(planning.skills.selected.every((skill) => ['planning.', 'design.'].some((prefix) => skill.skillId.startsWith(prefix)))).toBe(true);
+
+    const memory = buildStoryOsAuthorMemoryPacket('Lần sau đừng dùng quá nhiều câu giải thích đối lập.', registry);
+    expect(memory.skills.selected.map((skill) => skill.skillId)).toEqual(['memory.author-feedback']);
   });
 
   it('compiles Notion rows into the same registry contract and keeps the newest version', () => {
