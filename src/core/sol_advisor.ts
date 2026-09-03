@@ -140,10 +140,10 @@ const compactWorld = (world: WorldRules): WorldRules => ({
 });
 
 /**
- * sol-advisor is the context + skill selection layer between authoritative story state and Writer.
+ * sol-advisor is the context + Writer-skill selection layer between authoritative story state and Writer.
  * It is intentionally stateless: every execution turn derives a bounded working context
- * from fresh authority state. Skill selection is manifest-first; full skill bodies only enter
- * the compiled runtime packet after they have been selected.
+ * from fresh authority state. Only prose/style skills may enter Writer context; review/planning/memory
+ * skills have separate runtime stages.
  */
 export const adviseWriterContext = (input: SolAdvisorInput): SolAdvisorContext => {
   const directSeam = tail(input.sourceText, 1800);
@@ -157,6 +157,7 @@ export const adviseWriterContext = (input: SolAdvisorInput): SolAdvisorContext =
         mode: input.mode ?? 'continue',
         manifests: input.skillRegistry.manifests,
         bodies: input.skillRegistry.bodies,
+        allowedDomains: ['prose', 'style'],
         maxSkills: input.skillRegistry.maxSkills,
         maxTokens: input.skillRegistry.maxTokens,
       })
