@@ -59,6 +59,8 @@ export interface SkillSelectionRequest {
   bodies: Record<string, SkillBody | undefined>;
   /** Deterministic stage selection, e.g. review skills selected by the review stage. */
   requestedSkillIds?: string[];
+  /** Stage boundary. Dependencies outside this allowlist are not allowed to leak across stages. */
+  allowedDomains?: StorySkillDomain[];
   maxSkills?: number;
   maxTokens?: number;
 }
@@ -102,17 +104,18 @@ const compileRuntimeSkill = (body: SkillBody): RuntimeSkill => {
   const snapshot = () => ({ hardRules, guidance, antiPatterns, outputContract });
 
   // Shrink the least authoritative material first. Hard rules survive longest.
-  while (estimateTokens(snapshot()) > tokenBudget) {
+  let guard = 0;
+  while (estimateTokens(snapshot()) > tokenBudget && guard < 100) {
+    guard += 1;
     if (guidance.length > 2) guidance = guidance.slice(0, -1);
     else if (antiPatterns.length > 2) antiPatterns = antiPatterns.slice(0, -1);
-    else if (outputContract && outputContract.length > 160) outputContract = compactValue(outputContract, Math.max(160, outputContract.length - 100));
+    else if (outputContract && outputContract.length > 120) outputContract = compactValue(outputContract, Math.max(120, outputContract.length - 80));
     else if (hardRules.length > 2) hardRules = hardRules.slice(0, -1);
     else {
-      hardRules = hardRules.map((item) => compactValue(item, 120));
-      guidance = guidance.map((item) => compactValue(item, 120));
-      antiPatterns = antiPatterns.map((item) => compactValue(item, 100));
-      if (outputContract) outputContract = compactValue(outputContract, 160);
-      break;
+      hardRules = hardRules.map((item) => compactValue(item, Math.max(60, Math.floor(item.length * 0.8))));
+      guidance = guidance.map((item) => compactValue(item, Math.max(60, Math.floor(item.length * 0.8))));
+      antiPatterns = antiPatterns.map((item) => compactValue(item, Math.max(50, Math.floor(item.length * 0.8))));
+      if (outputContract) outputContract = compactValue(outputContract, Math.max(80, Math.floor(outputContract.length * 0.8)));
     }
   }
 
@@ -136,11 +139,13 @@ export const buildRuntimeSkillPacket = (request: SkillSelectionRequest): Runtime
   const maxSkills = request.maxSkills ?? 5;
   const maxTokens = request.maxTokens ?? 3200;
   const taskText = `${request.mode} ${request.taskText}`;
+  const allowed = request.allowedDomains ? new Set(request.allowedDomains) : undefined;
+  const domainAllowed = (manifest: SkillManifest) => !allowed || allowed.has(manifest.domain);
   const manifestById = new Map(request.manifests.map((manifest) => [manifest.skillId, manifest]));
 
   const requested = new Set(request.requestedSkillIds ?? []);
   const ranked = request.manifests
-    .filter((manifest) => manifest.status === 'active')
+    .filter((manifest) => manifest.status === 'active' && domainAllowed(manifest))
     .map((manifest, index) => ({
       manifest,
       index,
@@ -158,7 +163,13 @@ export const buildRuntimeSkillPacket = (request: SkillSelectionRequest): Runtime
     if (selectedIds.has(skillId) || selected.length >= maxSkills || visiting.has(skillId)) return;
     const manifest = manifestById.get(skillId);
     const body = request.bodies[skillId];
-    if (!manifest || !body || manifest.status !== 'active' || body.manifest.status !== 'active') return;
+    if (
+      !manifest ||
+      !body ||
+      !domainAllowed(manifest) ||
+      manifest.status !== 'active' ||
+      body.manifest.status !== 'active'
+    ) return;
 
     visiting.add(skillId);
     for (const dependency of manifest.dependencies) tryAdd(dependency);
@@ -166,6 +177,7 @@ export const buildRuntimeSkillPacket = (request: SkillSelectionRequest): Runtime
 
     if (selectedIds.has(skillId) || selected.length >= maxSkills) return;
     const compiled = compileRuntimeSkill(body);
+    if (compiled.estimatedTokens > body.manifest.tokenBudget) return;
     if (totalEstimatedTokens + compiled.estimatedTokens > maxTokens) return;
     selected.push(compiled);
     selectedIds.add(skillId);
