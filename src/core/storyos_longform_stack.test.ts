@@ -1,10 +1,15 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { storyOsBuiltinBodies, storyOsBuiltinManifests } from './storyos_builtin_skills';
 import { buildRuntimeSkillPacket, renderRuntimeSkillPacket } from './storyos_skill_registry';
 import { buildStoryOsReviewPacket } from './storyos_review_v2';
 import { compileNotionSkillRegistry } from './storyos_notion_adapter';
-import { validateChapterStateProposal, type ChapterStateProposal } from './storyos_state_loop';
+import {
+  commitChapterStateProposal,
+  validateChapterStateProposal,
+  type ChapterStateProposal,
+} from './storyos_state_loop';
 import type { MinimalWriterPacket } from './storyos_runtime_v2';
+import { adviseWriterContext } from './sol_advisor';
 
 const writerPacket: MinimalWriterPacket = {
   runtimeVersion: 'storyos_v2',
@@ -21,6 +26,20 @@ const writerPacket: MinimalWriterPacket = {
   continuityNotes: '',
 };
 
+const stateProposal: ChapterStateProposal = {
+  policy: 'state-extractor-v1',
+  projectId: 'P1',
+  chapterId: 'C10',
+  expectedCanonVersion: 3,
+  summary: 'A opens the letter.',
+  events: [{
+    eventId: 'evt-C10-1', type: 'open_loop_created', subjectId: 'letter', payload: { question: 'Who sent it?' }, confidence: 0.95, evidence: 'The seal carried no name.',
+  }],
+  deltas: [{ entityId: 'a', field: 'knowledge.letter_contents', newValue: 'known', confidence: 0.95, evidence: 'A read the letter.' }],
+  openLoopIds: ['letter-sender'],
+  resolvedLoopIds: [],
+};
+
 describe('StoryOS long-form stack', () => {
   it('routes extracted prose skills without loading review skills into Writer context', () => {
     const packet = buildRuntimeSkillPacket({
@@ -28,11 +47,29 @@ describe('StoryOS long-form stack', () => {
       taskText: 'Viết kết chương cliffhanger từ lựa chọn của A.',
       manifests: storyOsBuiltinManifests,
       bodies: storyOsBuiltinBodies,
+      allowedDomains: ['prose', 'style'],
     });
     const ids = packet.selected.map((skill) => skill.skillId);
     expect(ids).toContain('prose.cliffhanger');
     expect(ids.some((id) => id.startsWith('review.'))).toBe(false);
     expect(renderRuntimeSkillPacket(packet)).not.toContain('review.timeline');
+  });
+
+  it('enforces Writer stage boundaries even when task text strongly matches review skills', () => {
+    const advised = adviseWriterContext({
+      prompt: 'Viết tiếp nhân vật A nhưng phải chú ý knowledge boundary, timeline và character consistency.',
+      sourceText: 'A nhìn lá thư.',
+      notes: '',
+      currentFocus: 'A chưa biết người gửi.',
+      mainPlot: '',
+      mode: 'continue',
+      characters: writerPacket.relevantCharacters,
+      outline: writerPacket.relevantOutline,
+      world: writerPacket.world,
+      skillRegistry: { manifests: storyOsBuiltinManifests, bodies: storyOsBuiltinBodies },
+    });
+    expect(advised.skills?.selected.every((skill) => !skill.skillId.startsWith('review.'))).toBe(true);
+    expect(advised.skills?.selected.every((skill) => !skill.skillId.startsWith('planning.'))).toBe(true);
   });
 
   it('builds review context separately and deterministically selects review skills', () => {
@@ -46,6 +83,7 @@ describe('StoryOS long-form stack', () => {
       'review.knowledge-boundary',
       'review.timeline',
     ]);
+    expect(review.skills.selected.every((skill) => skill.skillId.startsWith('review.'))).toBe(true);
     expect(review.skills.totalEstimatedTokens).toBeLessThanOrEqual(1800);
   });
 
@@ -66,23 +104,23 @@ describe('StoryOS long-form stack', () => {
   });
 
   it('blocks stale or weak state extraction proposals before authority mutation', () => {
-    const proposal: ChapterStateProposal = {
-      policy: 'state-extractor-v1',
-      projectId: 'P1',
-      chapterId: 'C10',
-      expectedCanonVersion: 3,
-      summary: 'A opens the letter.',
-      events: [{
-        eventId: 'evt-C10-1', type: 'open_loop_created', subjectId: 'letter', payload: { question: 'Who sent it?' }, confidence: 0.95, evidence: 'The seal carried no name.',
-      }],
-      deltas: [{ entityId: 'a', field: 'knowledge.letter_contents', newValue: 'known', confidence: 0.95, evidence: 'A read the letter.' }],
-      openLoopIds: ['letter-sender'],
-      resolvedLoopIds: [],
-    };
-    expect(validateChapterStateProposal(proposal, 3).pass).toBe(true);
-    expect(validateChapterStateProposal(proposal, 4).violations.map((v) => v.code)).toContain('STALE_CANON');
+    expect(validateChapterStateProposal(stateProposal, 3).pass).toBe(true);
+    expect(validateChapterStateProposal(stateProposal, 4).violations.map((v) => v.code)).toContain('STALE_CANON');
 
-    const weak = { ...proposal, events: [{ ...proposal.events[0], confidence: 0.4 }] };
+    const weak = { ...stateProposal, events: [{ ...stateProposal.events[0], confidence: 0.4 }] };
     expect(validateChapterStateProposal(weak, 3).violations.map((v) => v.code)).toContain('LOW_CONFIDENCE');
+  });
+
+  it('commits an accepted proposal through the authority compare-and-swap boundary', async () => {
+    const commitChapterProposal = vi.fn(async () => undefined);
+    const result = await commitChapterStateProposal({
+      readCanonVersion: async () => 3,
+      commitChapterProposal,
+    }, stateProposal);
+
+    expect(result.pass).toBe(true);
+    expect(result.nextCanonVersion).toBe(4);
+    expect(commitChapterProposal).toHaveBeenCalledTimes(1);
+    expect(commitChapterProposal).toHaveBeenCalledWith(stateProposal, 4);
   });
 });
