@@ -1,4 +1,17 @@
 import type { Character, OutlineBeat, WorldRules } from '../types/story';
+import {
+  buildRuntimeSkillPacket,
+  type RuntimeSkillPacket,
+  type SkillBody,
+  type SkillManifest,
+} from './storyos_skill_registry';
+
+export interface SolAdvisorSkillRegistry {
+  manifests: SkillManifest[];
+  bodies: Record<string, SkillBody | undefined>;
+  maxSkills?: number;
+  maxTokens?: number;
+}
 
 export interface SolAdvisorInput {
   prompt: string;
@@ -6,9 +19,11 @@ export interface SolAdvisorInput {
   notes: string;
   currentFocus: string;
   mainPlot: string;
+  mode?: 'create' | 'rewrite' | 'continue' | 'polish';
   characters: Character[];
   outline: OutlineBeat[];
   world: WorldRules;
+  skillRegistry?: SolAdvisorSkillRegistry;
 }
 
 export interface SolAdvisorContext {
@@ -20,6 +35,7 @@ export interface SolAdvisorContext {
   relevantOutline: OutlineBeat[];
   world: WorldRules;
   continuityNotes: string;
+  skills?: RuntimeSkillPacket;
 }
 
 const compact = (text: string, maxChars: number) => {
@@ -124,9 +140,10 @@ const compactWorld = (world: WorldRules): WorldRules => ({
 });
 
 /**
- * sol-advisor is the context-selection layer between authoritative story state and Writer.
+ * sol-advisor is the context + skill selection layer between authoritative story state and Writer.
  * It is intentionally stateless: every execution turn derives a bounded working context
- * from fresh authority state instead of carrying forward accumulated tool/history noise.
+ * from fresh authority state. Skill selection is manifest-first; full skill bodies only enter
+ * the compiled runtime packet after they have been selected.
  */
 export const adviseWriterContext = (input: SolAdvisorInput): SolAdvisorContext => {
   const directSeam = tail(input.sourceText, 1800);
@@ -134,6 +151,16 @@ export const adviseWriterContext = (input: SolAdvisorInput): SolAdvisorContext =
   const currentFocus = compact(input.currentFocus || input.notes || '', 800);
   const objective = compact(input.prompt || input.currentFocus || input.mainPlot || '', 1200);
   const haystack = `${input.prompt} ${continuityNotes} ${directSeam} ${currentFocus}`.toLowerCase();
+  const skills = input.skillRegistry
+    ? buildRuntimeSkillPacket({
+        taskText: `${objective} ${currentFocus} ${directSeam}`,
+        mode: input.mode ?? 'continue',
+        manifests: input.skillRegistry.manifests,
+        bodies: input.skillRegistry.bodies,
+        maxSkills: input.skillRegistry.maxSkills,
+        maxTokens: input.skillRegistry.maxTokens,
+      })
+    : undefined;
 
   return {
     policy: 'sol-advisor-v1',
@@ -144,5 +171,6 @@ export const adviseWriterContext = (input: SolAdvisorInput): SolAdvisorContext =
     relevantOutline: rankOutline(input.outline, haystack),
     world: compactWorld(input.world),
     continuityNotes,
+    skills,
   };
 };
