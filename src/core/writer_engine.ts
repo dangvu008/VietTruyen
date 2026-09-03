@@ -3,6 +3,7 @@ import { styleById, stylePresets } from '../data/style_presets';
 import { buildConsistencyReport, buildFixParagraph, selfReflect } from './reflection';
 import { writerStrategyRegistry } from './writer_strategies/index';
 import { applyStyle } from './style_engine';
+import type { SolAdvisorSkillRegistry } from './sol_advisor';
 import {
   buildV2WriterRequest,
   compileMinimalWriterPacket,
@@ -32,6 +33,8 @@ export interface WriterRequest {
   selfReflection: boolean;
   consistency: boolean;
   project: Project;
+  /** Optional Notion-/adapter-backed registry. sol-advisor selects from manifests before bodies enter context. */
+  skillRegistry?: SolAdvisorSkillRegistry;
   /** StoryOS v2 is the default. Set legacy explicitly only for compatibility/debugging. */
   runtimeVersion?: StoryOsRuntimeVersion;
 }
