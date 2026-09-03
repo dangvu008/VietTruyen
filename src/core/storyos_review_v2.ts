@@ -37,6 +37,7 @@ export const buildStoryOsReviewPacket = (
     manifests: registry.manifests,
     bodies: registry.bodies,
     requestedSkillIds: ['review.character', 'review.knowledge-boundary', 'review.timeline'],
+    allowedDomains: ['review'],
     maxSkills: 4,
     maxTokens: 1800,
   }),
