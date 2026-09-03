@@ -1,4 +1,5 @@
 import type { Character, OutlineBeat, Project, WorldRules } from '../types/story';
+import { adviseWriterContext, type SolAdvisorContext } from './sol_advisor';
 
 export type StoryOsRuntimeVersion = 'legacy' | 'storyos_v2';
 
@@ -12,6 +13,7 @@ export interface RuntimeWriterInput {
 
 export interface MinimalWriterPacket {
   runtimeVersion: 'storyos_v2';
+  contextPolicy: SolAdvisorContext['policy'];
   projectId: string;
   storyTitle: string;
   mode: RuntimeWriterInput['mode'];
@@ -39,47 +41,32 @@ export interface InvariantValidationResult {
   violations: InvariantViolation[];
 }
 
-const tail = (text: string, maxChars: number) => {
-  const value = text.trim();
-  if (value.length <= maxChars) return value;
-  return value.slice(value.length - maxChars).replace(/^\S*\s/, '').trim();
-};
-
-const compact = (text: string, maxChars: number) => {
-  const value = text.replace(/\s+/g, ' ').trim();
-  if (value.length <= maxChars) return value;
-  return `${value.slice(0, maxChars).trim()}…`;
-};
-
-const scoreBeat = (beat: OutlineBeat, input: RuntimeWriterInput) => {
-  const haystack = `${input.prompt} ${input.notes} ${input.sourceText}`.toLowerCase();
-  const words = `${beat.title} ${beat.summary} ${beat.focus}`
-    .toLowerCase()
-    .split(/[^\p{L}\p{N}]+/u)
-    .filter((word) => word.length >= 4);
-  return words.reduce((score, word) => score + (haystack.includes(word) ? 1 : 0), 0);
-};
-
 /** Compile the bounded context a Writer is allowed to see in StoryOS v2. */
 export const compileMinimalWriterPacket = (input: RuntimeWriterInput): MinimalWriterPacket => {
-  const rankedOutline = [...input.project.outline]
-    .map((beat, index) => ({ beat, index, score: scoreBeat(beat, input) }))
-    .sort((a, b) => b.score - a.score || a.index - b.index)
-    .slice(0, 3)
-    .map(({ beat }) => beat);
+  const advised = adviseWriterContext({
+    prompt: input.prompt,
+    sourceText: input.sourceText,
+    notes: input.notes,
+    currentFocus: input.project.currentFocus,
+    mainPlot: input.project.mainPlot,
+    characters: input.project.characters,
+    outline: input.project.outline,
+    world: input.project.world,
+  });
 
   return {
     runtimeVersion: 'storyos_v2',
+    contextPolicy: advised.policy,
     projectId: input.project.id,
     storyTitle: input.project.title,
     mode: input.mode,
-    objective: compact(input.prompt || input.project.currentFocus || input.project.mainPlot || '', 1200),
-    currentFocus: compact(input.project.currentFocus || input.notes || '', 800),
-    directSeam: tail(input.sourceText, 1800),
-    relevantCharacters: input.project.characters.slice(0, 6),
-    relevantOutline: rankedOutline,
-    world: input.project.world,
-    continuityNotes: compact(input.notes, 1200),
+    objective: advised.objective,
+    currentFocus: advised.currentFocus,
+    directSeam: advised.directSeam,
+    relevantCharacters: advised.relevantCharacters,
+    relevantOutline: advised.relevantOutline,
+    world: advised.world,
+    continuityNotes: advised.continuityNotes,
   };
 };
 
@@ -91,6 +78,7 @@ export const buildV2WriterRequest = <T extends RuntimeWriterInput>(
     ...request.project,
     characters: packet.relevantCharacters,
     outline: packet.relevantOutline,
+    world: packet.world,
     // Accepted prose archives do not belong in Writer context. The direct seam is explicit.
     chapters: [],
     notes: packet.continuityNotes,
@@ -99,6 +87,7 @@ export const buildV2WriterRequest = <T extends RuntimeWriterInput>(
 
   return {
     ...request,
+    prompt: packet.objective,
     sourceText: packet.directSeam,
     notes: packet.continuityNotes,
     project: boundedProject,
