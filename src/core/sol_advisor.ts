@@ -49,6 +49,38 @@ const scoreText = (candidate: string, haystack: string) => {
   return score;
 };
 
+const compactCharacter = (character: Character): Character => ({
+  id: character.id,
+  name: compact(character.name, 120),
+  role: compact(character.role, 160),
+  arc: compact(character.arc, 360),
+  currentStage: compact(character.currentStage, 320),
+  traits: compact(character.traits, 360),
+  aliases: character.aliases?.slice(0, 6).map((alias) => compact(alias, 100)),
+  facts: character.facts?.slice(0, 8).map((fact) => ({
+    ...fact,
+    key: compact(fact.key, 100),
+    value: compact(fact.value, 260),
+  })),
+  psychology: character.psychology
+    ? {
+        coreWound: character.psychology.coreWound ? compact(character.psychology.coreWound, 220) : undefined,
+        deepFear: character.psychology.deepFear ? compact(character.psychology.deepFear, 220) : undefined,
+        hiddenDesire: character.psychology.hiddenDesire ? compact(character.psychology.hiddenDesire, 220) : undefined,
+        selfDeception: character.psychology.selfDeception ? compact(character.psychology.selfDeception, 220) : undefined,
+        bodyLanguage: character.psychology.bodyLanguage ? compact(character.psychology.bodyLanguage, 220) : undefined,
+      }
+    : undefined,
+});
+
+const compactOutlineBeat = (beat: OutlineBeat): OutlineBeat => ({
+  ...beat,
+  title: compact(beat.title, 180),
+  summary: compact(beat.summary, 520),
+  focus: compact(beat.focus, 220),
+  foreshadowingHint: beat.foreshadowingHint ? compact(beat.foreshadowingHint, 320) : undefined,
+});
+
 const rankOutline = (outline: OutlineBeat[], haystack: string) =>
   [...outline]
     .map((beat, index) => ({
@@ -58,7 +90,7 @@ const rankOutline = (outline: OutlineBeat[], haystack: string) =>
     }))
     .sort((a, b) => b.score - a.score || a.index - b.index)
     .slice(0, 3)
-    .map(({ beat }) => beat);
+    .map(({ beat }) => compactOutlineBeat(beat));
 
 const rankCharacters = (characters: Character[], haystack: string) =>
   [...characters]
@@ -72,7 +104,7 @@ const rankCharacters = (characters: Character[], haystack: string) =>
     }))
     .sort((a, b) => b.score - a.score || a.index - b.index)
     .slice(0, 6)
-    .map(({ character }) => character);
+    .map(({ character }) => compactCharacter(character));
 
 const compactFacts = (facts: WorldRules['facts'], maxItems: number) =>
   facts?.slice(0, maxItems).map((fact) => ({
