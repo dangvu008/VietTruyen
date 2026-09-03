@@ -54,6 +54,10 @@ export interface SkillSelectionRequest {
   maxTokens?: number;
 }
 
+export interface SkillRouter {
+  buildPacket(request: SkillSelectionRequest): RuntimeSkillPacket;
+}
+
 const normalize = (value: string) => value.toLowerCase();
 
 const scoreManifest = (manifest: SkillManifest, taskText: string) => {
@@ -139,4 +143,22 @@ export const buildRuntimeSkillPacket = (request: SkillSelectionRequest): Runtime
     selected,
     totalEstimatedTokens,
   };
+};
+
+export const defaultSkillRouter: SkillRouter = {
+  buildPacket: buildRuntimeSkillPacket,
+};
+
+export const renderRuntimeSkillPacket = (packet?: RuntimeSkillPacket) => {
+  if (!packet || packet.selected.length === 0) return '';
+  return packet.selected
+    .map((skill) => {
+      const parts = [`[Skill ${skill.skillId}@${skill.version}]`];
+      if (skill.hardRules.length) parts.push(`Hard rules: ${skill.hardRules.join(' | ')}`);
+      if (skill.guidance.length) parts.push(`Guidance: ${skill.guidance.join(' | ')}`);
+      if (skill.antiPatterns.length) parts.push(`Avoid: ${skill.antiPatterns.join(' | ')}`);
+      if (skill.outputContract) parts.push(`Output: ${skill.outputContract}`);
+      return parts.join('\n');
+    })
+    .join('\n\n');
 };
