@@ -68,15 +68,71 @@ const input = {
 };
 
 describe('StoryOS Runtime Harness v2', () => {
-  it('compiles a bounded writer packet and strips chapter archives', () => {
+  it('compiles a bounded writer packet through sol-advisor and strips chapter archives', () => {
     const packet = compileMinimalWriterPacket(input);
     const bounded = buildV2WriterRequest(input, packet);
 
     expect(packet.runtimeVersion).toBe('storyos_v2');
+    expect(packet.contextPolicy).toBe('sol-advisor-v1');
     expect(packet.directSeam.length).toBeLessThanOrEqual(1800);
     expect(packet.directSeam).toContain('The door closed behind A.');
     expect(bounded.project.chapters).toEqual([]);
     expect(JSON.stringify(bounded)).not.toContain('OLD FULL CHAPTER MUST NOT ENTER WRITER CONTEXT');
+  });
+
+  it('keeps context bounded instead of growing with execution turns', () => {
+    const bloatedProject: Project = {
+      ...project,
+      characters: Array.from({ length: 30 }, (_, index) => ({
+        id: `c${index}`,
+        name: `Character ${index}`,
+        role: index === 29 ? 'door witness' : 'support',
+        arc: 'x'.repeat(400),
+        currentStage: 'x'.repeat(400),
+        traits: 'x'.repeat(400),
+      })),
+      outline: Array.from({ length: 30 }, (_, index) => ({
+        id: `b${index}`,
+        title: index === 29 ? 'Door witness' : `Beat ${index}`,
+        summary: 'x'.repeat(500),
+        focus: `Character ${index}`,
+      })),
+      world: {
+        ...project.world,
+        geography: 'g'.repeat(5000),
+        magicSystem: 'm'.repeat(5000),
+        rules: 'r'.repeat(8000),
+        factions: Array.from({ length: 40 }, (_, index) => `Faction ${index} ${'f'.repeat(500)}`),
+        facts: Array.from({ length: 40 }, (_, index) => ({
+          id: `f${index}`,
+          key: `Fact ${index}`,
+          value: 'v'.repeat(1000),
+        })),
+      },
+    };
+
+    const sizes = Array.from({ length: 8 }, (_, turn) => {
+      const turnInput = {
+        ...input,
+        sourceText: `${'old prose '.repeat(4000 * (turn + 1))} The door closed behind Character 29.`,
+        notes: `${'old execution note '.repeat(1000 * (turn + 1))} Character 29 saw the door.`,
+        project: bloatedProject,
+      };
+      return JSON.stringify(compileMinimalWriterPacket(turnInput)).length;
+    });
+
+    expect(Math.max(...sizes) - Math.min(...sizes)).toBeLessThan(50);
+    expect(Math.max(...sizes)).toBeLessThan(15000);
+
+    const packet = compileMinimalWriterPacket({
+      ...input,
+      sourceText: `${'old prose '.repeat(5000)} The door closed behind Character 29.`,
+      project: bloatedProject,
+    });
+    expect(packet.relevantCharacters).toHaveLength(6);
+    expect(packet.relevantOutline).toHaveLength(3);
+    expect(packet.world.factions.length).toBeLessThanOrEqual(8);
+    expect(packet.world.facts?.length).toBeLessThanOrEqual(12);
   });
 
   it('keeps literary criticism observational instead of rewriting prose', () => {
