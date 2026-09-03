@@ -4,6 +4,8 @@ import { buildConsistencyReport, buildFixParagraph, selfReflect } from './reflec
 import { writerStrategyRegistry } from './writer_strategies/index';
 import { applyStyle } from './style_engine';
 import type { SolAdvisorSkillRegistry } from './sol_advisor';
+import { storyOsBuiltinBodies, storyOsBuiltinManifests } from './storyos_builtin_skills';
+import { buildStoryOsReviewPacket, type StoryOsReviewPacket } from './storyos_review_v2';
 import {
   buildV2WriterRequest,
   compileMinimalWriterPacket,
@@ -33,7 +35,7 @@ export interface WriterRequest {
   selfReflection: boolean;
   consistency: boolean;
   project: Project;
-  /** Optional Notion-/adapter-backed registry. sol-advisor selects from manifests before bodies enter context. */
+  /** External registry snapshot (e.g. compiled from Notion). Built-ins are the fallback. */
   skillRegistry?: SolAdvisorSkillRegistry;
   /** StoryOS v2 is the default. Set legacy explicitly only for compatibility/debugging. */
   runtimeVersion?: StoryOsRuntimeVersion;
@@ -50,6 +52,7 @@ export interface WriterGeneratedData {
 export interface WriterRuntimeReport {
   version: StoryOsRuntimeVersion;
   writerPacket?: MinimalWriterPacket;
+  reviewPacket?: StoryOsReviewPacket;
   literaryCritic?: LiteraryCriticResult;
   invariantValidation?: InvariantValidationResult;
 }
@@ -111,16 +114,22 @@ export const runWriter = (request: WriterRequest): WriterResponse => {
     return runLegacyWriter(request, response, style);
   }
 
-  // StoryOS v2: compile bounded Writer context before generation.
-  const writerPacket = compileMinimalWriterPacket(request);
-  const boundedRequest = buildV2WriterRequest(request, writerPacket);
+  const skillRegistry: SolAdvisorSkillRegistry = request.skillRegistry ?? {
+    manifests: storyOsBuiltinManifests,
+    bodies: storyOsBuiltinBodies,
+  };
+  const effectiveRequest: WriterRequest = { ...request, skillRegistry };
+
+  // StoryOS v2: compile bounded authority + selected Writer skills before generation.
+  const writerPacket = compileMinimalWriterPacket(effectiveRequest);
+  const boundedRequest = buildV2WriterRequest(effectiveRequest, writerPacket);
   const response = strategy.execute({ request: boundedRequest, style });
 
-  // Critic and invariant validation are separate reads. Neither is allowed to mutate prose.
+  // Review has its own bounded packet; review instructions never contaminate the Writer prompt.
+  const reviewPacket = buildStoryOsReviewPacket(response.output, writerPacket, skillRegistry);
   const literaryCritic = runLiteraryCritic(response.output);
   const invariantValidation = validateLocalInvariants(response.output);
 
-  // Optional compatibility report remains observational only in v2.
   const consistencyReport = request.consistency
     ? buildConsistencyReport(
         response.output,
@@ -137,6 +146,7 @@ export const runWriter = (request: WriterRequest): WriterResponse => {
     runtime: {
       version: 'storyos_v2',
       writerPacket,
+      reviewPacket,
       literaryCritic,
       invariantValidation,
     },
