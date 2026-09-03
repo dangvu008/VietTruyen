@@ -1,5 +1,6 @@
 import type { Character, OutlineBeat, Project, WorldRules } from '../types/story';
-import { adviseWriterContext, type SolAdvisorContext } from './sol_advisor';
+import { adviseWriterContext, type SolAdvisorContext, type SolAdvisorSkillRegistry } from './sol_advisor';
+import { renderRuntimeSkillPacket, type RuntimeSkillPacket } from './storyos_skill_registry';
 
 export type StoryOsRuntimeVersion = 'legacy' | 'storyos_v2';
 
@@ -9,6 +10,7 @@ export interface RuntimeWriterInput {
   sourceText: string;
   notes: string;
   project: Project;
+  skillRegistry?: SolAdvisorSkillRegistry;
 }
 
 export interface MinimalWriterPacket {
@@ -24,6 +26,7 @@ export interface MinimalWriterPacket {
   relevantOutline: OutlineBeat[];
   world: WorldRules;
   continuityNotes: string;
+  skills?: RuntimeSkillPacket;
 }
 
 export interface LiteraryCriticResult {
@@ -49,9 +52,11 @@ export const compileMinimalWriterPacket = (input: RuntimeWriterInput): MinimalWr
     notes: input.notes,
     currentFocus: input.project.currentFocus,
     mainPlot: input.project.mainPlot,
+    mode: input.mode,
     characters: input.project.characters,
     outline: input.project.outline,
     world: input.project.world,
+    skillRegistry: input.skillRegistry,
   });
 
   return {
@@ -67,6 +72,7 @@ export const compileMinimalWriterPacket = (input: RuntimeWriterInput): MinimalWr
     relevantOutline: advised.relevantOutline,
     world: advised.world,
     continuityNotes: advised.continuityNotes,
+    skills: advised.skills,
   };
 };
 
@@ -84,12 +90,16 @@ export const buildV2WriterRequest = <T extends RuntimeWriterInput>(
     notes: packet.continuityNotes,
     currentFocus: packet.currentFocus,
   };
+  const skillInstructions = renderRuntimeSkillPacket(packet.skills);
+  const notes = skillInstructions
+    ? `${packet.continuityNotes}\n\n${skillInstructions}`.trim()
+    : packet.continuityNotes;
 
   return {
     ...request,
     prompt: packet.objective,
     sourceText: packet.directSeam,
-    notes: packet.continuityNotes,
+    notes,
     project: boundedProject,
   } as T;
 };
