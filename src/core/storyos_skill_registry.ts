@@ -9,6 +9,12 @@ export type StorySkillDomain =
   | 'memory'
   | 'state';
 
+export interface SkillSourceRef {
+  repository?: string;
+  path?: string;
+  sha?: string;
+}
+
 export interface SkillManifest {
   skillId: string;
   version: string;
@@ -19,6 +25,7 @@ export interface SkillManifest {
   dependencies: string[];
   authorityRequirements: string[];
   tokenBudget: number;
+  source?: SkillSourceRef;
 }
 
 export interface SkillBody {
@@ -50,6 +57,8 @@ export interface SkillSelectionRequest {
   mode: 'create' | 'rewrite' | 'continue' | 'polish';
   manifests: SkillManifest[];
   bodies: Record<string, SkillBody | undefined>;
+  /** Deterministic stage selection, e.g. review skills selected by the review stage. */
+  requestedSkillIds?: string[];
   maxSkills?: number;
   maxTokens?: number;
 }
@@ -59,6 +68,7 @@ export interface SkillRouter {
 }
 
 const normalize = (value: string) => value.toLowerCase();
+const estimateTokens = (value: unknown) => Math.ceil(JSON.stringify(value).length / 4);
 
 const scoreManifest = (manifest: SkillManifest, taskText: string) => {
   const haystack = normalize(taskText);
@@ -73,24 +83,40 @@ const scoreManifest = (manifest: SkillManifest, taskText: string) => {
   return score;
 };
 
-const compactList = (items: string[], maxItems: number, maxChars: number) =>
-  items.slice(0, maxItems).map((item) => {
-    const value = item.replace(/\s+/g, ' ').trim();
-    return value.length <= maxChars ? value : `${value.slice(0, maxChars).trim()}…`;
-  });
+const compactValue = (value: string, maxChars: number) => {
+  const normalized = value.replace(/\s+/g, ' ').trim();
+  return normalized.length <= maxChars ? normalized : `${normalized.slice(0, maxChars).trim()}…`;
+};
 
+const compactList = (items: string[], maxItems: number, maxChars: number) =>
+  items.slice(0, maxItems).map((item) => compactValue(item, maxChars));
+
+/** Compile and physically truncate a skill so rendered content respects its token budget. */
 const compileRuntimeSkill = (body: SkillBody): RuntimeSkill => {
   const tokenBudget = Math.max(100, body.manifest.tokenBudget || 600);
-  const hardRules = compactList(body.hardRules, 8, 240);
-  const guidance = compactList(body.guidance, 8, 260);
-  const antiPatterns = compactList(body.antiPatterns, 6, 220);
-  const outputContract = body.outputContract
-    ? body.outputContract.replace(/\s+/g, ' ').trim().slice(0, 500)
-    : undefined;
-  const estimatedTokens = Math.min(
-    tokenBudget,
-    Math.ceil(JSON.stringify({ hardRules, guidance, antiPatterns, outputContract }).length / 4),
-  );
+  let hardRules = compactList(body.hardRules, 8, 240);
+  let guidance = compactList(body.guidance, 8, 260);
+  let antiPatterns = compactList(body.antiPatterns, 6, 220);
+  let outputContract = body.outputContract ? compactValue(body.outputContract, 500) : undefined;
+
+  const snapshot = () => ({ hardRules, guidance, antiPatterns, outputContract });
+
+  // Shrink the least authoritative material first. Hard rules survive longest.
+  while (estimateTokens(snapshot()) > tokenBudget) {
+    if (guidance.length > 2) guidance = guidance.slice(0, -1);
+    else if (antiPatterns.length > 2) antiPatterns = antiPatterns.slice(0, -1);
+    else if (outputContract && outputContract.length > 160) outputContract = compactValue(outputContract, Math.max(160, outputContract.length - 100));
+    else if (hardRules.length > 2) hardRules = hardRules.slice(0, -1);
+    else {
+      hardRules = hardRules.map((item) => compactValue(item, 120));
+      guidance = guidance.map((item) => compactValue(item, 120));
+      antiPatterns = antiPatterns.map((item) => compactValue(item, 100));
+      if (outputContract) outputContract = compactValue(outputContract, 160);
+      break;
+    }
+  }
+
+  const estimatedTokens = estimateTokens(snapshot());
   return {
     skillId: body.manifest.skillId,
     version: body.manifest.version,
@@ -110,21 +136,35 @@ export const buildRuntimeSkillPacket = (request: SkillSelectionRequest): Runtime
   const maxSkills = request.maxSkills ?? 5;
   const maxTokens = request.maxTokens ?? 3200;
   const taskText = `${request.mode} ${request.taskText}`;
+  const manifestById = new Map(request.manifests.map((manifest) => [manifest.skillId, manifest]));
 
+  const requested = new Set(request.requestedSkillIds ?? []);
   const ranked = request.manifests
     .filter((manifest) => manifest.status === 'active')
-    .map((manifest, index) => ({ manifest, index, score: scoreManifest(manifest, taskText) }))
+    .map((manifest, index) => ({
+      manifest,
+      index,
+      score: requested.has(manifest.skillId) ? Number.MAX_SAFE_INTEGER : scoreManifest(manifest, taskText),
+    }))
     .filter(({ score }) => score > 0)
     .sort((a, b) => b.score - a.score || a.index - b.index);
 
   const selected: RuntimeSkill[] = [];
   const selectedIds = new Set<string>();
+  const visiting = new Set<string>();
   let totalEstimatedTokens = 0;
 
   const tryAdd = (skillId: string) => {
-    if (selectedIds.has(skillId) || selected.length >= maxSkills) return;
+    if (selectedIds.has(skillId) || selected.length >= maxSkills || visiting.has(skillId)) return;
+    const manifest = manifestById.get(skillId);
     const body = request.bodies[skillId];
-    if (!body || body.manifest.status !== 'active') return;
+    if (!manifest || !body || manifest.status !== 'active' || body.manifest.status !== 'active') return;
+
+    visiting.add(skillId);
+    for (const dependency of manifest.dependencies) tryAdd(dependency);
+    visiting.delete(skillId);
+
+    if (selectedIds.has(skillId) || selected.length >= maxSkills) return;
     const compiled = compileRuntimeSkill(body);
     if (totalEstimatedTokens + compiled.estimatedTokens > maxTokens) return;
     selected.push(compiled);
@@ -133,7 +173,6 @@ export const buildRuntimeSkillPacket = (request: SkillSelectionRequest): Runtime
   };
 
   for (const { manifest } of ranked) {
-    for (const dependency of manifest.dependencies) tryAdd(dependency);
     tryAdd(manifest.skillId);
     if (selected.length >= maxSkills || totalEstimatedTokens >= maxTokens) break;
   }
