@@ -87,7 +87,9 @@ const scoreManifest = (manifest: SkillManifest, taskText: string) => {
 
 const compactValue = (value: string, maxChars: number) => {
   const normalized = value.replace(/\s+/g, ' ').trim();
-  return normalized.length <= maxChars ? normalized : `${normalized.slice(0, maxChars).trim()}…`;
+  if (normalized.length <= maxChars) return normalized;
+  if (maxChars <= 1) return normalized.slice(0, maxChars);
+  return `${normalized.slice(0, maxChars - 1).trimEnd()}…`;
 };
 
 const compactList = (items: string[], maxItems: number, maxChars: number) =>
